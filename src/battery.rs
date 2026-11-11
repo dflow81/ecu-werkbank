@@ -155,7 +155,8 @@ mod tests {
     fn demo_measurement() {
         // die Demo-Spannung ist für alle Tests gleich — nicht parallel zur Verbindungsprüfung
         let _g = crate::sim::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let pts = measure(&Backend::Demo, 7.0, |_, _| {}).unwrap();
+        // 9 s: die letzten 2 s liegen sicher hinter dem Hochregeln (ab 6 s), auch auf langsamen Rechnern
+        let pts = measure(&Backend::Demo, 9.0, |_, _| {}).unwrap();
         let r = analyze(&pts);
         assert_eq!(r.gesamt(), Stufe::Gut, "{:?}", r.bewertung);
     }
