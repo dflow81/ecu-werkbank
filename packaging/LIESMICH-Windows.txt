@@ -1,0 +1,49 @@
+ECUWerkbank für Windows (Light-Version)
+=======================================
+
+Start: ecu-werkbank-gui.exe doppelklicken. Keine Installation nötig.
+
+Beim ersten Start warnt Windows eventuell („Der Computer wurde durch Windows
+geschützt“), weil das Programm nicht kostenpflichtig signiert ist:
+„Weitere Informationen“ → „Trotzdem ausführen“.
+
+
+Was geht unter Windows
+----------------------
+- ELM327-Adapter über USB oder Bluetooth (COM-Port, z. B. COM3 — steht im
+  Geräte-Manager unter „Anschlüsse (COM & LPT)“) oder über WLAN (host:port).
+  Damit: Fehlerspeicher lesen/löschen, Live-Werte, OBD-II, Service-Anzeige
+  und alles, was über UDS läuft (neuere Fahrzeuge).
+- Demo-Fahrzeug: alles ausprobieren, ganz ohne Adapter.
+- Alles ohne Auto: Fahrzeuge, Wartung, gewechselte Teile, PDFs, Mitschnitte
+  auswerten, Label-Editor, eigene Namen, Lexikon.
+
+Was (noch) nicht geht
+---------------------
+- CAN-Adapter (CANable, candleLight, DSD TECH SH-C31x, PCAN …): dafür
+  braucht es SocketCAN, das gibt es nur unter Linux.
+- Damit auch kein TP 2.0 / KWP2000, also keine älteren Steuergeräte
+  (ca. 2004–2010). Dafür die Linux-Version nehmen.
+
+
+Daten
+-----
+Fahrzeuge, Scans, Sicherungen und Einstellungen liegen in
+  %APPDATA%\ecu-werkbank
+(im Explorer in die Adresszeile eingeben). Eigene Labels in
+  %APPDATA%\ecu-werkbank\labels
+
+Terminal-Programm
+-----------------
+In der Eingabeaufforderung im entpackten Ordner, z. B.:
+  ecu-werkbank.exe --help
+  ecu-werkbank.exe -t elm327 --port COM3 scan
+  ecu-werkbank.exe -t demo scan
+
+Handbuch: ecu-werkbank-Handbuch.pdf (beschreibt die Linux-Version; die
+Oberfläche ist dieselbe).
+
+Benutzung auf eigene Gefahr, ohne Gewährleistung. ECUWerkbank ist ein
+unabhängiges Projekt und nicht mit der Volkswagen AG oder Ross-Tech
+verbunden. Lizenz: MIT oder Apache-2.0 (siehe LICENSE-MIT, LICENSE-APACHE).
+https://github.com/dflow81/ecu-werkbank

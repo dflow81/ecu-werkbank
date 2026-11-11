@@ -1,0 +1,46 @@
+# Baut die macOS-Version (Light: ELM327, Demo, alles ohne Auto) auf einem
+# Mac-Rechner von GitHub. Start von Hand: Reiter „Actions“ → „Mac-Version“ →
+# „Run workflow“ (oder: gh workflow run mac.yml -f release=v0.1.1).
+# Das ZIP liegt danach beim Lauf unter „Artifacts“; mit Release-Angabe wird
+# es zusätzlich an dieses Release gehängt.
+name: Mac-Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "An dieses Release anhängen (z. B. v0.1.1) — leer lassen = nur bauen"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust vorbereiten
+        run: |
+          rustup update stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Tests
+        run: cargo test --release --lib
+
+      - name: Bauen und packen
+        run: ./packaging/build-mac.sh
+
+      - name: ZIP aufbewahren
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecu-werkbank-macos
+          path: target/ecu-werkbank-*-macos.zip
+
+      - name: An Release anhängen
+        if: inputs.release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release }}" target/ecu-werkbank-*-macos.zip --clobber

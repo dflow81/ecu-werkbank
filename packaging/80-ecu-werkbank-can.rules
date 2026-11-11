@@ -1,0 +1,4 @@
+# ecu-werkbank: CAN-Adapter (SocketCAN, z. B. CANable/candleLight, PCAN) beim
+# Einstecken automatisch einrichten — 500 kbit/s (Antriebs-CAN), danach aktiv.
+# Andere Bitrate: Zahl unten ändern und `sudo udevadm control --reload` ausführen.
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="can[0-9]*", RUN+="/bin/sh -c '/usr/sbin/ip link set %k type can bitrate 500000 restart-ms 100 || /usr/sbin/ip link set %k type can bitrate 500000'", RUN+="/usr/sbin/ip link set %k up"

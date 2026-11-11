@@ -1,0 +1,34 @@
+[package]
+name = "ecu-werkbank"
+version = "0.1.4"
+edition = "2021"
+description = "ECUWerkbank: open diagnostic and coding workbench for German cars (UDS, TP 2.0, OBD-II)"
+authors = ["dflow81"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+anyhow = "1"
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+serial2 = "0.2"
+eframe = "0.28"
+egui_plot = "0.28"
+rfd = "0.15"
+
+# Direkter CAN-Zugang nur unter Linux (Windows: siehe src/can.rs)
+[target.'cfg(target_os = "linux")'.dependencies]
+socketcan = "3"
+
+[[bin]]
+name = "ecu-werkbank"
+path = "src/main.rs"
+
+[[bin]]
+name = "ecu-werkbank-gui"
+path = "src/bin/gui.rs"
+
+[[bin]]
+name = "mockecu"
+path = "src/bin/mockecu.rs"

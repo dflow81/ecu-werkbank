@@ -1,0 +1,5 @@
+# ecu-werkbank: CAN-Adapter (candleLight/gs_usb, z. B. DSD TECH SH-C31x), der beim
+# Einstecken manchmal im Update-Modus (STM32 DFU) startet, automatisch in die
+# normale Firmware zurückholen. Gilt NUR für den Adapter mit dieser Seriennummer —
+# andere STM32-Platinen zum Flashen bleiben unberührt. Es wird nichts geschrieben.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", ATTRS{serial}=="@SERIAL@", RUN+="/usr/bin/systemd-run --no-block /usr/bin/dfu-util -d 0483:df11 -S @SERIAL@ -a 0 -s 0x08000000:leave"

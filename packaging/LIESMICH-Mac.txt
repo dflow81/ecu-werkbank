@@ -1,0 +1,58 @@
+ECUWerkbank für macOS (Light-Version)
+=====================================
+
+Läuft auf Macs mit Intel- und mit Apple-Chip (M1 und neuer), ab macOS 11.
+
+Start: ecu-werkbank.app in den Ordner „Programme“ ziehen (oder direkt starten).
+
+Beim ersten Start blockiert macOS das Programm („kann nicht geöffnet werden,
+da der Entwickler nicht verifiziert werden kann“), weil es nicht
+kostenpflichtig bei Apple registriert ist. Freigeben:
+  Rechtsklick (oder ctrl-Klick) auf ecu-werkbank.app → „Öffnen“ → „Öffnen“.
+Klappt das nicht: Systemeinstellungen → Datenschutz & Sicherheit → ganz
+unten „Trotzdem öffnen“. Danach startet es normal per Doppelklick.
+
+
+Was geht unter macOS
+--------------------
+- ELM327-Adapter über USB (Port z. B. /dev/cu.usbserial-…; im Terminal mit
+  „ls /dev/cu.*“ nachsehen) oder über WLAN (host:port).
+  Damit: Fehlerspeicher lesen/löschen, Live-Werte, OBD-II, Service-Anzeige
+  und alles, was über UDS läuft (neuere Fahrzeuge).
+- Demo-Fahrzeug: alles ausprobieren, ganz ohne Adapter.
+- Alles ohne Auto: Fahrzeuge, Wartung, gewechselte Teile, PDFs, Mitschnitte
+  auswerten, Label-Editor, eigene Namen, Lexikon.
+
+Was (noch) nicht geht
+---------------------
+- CAN-Adapter (CANable, candleLight, DSD TECH SH-C31x, PCAN …): dafür
+  braucht es SocketCAN, das gibt es nur unter Linux.
+- Damit auch kein TP 2.0 / KWP2000, also keine älteren Steuergeräte
+  (ca. 2004–2010). Dafür die Linux-Version nehmen.
+
+
+Daten
+-----
+Fahrzeuge, Scans, Sicherungen und Einstellungen liegen in
+  ~/.local/share/ecu-werkbank
+Eigene Labels in
+  ~/.config/ecu-werkbank/labels
+(im Finder: Gehe zu → Gehe zum Ordner … und den Pfad eingeben).
+
+Terminal-Programm
+-----------------
+Im Terminal im entpackten Ordner, z. B.:
+  ./ecu-werkbank --help
+  ./ecu-werkbank -t elm327 --port /dev/cu.usbserial-1410 scan
+  ./ecu-werkbank -t demo scan
+
+Handbuch: ecu-werkbank-Handbuch.pdf (beschreibt die Linux-Version; die
+Oberfläche ist dieselbe).
+
+Ungetestet: Diese Version wird automatisch gebaut, aber mangels Mac nicht
+von Hand geprüft. Rückmeldungen gern auf GitHub (Issues).
+
+Benutzung auf eigene Gefahr, ohne Gewährleistung. ECUWerkbank ist ein
+unabhängiges Projekt und nicht mit der Volkswagen AG oder Ross-Tech
+verbunden. Lizenz: MIT oder Apache-2.0 (siehe LICENSE-MIT, LICENSE-APACHE).
+https://github.com/dflow81/ecu-werkbank

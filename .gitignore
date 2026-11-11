@@ -1,0 +1,34 @@
+# Build-Ausgabe
+/target/
+
+# Ross-Tech-Labeldateien (urheberrechtlich geschützt, NIE veröffentlichen)
+/label/
+*.lbl
+*.LBL
+*.clb
+*.CLB
+*.rod
+
+# Eigene Label-Dateien: nur Beispiel und leere Vorlage gehören ins Projekt
+/labels/*
+!/labels/beispiel.toml
+!/labels/j519-bordnetz.toml
+
+# Persönliche Daten: Mitschnitte, Logs, Sicherungen, Berichte
+/logs/
+*.log
+Log-*.txt
+Scan-*.txt
+*.ics
+*.bak
+*.toml.bak
+*.zip
+*.pdf
+!/docs/handbuch/ecu-werkbank-Handbuch.pdf
+*.csv
+
+# Editor / System
+.vscode/
+.idea/
+*.swp
+.DS_Store

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ECUWerkbank
+GenericName=Fahrzeugdiagnose
+Comment=Offene Fahrzeugdiagnose: Fehlerspeicher, Messwerte, OBD-II, Codierung
+Exec=ecu-werkbank-gui
+Icon=ecu-werkbank
+Terminal=false
+Categories=Utility;Engineering;
+Keywords=ECU;VW;Audi;Skoda;Seat;OBD;CAN;Diagnose;Fehlerspeicher;
+StartupWMClass=ecu-werkbank
