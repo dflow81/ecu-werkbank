@@ -432,6 +432,9 @@ pub struct Tp20Found {
 
 /// Kennung der langen Codierung — wie bei UDS. Neuere TP-2.0-Steuergeräte
 /// (Golf 6: Bordnetz, ABS, Einparkhilfe, Anhänger) verstehen 0x22 mit Kennungen.
+/// Am Golf 6 bestätigt (Mitschnitt 14.11.2026): Bordnetz 0x20 und ABS 0x03
+/// liefern über 0x22 0x0600 dieselbe Codierung, die ein Werkstatt-Diagnosegerät
+/// liest (Sitzung 0x89 vorher, wie hier).
 pub const CODING_DID: u16 = 0x0600;
 
 /// Codierung eines TP-2.0-Steuergeräts.

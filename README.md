@@ -872,7 +872,9 @@ dafür eine Zugriffsberechtigung — dann bricht es mit einer klaren Meldung ab.
 TP-2.0-Steuergeräte (nur lesen, Zurückschreiben noch nicht):
 - **Neuere** (Golf 6: Bordnetz 20, ABS 03, Einparkhilfe 1D, Anhänger 43) verstehen
   Kennungen wie UDS — die lange Codierung kommt über Kennung 0x0600 und lässt sich
-  im Codier-Helfer Bit für Bit ansehen und benennen.
+  im Codier-Helfer Bit für Bit ansehen und benennen. Am Golf 6 per Mitschnitt mit
+  einem Werkstatt-Diagnosegerät bestätigt (14.11.2026): Bordnetz (30 Byte) und
+  ABS (18 Byte) liefern Byte für Byte dieselbe Codierung.
 - **Ältere** (Motor, Türen, Lenksäule) haben eine Kurzcodierung in der
   Identifikation (Byte 16–19 = `03 xx xx xx`); ECUWerkbank zeigt sie als Zahl
   (vermutet, noch nicht mit anderem Gerät verglichen). Andere (Gateway, Lenkung):
