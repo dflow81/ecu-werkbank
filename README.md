@@ -211,10 +211,12 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 
 ✅ geht · ⚠️ geht eingeschränkt · ❌ geht nicht · ➖ braucht keinen Adapter
 
-> **Ehrlich:** Am Golf 6 getestet ist nur das CAN-Interface. Der ELM327-Teil folgt
-> dem dokumentierten Befehlssatz (11 bit, 500 kbit/s), wurde aber noch nicht an
-> echter Hardware geprüft. Für ältere Fahrzeuge (TP 2.0) führt am CAN-Interface kein Weg
-> vorbei. Alles lässt sich vorher ohne Auto mit `-t demo` ausprobieren.
+> **Stand der Prüfung:** Beide Adapter sind am Golf 6 getestet. Der ELM327 (USB, v1.5,
+> FTDI-Chip) seit 14.11.2026 **lesend**: OBD-II (VIN, Readiness, Fehler, Live-Werte),
+> Steuergeräte-Suche und die UDS-Steuergeräte mit Herstelleradresse (Kombi, Airbag,
+> Climatronic, Radio: Fehlerspeicher und erweiterte Identifikation). Schreiben über
+> ELM327 ist noch ungeprüft. Für ältere Fahrzeuge (TP 2.0) führt am CAN-Interface kein
+> Weg vorbei. Alles lässt sich vorher ohne Auto mit `-t demo` ausprobieren.
 
 ### Erfahrungen am echten Fahrzeug (Golf 6, 2010)
 

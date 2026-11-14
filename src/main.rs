@@ -2119,13 +2119,22 @@ fn scan(be: &Backend) -> Result<()> {
         let tx = 0x7E0 + i;
         let rx = 0x7E8 + i;
         let tp = be.open(tx, rx)?;
-        let uds = Uds::new(&*tp);
-        match uds.diagnostic_session(0x01) {
-            Ok(_) => {
-                println!("{}", tr!("  ✓ ECU bei tx={tx} rx={rx} antwortet", tx = format!("{:#05x}", tx), rx = format!("{:#05x}", rx)));
-                found += 1;
-            }
-            Err(_) => { /* kein Steuergerät auf dieser ID */ }
+        // Jede Antwort zählt — auch eine Absage (0x7F) heißt: hier ist ein Steuergerät.
+        // Erst OBD (01 00, muss jedes OBD-Steuergerät können), dann UDS (10 01).
+        // Golf 6: Motor antwortet hier nur auf OBD, UDS spricht er nicht.
+        let antwort = |anfrage: &[u8], ok: u8| -> bool {
+            tp.send(anfrage).is_ok() && tp.recv().is_ok_and(|r| r.first().is_some_and(|&b| b == ok || b == 0x7F))
+        };
+        let obd = antwort(&[0x01, 0x00], 0x41);
+        let uds = antwort(&[0x10, 0x01], 0x50);
+        if obd || uds {
+            let art = match (obd, uds) {
+                (true, true) => "OBD + UDS",
+                (true, false) => "OBD",
+                _ => "UDS",
+            };
+            println!("{}", tr!("  ✓ ECU bei tx={tx} rx={rx} antwortet ({art})", tx = format!("{:#05x}", tx), rx = format!("{:#05x}", rx), art = art));
+            found += 1;
         }
     }
     if found == 0 {
