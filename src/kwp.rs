@@ -290,7 +290,9 @@ impl BlockValue {
     /// Decoded value and unit. Unknown formulas return None — show raw then.
     pub fn decode(&self) -> Option<(f64, &'static str)> {
         let (a, b) = (f64::from(self.a), f64::from(self.b));
-        // TODO(verify): community-documented formulas.
+        // Formeln aus öffentlicher Community-Beschreibung. Am Golf 6 mit einem
+        // Werkstatt-Diagnosegerät verglichen (15.11.2026) und bestätigt:
+        // 01 06 07 08 12 14 15 16 17 1B 21 22 36 5E; dazu die neuen weiter unten.
         Some(match self.formula {
             0x01 => (0.2 * a * b, "1/min"),
             0x02 => (a * 0.002 * b, "%"),
@@ -305,7 +307,6 @@ impl BlockValue {
             0x15 => (0.001 * a * b, "V"),
             0x16 => (0.001 * a * b, "ms"),
             0x17 => (b / 256.0 * a, "%"),
-            // TODO(verify): Vorzeichen (vor/nach OT) noch nicht am Auto bestätigt
             0x1B => ((b - 128.0) * 0.01 * a, "°"),
             0x21 => (if self.a == 0 { 100.0 * b } else { 100.0 * b / a }, "%"),
             0x22 => ((b - 128.0) * 0.01 * a, "kW"),

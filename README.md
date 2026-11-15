@@ -193,14 +193,15 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 | Funktion | CAN-Interface | ELM327 | Hinweis |
 |---|:---:|:---:|---|
 | **OBD-II** (Fehler, Readiness/AU, Live-Werte, VIN, Freeze Frame) | ✅ | ✅ | herstellerunabhängig |
-| **UDS-Steuergeräte** (Fehlerspeicher lesen/löschen, Identifikation, Messwerte per Kennung) | ✅ | ⚠️ | ELM327: nur Geräte mit bekannter CAN-ID (OBD-Adressen, Label-Datei, Fahrzeugprofil) |
-| Codierung, Anpassungen, Login (UDS) | ✅ | ⚠️ | ELM327 ungetestet am echten Auto |
-| Service-Reset, Partikelfilter, Kilometerstand, Softwarestände (UDS) | ✅ | ⚠️ | wie oben |
+| **UDS-Steuergeräte** (Fehlerspeicher lesen/löschen, Identifikation, Messwerte per Kennung) | ✅ | ⚠️ | ELM327: nur Geräte mit bekannter CAN-ID (OBD-Adressen, Label-Datei, Fahrzeugprofil); Lesen am Golf 6 geprüft |
+| Codierung, Anpassungen, Login (UDS) | ✅ | ⚠️ | ELM327: Codierung lesen am Golf 6 geprüft, Schreiben noch ungetestet |
+| Service-Reset, Partikelfilter, Kilometerstand, Softwarestände (UDS) | ✅ | ⚠️ | ELM327: Lesen geht, Schreiben ungetestet |
 | Schnell-Check, Batterietest, Gebrauchtwagen-Check | ✅ | ✅ | über OBD-II |
-| **Auto-Scan aller Steuergeräte** | ✅ | ⚠️ | ELM327: nur OBD-Adressen + bekannte Geräte, kein Hersteller-Suchlauf |
+| **Auto-Scan aller Steuergeräte** | ✅ | ⚠️ | ELM327: nur OBD-Adressen + bekannte Geräte, kein Hersteller-Suchlauf; findet auch reine OBD-Geräte |
 | Andere Marken: Steuergeräte suchen | ✅ | ⚠️ | ELM327: nur OBD-Adressen |
 | **TP 2.0 / KWP2000** (ältere Fahrzeuge, z. B. Golf 6 Komfort-Geräte) | ✅ | ❌ | ELM327 kann TP 2.0 nicht |
 | Messwertblöcke, ⭐ Favoriten, Blockscan | ✅ | ❌ | brauchen TP 2.0 |
+| **Gateway-Verbauliste und -Codierung** (direkt aus dem Gateway) | ✅ | ❌ | TP 2.0; am Golf 6 geprüft |
 | Motor-Checks (Steuerkette, Leerlauf …), Fahrt-Rekorder | ✅ | ❌ | lesen Messwertblöcke (TP 2.0) |
 | Grundeinstellung an TP-2.0-Geräten (Funktion 04) | ✅ | ❌ | erst nach einem eigenen Mitschnitt freigeschaltet |
 | Live-Grafik / Scope | ✅ | ⚠️ | ELM327: nur OBD- und UDS-Kanäle, keine Messwertblöcke |
@@ -214,7 +215,9 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 > **Stand der Prüfung:** Beide Adapter sind am Golf 6 getestet. Der ELM327 (USB, v1.5,
 > FTDI-Chip) seit 14.11.2026 **lesend**: OBD-II (VIN, Readiness, Fehler, Live-Werte),
 > Steuergeräte-Suche und die UDS-Steuergeräte mit Herstelleradresse (Kombi, Airbag,
-> Climatronic, Radio: Fehlerspeicher und erweiterte Identifikation). Schreiben über
+> Climatronic, Radio: Fehlerspeicher, Codierung und erweiterte Identifikation). Am
+> CAN-Interface zusätzlich per Mitschnitt mit einem Werkstatt-Diagnosegerät verglichen
+> (15.11.2026): Codierungen, Fehlerarten, Messwert-Formeln und die Gateway-Verbauliste. Schreiben über
 > ELM327 ist noch ungeprüft. Für ältere Fahrzeuge (TP 2.0) führt am CAN-Interface kein
 > Weg vorbei. Alles lässt sich vorher ohne Auto mit `-t demo` ausprobieren.
 
@@ -1145,38 +1148,40 @@ und Stand in ECUWerkbank:
 | Nr. | Funktion | UDS (ab ~2008) | TP 2.0 / KWP2000 |
 |---|---|---|---|
 | 00 | Auto-Scan / Report (PDF) | ✅ `autoscan`, `report` | ✅ `autoscan`, `report` |
-| 01 | Steuergerät-Identifikation | ✅ `rdid` (0xF187, 0xF190 …) | ✅ `kwp-ident` |
-| 02 | Fehlerspeicher lesen | ✅ `dtc` | ✅ `kwp-dtc` |
+| 01 | Steuergerät-Identifikation | ✅ `rdid` (0xF187, 0xF190 …) | ✅ `kwp-ident` (Softwarestand am Golf 6 bestätigt) |
+| 02 | Fehlerspeicher lesen | ✅ `dtc` (VW-Fehlernummern wie beim Werkstattgerät) | ✅ `kwp-dtc` (Fehlerart am Golf 6 bestätigt) |
 | 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | 🟡 Steuergeräte am Golf 6 lehnen ab; per Auto-Scan-Import ✅ |
 | – | Auto-Scan-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `autoscan-import` | ✅ `autoscan-import` |
 | 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ❌ |
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |
-| 07 | Codierung | ✅ `coding`, `code-write` | 🟡 lesen `kwp-coding` |
+| 07 | Codierung | ✅ `coding`, `code-write` | 🟡 lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Schreiben noch nicht |
 | – | Codierungs-Sicherung / Vergleich / Zurückschreiben | ✅ `coding-*` | 🟡 nur sichern |
 | – | Fahrzeug-Historie, Vorher/Nachher | ✅ `history`, `compare` | ✅ |
-| 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste |
+| 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste; Formeln am Golf 6 mit Werkstattgerät verglichen |
 | 09 | Einzelmesswerte | – | ❌ |
 | 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 sichern (soweit das Gerät antwortet) |
 | 11/16 | Login / Zugriffsberechtigung | 🟡 `login` (SecurityAccess, Bytecode vom Nutzer) | 🟡 `login --kwp` (am Auto ungeprüft) |
 | 15 | Readiness | ✅ `obd-info` + Fahranleitung (GUI) | – |
 | 18 | Fehlerpfade (alle möglichen Fehlercodes) | ✅ `fehler-geruest`, GUI Werkzeuge → Fehlerbilder | ❌ Dienst gibt es bei KWP nicht |
-| 1A | Erweiterte Identifikation | ✅ `ident` | 🟡 `kwp-ident` |
+| 1A | Erweiterte Identifikation | ✅ `ident` (inkl. Betriebsnummer der letzten Codierung) | 🟡 `kwp-ident` |
 | 33 | OBD-II/EOBD (Modi 01, 02, 03, 04, 07, 09, 0A) | ✅ `obd-*`, GUI „OBD-II“ (inkl. Freeze-Frame) | – |
 | – | Messwerte protokollieren (CSV) | ✅ `obd-live --csv` | ✅ `kwp-block --csv` |
 | – | Mitschnitt aufzeichnen/auswerten | ✅ `record`, `decode-log` | ✅ inkl. Prüfbericht |
-| – | Service-Anzeige lesen / zurückstellen | 🟡 `service` (Kennungen je Fahrzeug lernen) | – |
+| – | Service-Anzeige lesen / zurückstellen | 🟡 `service` (Kennungen je Fahrzeug lernen; Golf 6: km seit Service bestätigt) | – |
 | – | Verbauliste (verbaute Steuergeräte, nach System) | ✅ `verbauliste`, GUI Steuergeräte → „📋 Verbauliste nach System“ | ✅ aus dem Scan |
-| – | Gateway-Verbauliste direkt aus dem Gateway | ✅ `gateway-verbauliste` (TP 2.0, Golf 6 geprüft) | ❌ |
+| – | Gateway-Verbauliste direkt aus dem Gateway | ❌ (neuere UDS-Gateways noch offen) | ✅ `gateway-verbauliste` (Golf 6 geprüft) |
 | – | Transportmodus | ❌ | ❌ |
 | – | K-Line (vor ~2004) | – nicht über SocketCAN | – |
 
 Als Nächstes:
-- TP-2.0-Byte-Offsets und Messwert-Formeln gegen echten Mitschnitt festnageln
-  (`candump -L can0`), danach `TODO(verify)` entfernen
-- KWP2000: Codierung, Anpassung, Grundeinstellung
+- Restliche Messwert-Formeln (Bremsdruck, Beschleunigung, Drehrate …) mit einer
+  gleichzeitigen Vergleichsmessung festnageln
+- KWP2000: Codierung und Anpassung schreiben, Grundeinstellung
 - Umgebungsbedingungen bei TP-2.0-Fehlern direkt lesen (Mitschnitt am Golf auswerten)
+- Gateway-Verbauliste bei neueren UDS-Gateways
+- Erkenntnisse vom Golf 6 an einem zweiten Auto (Polo 6R) prüfen
 - **Steuergeräte-Adresskarte** aus eigenen `discover`-Mitschnitten
 
 ## Lizenz, Marken, Quellen
