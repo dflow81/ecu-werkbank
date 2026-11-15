@@ -305,24 +305,6 @@ enum Command {
         #[arg(long)]
         suche: Option<String>,
     },
-    /// Codier-Helfer: Kurzcodierung-Bedeutungen und Login-Codes aus deinen .lbl-Labels (nur Nachschlagen)
-    CodierHilfe {
-        /// Steuergerät (hex): UDS-Anfrage-ID oder TP-2.0-Adresse; Teilenummer kommt aus der Sicherung
-        #[arg(long, value_parser = parse_kennung)]
-        geraet: Option<u16>,
-        /// Teilenummer direkt angeben (statt --geraet)
-        #[arg(long)]
-        teil: Option<String>,
-    },
-    /// Benannte Anpassungskanäle eines Steuergeräts aus deinen .lbl-Labels zeigen (nur lesen, nur Nachschlagen)
-    AnpassungKanaele {
-        /// Steuergerät (hex): UDS-Anfrage-ID (z. B. 714) oder TP-2.0-Adresse (z. B. 20); Teilenummer kommt aus der Sicherung
-        #[arg(long, value_parser = parse_kennung)]
-        geraet: Option<u16>,
-        /// Teilenummer direkt angeben (statt --geraet), z. B. 03C906016
-        #[arg(long)]
-        teil: Option<String>,
-    },
     /// Login (SecurityAccess) für ein Steuergerät hinterlegen oder testen — damit geschützte Geräte das Schreiben erlauben
     Login {
         /// Steuergerät (hex): UDS-Anfrage-ID, z. B. 714. Ohne: alle hinterlegten Logins zeigen
@@ -727,14 +709,6 @@ enum Command {
     NotfallSicherung,
     /// Ersatzteil-Pass (PDF) aus den zuletzt gesicherten Daten neu erzeugen — liest das Auto nicht
     Ersatzteilpass,
-    /// Ordner mit Ross-Tech-Labeldateien (.lbl) einstellen und prüfen, welche zu den Steuergeräten passen
-    LblOrdner {
-        /// Ordner mit den .lbl-Dateien (ohne Angabe: nur anzeigen)
-        pfad: Option<PathBuf>,
-        /// Eingestellten Ordner vergessen
-        #[arg(long)]
-        vergessen: bool,
-    },
     /// Prüfplan (geführte Fehlersuche) zu einem Fehlercode
     Pruefplan { code: String },
     /// Fehlerspeicher ALLER Steuergeräte löschen (auch OBD/Readiness!)
@@ -842,8 +816,9 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// VCDS-Protokolle (Auto-Scan als Text) einlesen: Fehler mit km-Stand in den Verlauf, Fehlertexte übernehmen
-    VcdsImport {
+    /// Auto-Scan-Protokolle (Textdateien) einlesen: Fehler mit km-Stand in den Verlauf, Fehlertexte übernehmen
+    #[command(alias = "vcds-import")]
+    AutoscanImport {
         /// Eine oder mehrere Protokolldateien
         #[arg(required = true)]
         dateien: Vec<PathBuf>,
@@ -1077,8 +1052,6 @@ fn main() -> Result<()> {
         Command::AnpassungZurueck { datei, geraet, kennung, alle, ja } => anpassung_zurueck(&be, datei.as_deref(), geraet, &kennung, alle, ja, cli.fahrzeug.as_deref()),
         Command::Ident { geraet, rx } => ident_cmd(&be, geraet, rx),
         Command::AnpassungSchreibtest { geraet, kennung, ja } => anpassung_schreibtest(&be, geraet, kennung, ja, cli.fahrzeug.as_deref()),
-        Command::AnpassungKanaele { geraet, teil } => anpassung_kanaele(&be, geraet, teil.as_deref(), cli.fahrzeug.as_deref()),
-        Command::CodierHilfe { geraet, teil } => codier_hilfe_cmd(&be, geraet, teil.as_deref(), cli.fahrzeug.as_deref()),
         Command::Grundeinstellung { system, suche } => grundeinstellung_cmd(system.as_deref(), suche.as_deref()),
         Command::Login { geraet, sa2, key, kwp, index, level, test, loeschen } => login_cmd(&be, geraet, sa2, key, kwp, index, level, test, loeschen, cli.fahrzeug.as_deref()),
         Command::KwpBlockscan { address, von, bis } => kwp_blockscan(&be, address as u8, von, bis),
@@ -1219,7 +1192,7 @@ fn main() -> Result<()> {
         }
         Command::Codiertext { tx, byte, bit, text } => codiertext(tx, byte, bit, text),
         Command::FehlerGeruest { out } => fehler_geruest(&be, &db, out, cli.fahrzeug.as_deref()),
-        Command::VcdsImport { dateien, probe } => {
+        Command::AutoscanImport { dateien, probe } => {
             for d in &dateien {
                 let name = d.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 if probe {
@@ -1338,7 +1311,6 @@ fn main() -> Result<()> {
         Command::Kaufcheck { out, note, aus_scan: false } => kaufcheck(&be, &db, out.as_deref(), &note, cli.fahrzeug.as_deref()),
         Command::NotfallSicherung => notfall_sicherung(&be, &db, cli.fahrzeug.as_deref()),
         Command::Ersatzteilpass => ersatzteilpass_neu(&be, cli.fahrzeug.as_deref()),
-        Command::LblOrdner { pfad, vergessen } => lbl_ordner(pfad.as_deref(), vergessen, cli.fahrzeug.as_deref()),
         Command::Fremd { out } => {
             let (mut r, s) = ecu_werkbank::fremd::scan(&be, &db, |p| eprint!("\r{p:<70}"))?;
             eprint!("\r{:<70}\r", "");
@@ -2608,66 +2580,7 @@ fn grundeinstellung_cmd(system: Option<&str>, suche: Option<&str>) -> Result<()>
     Ok(())
 }
 
-fn codier_hilfe_cmd(be: &Backend, geraet: Option<u16>, teil: Option<&str>, fahrzeug: Option<&str>) -> Result<()> {
-    use ecu_werkbank::lbl;
-    if lbl::ordner().is_none() {
-        anyhow::bail!(tr!("Kein Label-Ordner eingestellt (lbl-ordner setzen oder VAG_LBL_DIR)."));
-    }
-    let teil = match (teil, geraet) {
-        (Some(t), _) => t.to_string(),
-        (None, Some(g)) => {
-            let v = fahrzeug_fuer(be, fahrzeug)?;
-            ecu_werkbank::swinfo::teilenummer_fuer(&v.key, g).with_context(|| tr!("Keine Teilenummer für {a} in der Sicherung (erst: notfall-sicherung).", a = format!("{g:#x}")))?
-        }
-        (None, None) => anyhow::bail!(tr!("Bitte --geraet <hex> oder --teil <Teilenummer> angeben.")),
-    };
-    let (ct, cz, lt, lz) = lbl::codier_hilfe(&teil);
-    if cz.is_empty() && lz.is_empty() {
-        println!("{}", tr!("Kein Codier-Helfer für {a} gefunden (Langcodierung steckt meist in verschlüsselten .clb).", a = teil));
-        return Ok(());
-    }
-    println!("{}", tr!("Codier-Helfer laut Label für {a}:", a = teil));
-    if !cz.is_empty() {
-        println!("  {}", ct.unwrap_or_else(|| tr!("Codierung")));
-        for z in &cz {
-            println!("    {z}");
-        }
-    }
-    if !lz.is_empty() {
-        println!("  {}", lt.unwrap_or_else(|| tr!("Login")));
-        for z in &lz {
-            println!("    {z}");
-        }
-    }
-    println!("{}", tr!("Nur Nachschlagen. Kurzcodierung schreiben: codier-bit / rdid; Login: siehe login."));
-    Ok(())
-}
 
-fn anpassung_kanaele(be: &Backend, geraet: Option<u16>, teil: Option<&str>, fahrzeug: Option<&str>) -> Result<()> {
-    use ecu_werkbank::lbl;
-    if lbl::ordner().is_none() {
-        anyhow::bail!(tr!("Kein Label-Ordner eingestellt (lbl-ordner setzen oder VAG_LBL_DIR)."));
-    }
-    let teil = match (teil, geraet) {
-        (Some(t), _) => t.to_string(),
-        (None, Some(g)) => {
-            let v = fahrzeug_fuer(be, fahrzeug)?;
-            ecu_werkbank::swinfo::teilenummer_fuer(&v.key, g).with_context(|| tr!("Keine Teilenummer für {a} in der Sicherung (erst: notfall-sicherung).", a = format!("{g:#x}")))?
-        }
-        (None, None) => anyhow::bail!(tr!("Bitte --geraet <hex> oder --teil <Teilenummer> angeben.")),
-    };
-    let namen = lbl::anpassung_namen(&teil);
-    if namen.is_empty() {
-        println!("{}", tr!("Keine benannten Anpassungskanäle für {a} gefunden (kein passendes Label oder keine A-Zeilen).", a = teil));
-        return Ok(());
-    }
-    println!("{}", tr!("Anpassungskanäle laut Label für {a} ({b}):", a = teil, b = namen.len()));
-    for (k, n) in &namen {
-        println!("  {k:03}  {n}");
-    }
-    println!("{}", tr!("Hinweis: nur Nachschlagen aus dem Label. Zum Schreiben braucht es den passenden Kanal-Zugang (siehe anpassung-zurueck)."));
-    Ok(())
-}
 
 fn ident_cmd(be: &Backend, geraet: u16, rx: Option<u16>) -> Result<()> {
     use ecu_werkbank::swinfo;
@@ -4022,45 +3935,6 @@ fn codier_bit(be: &Backend, tx: u16, rx: u16, did: u16, byte: usize, bit: u8, we
     Ok(())
 }
 
-fn lbl_ordner(pfad: Option<&std::path::Path>, vergessen: bool, fahrzeug: Option<&str>) -> Result<()> {
-    use ecu_werkbank::lbl;
-    if vergessen {
-        lbl::ordner_setzen(None)?;
-        println!("{}", tr!("Labelordner vergessen."));
-        return Ok(());
-    }
-    if let Some(p) = pfad {
-        anyhow::ensure!(p.is_dir(), tr!("Ordner nicht gefunden: {a}", a = p.display()));
-        lbl::ordner_setzen(Some(p))?;
-    }
-    let Some(o) = lbl::ordner() else {
-        println!("{}", tr!("Kein Labelordner eingestellt. Einstellen mit: ecu-werkbank lbl-ordner /pfad/zu/Labels"));
-        return Ok(());
-    };
-    println!("{}", tr!("Labelordner: {a}", a = o.display()));
-    let key = match active_vehicle(fahrzeug)? {
-        Some(k) => Some(k),
-        None => load_active(),
-    };
-    let Some(key) = key else {
-        println!("{}", tr!("Kein Fahrzeug gewählt — mit -f angeben, um die passenden Dateien zu sehen."));
-        return Ok(());
-    };
-    let teile = lbl::teile_aus_scan(&key);
-    if teile.is_empty() {
-        println!("{}", tr!("Im letzten Scan des Fahrzeugs sind keine TP-2.0-Steuergeräte mit Teilenummer."));
-    }
-    for (adr, teil) in teile {
-        let datei = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let z = match lbl::suchen(&o, &teil) {
-            lbl::Fund::Gefunden(l) => tr!("{a} ({b} Blöcke)", a = datei(&l.datei), b = l.bloecke.len()),
-            lbl::Fund::Verschluesselt(p) => tr!("{a} — verschlüsselt, nicht lesbar", a = datei(&p)),
-            lbl::Fund::Keine => tr!("keine passende Datei"),
-        };
-        println!("  {adr:02X}  {teil:<12} {z}");
-    }
-    Ok(())
-}
 
 fn ersatzteilpass_neu(be: &Backend, fahrzeug: Option<&str>) -> Result<()> {
     let v = fahrzeug_fuer(be, fahrzeug)?;

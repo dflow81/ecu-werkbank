@@ -75,8 +75,6 @@ pub struct State {
     anp_erg: Vec<String>,
     anp_login_bc: String,
     anp_login_level: String,
-    /// Anpassungskanäle laut Label für das gewählte Gerät (gecacht je Gerät-ID)
-    anp_kanaele: Option<(u16, Vec<(u16, String)>)>,
 }
 
 impl Default for State {
@@ -120,7 +118,6 @@ impl Default for State {
             anp_erg: Vec::new(),
             anp_login_bc: String::new(),
             anp_login_level: "3".into(),
-            anp_kanaele: None,
         }
     }
 }
@@ -719,27 +716,8 @@ impl App {
             m.anp_punkte = None;
             m.anp_haken.clear();
             m.anp_erg.clear();
-            m.anp_kanaele = None;
         }
         let g = s.geraete[m.anp_geraet].clone();
-        // Bekannte Anpassungskanäle laut .lbl (nur Nachschlagen) — je Gerät einmal laden
-        let gid = g.tp20.map(u16::from).unwrap_or(g.tx);
-        if m.anp_kanaele.as_ref().map(|(id, _)| *id) != Some(gid) {
-            let liste = ecu_werkbank::swinfo::teilenummer_fuer(&s.vehicle, gid)
-                .map(|teil| ecu_werkbank::lbl::anpassung_namen(&teil).into_iter().collect::<Vec<_>>())
-                .unwrap_or_default();
-            m.anp_kanaele = Some((gid, liste));
-        }
-        if let Some((_, liste)) = &m.anp_kanaele {
-            if !liste.is_empty() {
-                egui::CollapsingHeader::new(tr!("📖 Bekannte Anpassungskanäle laut Label ({a})", a = liste.len())).id_source("anp_kanaele").show(ui, |ui| {
-                    ui.weak(tr!("Nur Nachschlagen aus deinen .lbl-Labels — was welcher Kanal bedeutet."));
-                    for (k, n) in liste {
-                        ui.monospace(format!("  {k:03}  {n}"));
-                    }
-                });
-            }
-        }
         if g.tp20.is_none() {
             let vorhanden = ecu_werkbank::login::fuer(&s.vehicle, g.tx).map(|mm| mm.beschreibung());
             egui::CollapsingHeader::new(tr!("🔑 Login (SecurityAccess), falls das Gerät das Schreiben verweigert")).id_source("anp_login").show(ui, |ui| {

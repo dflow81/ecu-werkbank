@@ -305,7 +305,6 @@ enum Tab {
     Rekorder,
     Fremd,
     Ident,
-    CodierHelfer,
     GrundLexikon,
 }
 
@@ -397,9 +396,6 @@ struct App {
     // Erweiterte Identifikation (nur lesen)
     ident_tx: String,
     ident_result: Option<(String, Vec<(String, String)>)>,
-    // Codier-Helfer aus .lbl (nur nachschlagen)
-    chl_teil: String,
-    chl_result: Option<(String, Option<(Option<String>, Vec<String>, Option<String>, Vec<String>)>)>,
     // Grundeinstellung-Katalog (Referenz)
     gek_system: String,
     gek_suche: String,
@@ -714,7 +710,6 @@ struct App {
     film: Option<FilmState>,
     /// Favoriten-Messwerte (Steuergerät + Block), im Speicher gehalten
     favoriten: Vec<ecu_werkbank::favoriten::Favorit>,
-    lbl_ordner_eingabe: Option<String>,
     mw_edit: Option<(Option<u8>, String)>,
     tp_sweep: Option<mpsc::Receiver<SweepMsg>>,
     tp_sweep_at: u8,
@@ -1693,7 +1688,6 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
         (Tab::Wissen, trn!("Fehlerbilder")),
         (Tab::Editor, trn!("Label-Editor")),
         (Tab::Namen, trn!("Eigene Namen")),
-        (Tab::CodierHelfer, trn!("Codier-Helfer (Label)")),
         (Tab::GrundLexikon, trn!("Grundeinstellungen (Referenz)")),
     ]),
 ];

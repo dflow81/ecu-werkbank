@@ -383,7 +383,7 @@ impl LabelDb {
                 Ok(lf) => lf,
                 Err(e) => {
                     let hint = if looks_like_vcds(&text) {
-                        crate::trs!("  (sieht nach einer .lbl-Rohdatei aus — das ist keine eigene Label-Datei; .lbl-Texte liest ECUWerkbank direkt über den eingestellten lbl-Ordner)")
+                        crate::trs!("  (sieht nach einer fremden Labeldatei aus — ECUWerkbank liest nur eigene Label-Dateien im eigenen Format, siehe beispiel.toml)")
                     } else {
                         ""
                     };

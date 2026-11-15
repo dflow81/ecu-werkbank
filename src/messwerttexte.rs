@@ -93,57 +93,22 @@ pub fn art(formel: u8) -> Option<&'static str> {
 #[derive(Debug, Clone, Default)]
 pub struct Texte {
     m: BTreeMap<String, String>,
-    /// Texte aus Ross-Tech-Labeldateien (.lbl) des Nutzers, nur zur Anzeige
-    lbl: BTreeMap<String, String>,
 }
 
 impl Texte {
-    /// Eigene Texte und — falls ein .lbl-Ordner eingestellt ist — die Labels
-    /// zu den Steuergeräten aus dem letzten Scan des gewählten Fahrzeugs.
+    /// Eigene Texte laden.
     pub fn laden() -> Self {
-        let mut teile = Vec::new();
-        if let Some(k) = crate::lbl::aktives_fahrzeug() {
-            teile = crate::lbl::teile_aus_scan(&k);
-            // Software-Sicherung ergänzen (Adressen, die der Scan nicht hatte)
-            for (a, t) in crate::lbl::teile_aus_software(&k) {
-                if !teile.iter().any(|(x, _)| *x == a) {
-                    teile.push((a, t));
-                }
-            }
-        }
-        Self { m: alle(), lbl: crate::lbl::texte(&teile) }
+        Self { m: alle() }
     }
 
-    /// Labels für ein Steuergerät ergänzen (z. B. nach der Suche), falls noch keine da sind.
-    pub fn teil_ergaenzen(&mut self, adresse: u8, teil: &str) {
-        let pre = format!("{adresse:02X}-");
-        if self.lbl.keys().any(|k| k.starts_with(&pre)) {
-            return;
-        }
-        if let Some(t) = crate::lbl::teil_aus_ident(teil) {
-            self.lbl.extend(crate::lbl::texte(&[(adresse, t)]));
-        }
-    }
-
-    /// Name des Blocks: eigener Text, sonst aus dem Label.
+    /// Eigener Name des Blocks.
     pub fn block(&self, adresse: u8, block: u8) -> Option<&str> {
-        let k = schluessel(adresse, block, None);
-        self.m.get(&k).or_else(|| self.lbl.get(&k)).map(String::as_str)
+        self.m.get(&schluessel(adresse, block, None)).map(String::as_str)
     }
 
-    /// Text eines Felds aus dem Label (.lbl).
-    pub fn aus_label(&self, adresse: u8, block: u8, feld: u8) -> Option<&str> {
-        self.lbl.get(&schluessel(adresse, block, Some(feld))).map(String::as_str)
-    }
-
-    /// Eigener Text, sonst Label — ohne „~Art“.
+    /// Eigener Text eines Felds — ohne „~Art“.
     pub fn name(&self, adresse: u8, block: u8, feld: u8) -> Option<&str> {
-        self.eigen(adresse, block, feld).or_else(|| self.aus_label(adresse, block, feld))
-    }
-
-    /// Anzahl Texte aus Labeldateien.
-    pub fn label_anzahl(&self) -> usize {
-        self.lbl.len()
+        self.eigen(adresse, block, feld)
     }
 
     /// Eigener Text eines Felds (Feld ab 1).

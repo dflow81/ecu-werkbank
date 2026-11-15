@@ -202,7 +202,7 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 | **TP 2.0 / KWP2000** (ältere Fahrzeuge, z. B. Golf 6 Komfort-Geräte) | ✅ | ❌ | ELM327 kann TP 2.0 nicht |
 | Messwertblöcke, ⭐ Favoriten, Blockscan | ✅ | ❌ | brauchen TP 2.0 |
 | Motor-Checks (Steuerkette, Leerlauf …), Fahrt-Rekorder | ✅ | ❌ | lesen Messwertblöcke (TP 2.0) |
-| Grundeinstellung an TP-2.0-Geräten (wie VCDS 04) | ✅ | ❌ | erst nach einem eigenen Mitschnitt freigeschaltet |
+| Grundeinstellung an TP-2.0-Geräten (Funktion 04) | ✅ | ❌ | erst nach einem eigenen Mitschnitt freigeschaltet |
 | Live-Grafik / Scope | ✅ | ⚠️ | ELM327: nur OBD- und UDS-Kanäle, keine Messwertblöcke |
 | **CAN-Mitschnitt** aufnehmen, Lernhilfe aus Mitschnitt | ✅ | ❌ | braucht direkten Buszugriff |
 | Auto-Erkennung (Auto an/aus, Fahrzeug automatisch wählen) | ✅ | ❌ | liest die Adapter-Zähler |
@@ -248,8 +248,9 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
   Viele auf einmal: `ecu-werkbank fehler-geruest` liest aus allen UDS-Steuergeräten
   **alle möglichen** Fehlercodes (nur lesen) und schreibt eine Datei zum Ausfüllen;
   danach `ecu-werkbank fehlertexte-uebernehmen <datei>`. TP 2.0 kennt diese Abfrage nicht.
-- **VCDS-Protokolle einlesen:** Fahrzeug → Historie & Trends → „📥 VCDS-Protokolle importieren“
-  (oder `ecu-werkbank vcds-import <dateien…>`, Probelauf mit `--probe`). Auto-Scan-Protokolle
+- **Auto-Scan-Protokolle einlesen:** Fahrzeug → Historie & Trends → „📥 Auto-Scan-Protokolle importieren“
+  (oder `ecu-werkbank autoscan-import <dateien…>`, Probelauf mit `--probe`). Auto-Scan-Protokolle
+  eines Werkstatt-Diagnosegeräts als Textdatei
   (deutsch/englisch, auch alte Latin-1-Dateien) kommen mit km-Stand, Datum und allen
   Umgebungsbedingungen je Fehler in den Verlauf des Fahrzeugs (erkannt an der
   Fahrgestellnummer); ihre Fehlertexte werden eigene Fehlertexte — nur für Codes ohne
@@ -353,15 +354,15 @@ und Nummer einzutippen. Entfernen über das **✖** an der Leiste oder nochmal d
 Stern. Die Liste gilt geräteübergreifend (bei mehreren Autos stehen die Adressen
 des jeweiligen Modells drin) und liegt in `messwert_favoriten.toml` im Datenordner.
 
-**⚙ Grundeinstellung (wie VCDS 04) an TP-2.0-Steuergeräten:** Welche Anfragen der Hersteller
+**⚙ Grundeinstellung (Funktion 04) an TP-2.0-Steuergeräten:** Welche Anfragen der Hersteller
 dafür über TP 2.0 schickt, ist nicht verlässlich veröffentlicht. ECUWerkbank rät das
 nicht, sondern **lernt den Ablauf aus deinem eigenen Mitschnitt** — bis dahin ist
 das Senden für dieses Steuergerät **gesperrt**:
 
-1. Reiter „Mitschnitt & Lernhilfe“: Aufnahme starten (CAN-Interface und VCDS-Kabel
-   über ein OBD-Y-Kabel gleichzeitig am Auto).
-2. In VCDS am Steuergerät „Grundeinstellung – 04“, eine Gruppe einschalten, ein
-   paar Sekunden laufen lassen, ausschalten.
+1. Reiter „Mitschnitt & Lernhilfe“: Aufnahme starten (CAN-Interface und das Kabel
+   eines Werkstatt-Diagnosegeräts über ein OBD-Y-Kabel gleichzeitig am Auto).
+2. Mit dem Diagnosegerät am Steuergerät die Grundeinstellung (Funktion 04) für eine
+   Gruppe einschalten, ein paar Sekunden laufen lassen, ausschalten.
 3. Aufnahme stoppen. Im Reiter „TP 2.0“ unter „⚙ Grundeinstellung“ dieselbe Gruppe
    eintragen, „📂 Mitschnitt auswerten…“, das Ergebnis prüfen und übernehmen.
 
@@ -762,38 +763,18 @@ und wird nicht gebraucht — ein Ersatzteil mit gleicher Teilenummer bringt sie 
 Anpassungen der TP-2.0-Steuergeräte: gesichert wird alles, was das Gerät über
 Kennungen (0x22) herausgibt; ganz alte Geräte ohne diesen Dienst geben so nichts her.
 
-### Erweiterte Identifikation, Codier-Helfer, Grundeinstellungen (Referenz)
+### Erweiterte Identifikation, Grundeinstellungen (Referenz)
 
 ```bash
 ecu-werkbank -i can0 ident --geraet 714        # alle Standard-Kennfelder eines UDS-Geräts (Teilenr., SW/HW, Seriennr., Datum …)
-ecu-werkbank codier-hilfe --teil 021906259AAA  # Kurzcodierung-Bedeutungen + Login-Codes aus deinen .lbl
 ecu-werkbank grundeinstellung --system bremse  # Katalog üblicher Werkstattfunktionen (nur Nachschlagen)
 ```
 
 `ident` liest nur (funktioniert auf jedem UDS-Gerät, auch beim Golf).
-`codier-hilfe` und `grundeinstellung` sind reine Nachschlage-Hilfen und greifen
-nie ins Auto ein. Langcodierung-Helfer und viele Labels liegen nur verschlüsselt
-(`.clb`) vor und können nicht gelesen werden.
+`grundeinstellung` ist eine reine Nachschlage-Hilfe und greift nie ins Auto ein.
 
-In der Oberfläche gibt es dieselben drei als eigene Seiten: **Erweiterte
-Identifikation** (Gruppe „Diagnose“) sowie **Codier-Helfer (Label)** und
-**Grundeinstellungen (Referenz)** (Gruppe „Werkzeuge“).
-
-### Anpassungskanäle benennen (aus deinen .lbl-Labels)
-
-Klartext-Labels (`.lbl`) enthalten oft `A`-Zeilen mit den Namen
-der Anpassungskanäle (z. B. „005 = Abgasrückführung"). ECUWerkbank kann die
-anzeigen — reines Nachschlagen, kein Schreiben:
-
-```bash
-ecu-werkbank anpassung-kanaele --teil 038906016BEW     # nach Teilenummer
-ecu-werkbank -i can0 anpassung-kanaele --geraet 20     # Teilenummer kommt aus der Sicherung
-```
-
-In der Oberfläche steht die Liste unter **Anpassungen zurückschreiben →
-„📖 Bekannte Anpassungskanäle laut Label"**. Verschlüsselte Labels (`.clb`)
-können nicht gelesen werden; viele moderne Steuergeräte gibt es nur als `.clb`,
-dann bleibt die Liste leer.
+In der Oberfläche gibt es beide als eigene Seiten: **Erweiterte Identifikation**
+(Gruppe „Diagnose“) und **Grundeinstellungen (Referenz)** (Gruppe „Werkzeuge“).
 
 ### Nach dem Tausch: Anpassungen zurückschreiben
 
@@ -977,7 +958,7 @@ Messwert-Formeln kommen vor? Damit lassen sich die `TODO(verify)`-Stellen in
 während ein anderes, funktionierendes Diagnosegerät einen Kanal öffnet. In der
 GUI: Reiter **„Mitschnitt“**.
 
-## Eigene Label-Dateien (Klartext wie bei VCDS, aber dein Inhalt)
+## Eigene Label-Dateien (dein Inhalt)
 
 Lege `*.toml`-Dateien in den Ordner `labels/` (eine pro Steuergerät). Format und
 Beispiel siehe [`labels/beispiel.toml`](labels/beispiel.toml) und das Modul
@@ -992,8 +973,8 @@ legt beim Speichern eine `.toml.bak`-Sicherung an). Damit bekommen DTCs Klartext
 ```
 
 > Die Texte formulierst du selbst (oder nimmst sie aus offenen, genormten
-> Quellen). Es werden **keine** Label-Texte aus VCDS übernommen — der Aufbau darf
-> ähnlich sein, der Inhalt gehört dir.
+> Quellen). Fremde Label-Dateien anderer Diagnoseprogramme liest ECUWerkbank
+> nicht — der Inhalt gehört dir.
 
 **Vorbefüllen aus dem Scan:** Im Label-Editor legt der Knopf **„⬇ Aus letztem
 Scan anlegen“** für jedes Steuergerät aus dem letzten Scan des aktiven Fahrzeugs
@@ -1006,26 +987,7 @@ Adresse melden.
 Noch schneller geht es im GUI-Reiter **„Eigene Namen“** (Gruppe Werkzeuge):
 Steuergerät-Adresse, Block und Feld eingeben, Namen tippen, speichern — der Name
 gilt danach überall (Live-Werte, Testlauf, Rekorder, Kurven) und bleibt in
-`messwerttexte.toml`. Das ist der empfohlene Weg für eigene Messwert-Namen; einen
-Massen-Import aus `.lbl`/`.clb` gibt es bewusst nicht.
-
-### Feldnamen aus deinen Ross-Tech-Labeldateien (.lbl)
-
-Hast du VCDS, kann ECUWerkbank die **Klartext-Labels** (`.lbl`) aus dessen Ordner
-`Labels` zur Anzeige lesen: Block- und Feldnamen der TP-2.0-Messwertblöcke.
-Die passende Datei wird über die Teilenummer gefunden (aus dem letzten Scan
-bzw. der Steuergeräte-Suche), Umleitungen (`REDIRECT`) werden befolgt.
-Gelesen wird nur zur Laufzeit — **nichts wird kopiert** oder in ECUWerkbank
-gespeichert. Verschlüsselte Labels (`.clb`) gehen nicht. Eigene Texte
-(✏ in der GUI) haben Vorrang.
-
-```bash
-ecu-werkbank lbl-ordner ~/VCDS/Labels      # Ordner einstellen, zeigt passende Dateien je Steuergerät
-ecu-werkbank lbl-ordner                    # nur anzeigen
-ecu-werkbank lbl-ordner --vergessen
-```
-
-In der GUI: **TP 2.0 → „Feldnamen aus Labeldateien (.lbl)“**.
+`messwerttexte.toml`. Das ist der empfohlene Weg für eigene Messwert-Namen.
 
 ## Testen ohne Auto und ohne sudo
 
@@ -1175,8 +1137,8 @@ und Stand in ECUWerkbank:
 | 00 | Auto-Scan / Report (PDF) | ✅ `autoscan`, `report` | ✅ `autoscan`, `report` |
 | 01 | Steuergerät-Identifikation | ✅ `rdid` (0xF187, 0xF190 …) | ✅ `kwp-ident` |
 | 02 | Fehlerspeicher lesen | ✅ `dtc` | ✅ `kwp-dtc` |
-| 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | 🟡 Steuergeräte am Golf 6 lehnen ab; per VCDS-Import ✅ |
-| – | VCDS-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `vcds-import` | ✅ `vcds-import` |
+| 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | 🟡 Steuergeräte am Golf 6 lehnen ab; per Auto-Scan-Import ✅ |
+| – | Auto-Scan-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `autoscan-import` | ✅ `autoscan-import` |
 | 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ❌ |
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
@@ -1203,7 +1165,7 @@ Als Nächstes:
 - TP-2.0-Byte-Offsets und Messwert-Formeln gegen echten Mitschnitt festnageln
   (`candump -L can0`), danach `TODO(verify)` entfernen
 - KWP2000: Codierung, Anpassung, Grundeinstellung
-- Umgebungsbedingungen bei TP-2.0-Fehlern direkt lesen (VCDS-Mitschnitt am Golf auswerten)
+- Umgebungsbedingungen bei TP-2.0-Fehlern direkt lesen (Mitschnitt am Golf auswerten)
 - **Steuergeräte-Adresskarte** aus eigenen `discover`-Mitschnitten
 
 ## Lizenz, Marken, Quellen
@@ -1212,14 +1174,12 @@ ECUWerkbank steht wahlweise unter der **MIT-Lizenz** ([LICENSE-MIT](LICENSE-MIT)
 **Apache-Lizenz 2.0** ([LICENSE-APACHE](LICENSE-APACHE)). © 2026 dflow81.
 
 **Marken:** ECUWerkbank ist ein unabhängiges Projekt und **nicht** mit der Volkswagen AG,
-ihren Marken (VW, Audi, Seat, Škoda) oder mit Ross-Tech LLC verbunden. „VAG“, „VW“,
-„Golf“, „VCDS“ und „Ross-Tech“ sind Marken ihrer Inhaber und werden nur beschreibend
-genannt.
+ihren Marken (VW, Audi, Seat, Škoda) oder mit Ross-Tech LLC verbunden. Genannte
+Marken gehören ihren Inhabern und werden nur beschreibend verwendet.
 
 **Fremde Daten:** ECUWerkbank liefert **keine** Label-Dateien, Datenbanken oder
-Schlüssel von Ross-Tech oder Volkswagen mit. Ross-Tech-Labeldateien im Klartext (`.lbl`)
-werden nur aus der *eigenen* VCDS-Installation des Nutzers gelesen und nie kopiert;
-verschlüsselte Labels (`.clb`) werden nicht geöffnet. Login-Verfahren (SA2) muss der
+Schlüssel von Ross-Tech oder Volkswagen mit und liest keine Label-Dateien anderer
+Diagnoseprogramme. Login-Verfahren (SA2) muss der
 Nutzer selbst vorgeben. Protokolle (ISO-TP, UDS, KWP2000, TP 2.0) sind nach
 öffentlichen Normen bzw. öffentlicher Community-Dokumentation selbst umgesetzt.
 

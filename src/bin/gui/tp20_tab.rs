@@ -27,11 +27,6 @@ impl App {
                 match result {
                     Ok(found) => {
                         self.status = tr!("TP-2.0-Suche: {a} Steuergerät(e) gefunden.", a = found.len());
-                        for f in &found {
-                            if let Some(i) = f.ident.first() {
-                                self.mw_texte.teil_ergaenzen(f.address, i);
-                            }
-                        }
                         self.tp_found = found;
                     }
                     Err(e) => self.status = tr!("TP-2.0-Suche fehlgeschlagen: {e}", e = e),
@@ -342,7 +337,7 @@ impl App {
                             ui.set_min_width(210.0);
                             ui.add(egui::Label::new(egui::RichText::new(&wert).monospace()).truncate()).on_hover_text(&wert);
                         });
-                        let hint = texte.aus_label(addr, *b, feld).map(str::to_string).unwrap_or_else(|| tr!("Name eintragen …"));
+                        let hint = tr!("Name eintragen …");
                         if let Some(f) = namen.get_mut(&schluessel(addr, *b, Some(feld))) {
                             ui.add_sized([300.0, 20.0], egui::TextEdit::singleline(f).hint_text(hint));
                         }
@@ -350,48 +345,6 @@ impl App {
                     }
                 }
             });
-        });
-    }
-
-    /// Ordner mit Ross-Tech-Labeldateien (.lbl) für die Namen der Messwerte.
-    pub(super) fn ui_lbl_ordner(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new(tr!("Feldnamen aus Labeldateien (.lbl)")).id_source("lbl-ordner").show(ui, |ui| {
-            ui.label(tr!("Hast du Labeldateien im Klartext (.lbl, z. B. im Ordner „Labels“ eines anderen Diagnoseprogramms), zeigt ECUWerkbank deren Feldnamen an. Die Dateien werden nur gelesen, nichts wird kopiert. Verschlüsselte Labels (.clb) gehen nicht."));
-            if self.lbl_ordner_eingabe.is_none() {
-                self.lbl_ordner_eingabe = Some(ecu_werkbank::lbl::ordner().map(|p| p.display().to_string()).unwrap_or_default());
-            }
-            let mut speichern = false;
-            ui.horizontal(|ui| {
-                ui.label(tr!("Ordner:"));
-                if let Some(t) = self.lbl_ordner_eingabe.as_mut() {
-                    ui.add(egui::TextEdit::singleline(t).desired_width(360.0).hint_text("/home/…/Labels"));
-                }
-                speichern = ui.button(tr!("💾 Übernehmen")).clicked();
-            });
-            if speichern {
-                let t = self.lbl_ordner_eingabe.clone().unwrap_or_default();
-                let t = t.trim();
-                let p = std::path::PathBuf::from(t);
-                self.status = if !t.is_empty() && !p.is_dir() {
-                    tr!("Ordner nicht gefunden: {a}", a = t)
-                } else {
-                    match ecu_werkbank::lbl::ordner_setzen((!t.is_empty()).then_some(p.as_path())) {
-                        Ok(()) => {
-                            self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
-                            for f in &self.tp_found {
-                                if let Some(i) = f.ident.first() {
-                                    self.mw_texte.teil_ergaenzen(f.address, i);
-                                }
-                            }
-                            tr!("Labeldateien: {a} Texte gefunden.", a = self.mw_texte.label_anzahl())
-                        }
-                        Err(e) => tr!("Speichern: {e}", e = e),
-                    }
-                };
-            }
-            if ecu_werkbank::lbl::ordner().is_some() {
-                ui.weak(tr!("{a} Texte aus Labeldateien für die Steuergeräte des gewählten Fahrzeugs (aus dem letzten Scan bzw. der Suche).", a = self.mw_texte.label_anzahl()));
-            }
         });
     }
 
@@ -769,7 +722,6 @@ impl App {
         if !self.backend().supports_tp20() {
             ui.colored_label(egui::Color32::from_rgb(220, 160, 40), tr!("⚠ TP 2.0 geht nur mit SocketCAN oder Demo — oben umstellen."));
         }
-        self.ui_lbl_ordner(ui);
         ui.add_space(6.0);
 
         ui.horizontal(|ui| {
@@ -905,8 +857,6 @@ impl App {
                             let name = raw.map(|r| self.mw_texte.feld(addr, block, feld, r)).unwrap_or_else(|| tr!("Feld {a}", a = feld));
                             if self.mw_texte.eigen(addr, block, feld).is_some() {
                                 ui.label(name);
-                            } else if self.mw_texte.aus_label(addr, block, feld).is_some() {
-                                ui.label(name).on_hover_text(tr!("Feld {a} — Text aus deiner Labeldatei (.lbl). Mit ✏ eigenen Text eintragen.", a = feld));
                             } else {
                                 ui.weak(name).on_hover_text(tr!("Feld {a} — „~“ = nur die Art aus der Umrechnung. Mit ✏ eigenen Text eintragen.", a = feld));
                             }

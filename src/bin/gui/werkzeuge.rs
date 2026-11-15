@@ -15,8 +15,6 @@ impl App {
                     }
                     self.status = tr!("{a} Steuergerät(e) ausgelesen.", a = st.module.len());
                     self.sw_last = Some(st);
-                    // Teilenummern bekannt → .lbl-Messwertnamen nachladen
-                    self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
                 }
                 Err(e) => self.status = tr!("Softwarestände: {e}", e = format!("{:#}", e)),
             }
@@ -119,105 +117,6 @@ impl App {
             Err(e) => self.status = tr!("Verbindung: {e}", e = format!("{:#}", e)),
         }
         self.ident_result = Some((format!("{tx:#05x}"), zeilen));
-    }
-
-    /// Codier-Helfer aus den .lbl-Labels: was die Kurzcodierung bedeutet und
-    /// welche Login-Codes es gibt. Reines Nachschlagen (keine Verbindung nötig).
-    pub(super) fn ui_codier_helfer(&mut self, ui: &mut egui::Ui) {
-        use ecu_werkbank::lbl;
-        ui.heading(tr!("Codier-Helfer (aus Label)"));
-        ui.label(tr!("Zeigt zu einer Teilenummer, was die Kurzcodierung bedeutet und welche Login-Codes im Label stehen. Nur Nachschlagen aus deinen .lbl-Dateien."));
-        ui.add_space(4.0);
-        // .lbl-Ordner anzeigen und hier direkt wählen (keine feste Vorgabe —
-        // zeig auf deinen vorhandenen VCDS-„Labels“-Ordner).
-        let ordner = lbl::ordner();
-        ui.horizontal_wrapped(|ui| {
-            match &ordner {
-                Some(p) => ui.weak(tr!(".lbl-Ordner: {a}", a = p.display())),
-                None => ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Noch kein .lbl-Ordner gewählt.")),
-            };
-            if ui.button(tr!("📂 .lbl-Ordner wählen…")).clicked() {
-                if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                    self.status = match lbl::ordner_setzen(Some(&dir)) {
-                        Ok(()) => {
-                            self.chl_result = None;
-                            self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
-                            tr!(".lbl-Ordner gesetzt: {a}", a = dir.display())
-                        }
-                        Err(e) => format!("{e:#}"),
-                    };
-                }
-            }
-            if ordner.is_some() && ui.button(tr!("vergessen")).clicked() {
-                let _ = lbl::ordner_setzen(None);
-                self.chl_result = None;
-                self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
-                self.status = tr!(".lbl-Ordner vergessen.");
-            }
-        });
-        if ordner.is_none() {
-            ui.weak(tr!("Tipp: Zeig auf einen Ordner „Labels“ mit .lbl-Dateien. Es wird nur gelesen."));
-            return;
-        }
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.label(tr!("Teilenummer:"));
-            ui.add_sized([200.0, 20.0], egui::TextEdit::singleline(&mut self.chl_teil).hint_text("z. B. 021906259AAA"));
-            if ui.button(tr!("Nachschlagen")).clicked() && !self.chl_teil.trim().is_empty() {
-                let teil = self.chl_teil.trim().to_string();
-                let (ct, cz, lt, lz) = lbl::codier_hilfe(&teil);
-                let gefunden = if cz.is_empty() && lz.is_empty() { None } else { Some((ct, cz, lt, lz)) };
-                self.chl_result = Some((teil, gefunden));
-            }
-        });
-        // Steuergeräte aus der neuesten Software-Sicherung zur schnellen Auswahl
-        if let Some(v) = self.active_vehicle.as_deref() {
-            if let Some(st) = ecu_werkbank::swinfo::list(v).pop() {
-                let teile: Vec<(String, String)> = st.module.iter().filter(|m| !m.teilenummer.is_empty())
-                    .map(|m| (m.teilenummer.clone(), format!("{} — {}", if m.name.is_empty() { &m.system } else { &m.name }, m.teilenummer))).collect();
-                if !teile.is_empty() {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.weak(tr!("aus Sicherung:"));
-                        for (teil, label) in teile {
-                            if ui.small_button(label).clicked() {
-                                self.chl_teil = teil.clone();
-                                let (ct, cz, lt, lz) = lbl::codier_hilfe(&teil);
-                                let gefunden = if cz.is_empty() && lz.is_empty() { None } else { Some((ct, cz, lt, lz)) };
-                                self.chl_result = Some((teil, gefunden));
-                            }
-                        }
-                    });
-                }
-            }
-        }
-        if let Some((teil, gefunden)) = &self.chl_result {
-            ui.add_space(6.0);
-            match gefunden {
-                None => {
-                    ui.label(tr!("Kein Codier-Helfer für {a} gefunden.", a = teil));
-                    ui.weak(tr!("Die Langcodierung moderner Geräte steckt meist in verschlüsselten .clb — die sind nicht lesbar."));
-                }
-                Some((ct, cz, lt, lz)) => {
-                    ui.strong(tr!("Codier-Helfer für {a}:", a = teil));
-                    if !cz.is_empty() {
-                        egui::CollapsingHeader::new(ct.clone().unwrap_or_else(|| tr!("Kurzcodierung"))).default_open(true).id_source("chl_cod").show(ui, |ui| {
-                            for z in cz {
-                                ui.monospace(z);
-                            }
-                        });
-                    }
-                    if !lz.is_empty() {
-                        egui::CollapsingHeader::new(lt.clone().unwrap_or_else(|| tr!("Login-Codes"))).default_open(true).id_source("chl_login").show(ui, |ui| {
-                            for z in lz {
-                                ui.monospace(z);
-                            }
-                        });
-                    }
-                    ui.add_space(4.0);
-                    ui.weak(tr!("Nur Nachschlagen. Kurzcodierung schreiben: Reiter „Codierung“. Login: Reiter „Codier-Sicherung“/Zurückschreiben."));
-                }
-            }
-        }
     }
 
     /// Grundeinstellung-Katalog: Nachschlage-Referenz der üblichen

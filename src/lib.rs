@@ -54,7 +54,6 @@ pub mod service;
 pub mod bus;
 pub mod erkennung;
 pub mod fremd;
-pub mod lbl;
 pub mod login;
 pub mod notfall;
 pub mod sim;

@@ -33,7 +33,6 @@ impl App {
             Tab::Motor => self.ui_motor(ui),
             Tab::Rekorder => self.ui_rekorder(ui),
             Tab::Ident => self.ui_ident(ui),
-            Tab::CodierHelfer => self.ui_codier_helfer(ui),
             Tab::GrundLexikon => self.ui_grund_lexikon(ui),
         }
     }

@@ -11,7 +11,7 @@ fotografiert sich selbst und schließt sich danach:
   VAG_FOTO=bild.ppm VAG_FOTO_WARTEN=<sekunden> ecu-werkbank-gui
 Seiten (VAG_TAB) z. B.: start, steuergeraete, obd, tp20, tp20-block, grundeinstellung,
 batterie, diagnose, fahrzeuge, service-anzeige, historie, sicherung, software, testlauf,
-sicherheit, ident, codierhelfer, lexikon, namen, editor-scan, service-frage, lernen.
+sicherheit, ident, lexikon, namen, editor-scan, service-frage, lernen.
 Mit eigenem Datenordner (VAG_DATA_DIR) und Label-Ordner (VAG_LABELS), damit keine
 echten Daten ins Bild kommen.
 Braucht: python3-reportlab, Schrift DejaVu Sans.
@@ -41,7 +41,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 HIER = Path(__file__).resolve().parent
 BILDER = HIER / "bilder"
 AUSGABE = HIER / "ecu-werkbank-Handbuch.pdf"
-STAND = "11.11.2026"
+STAND = "15.11.2026"
 
 FONTS = Path("/usr/share/fonts/truetype/dejavu")
 pdfmetrics.registerFont(TTFont("DV", str(FONTS / "DejaVuSans.ttf")))
@@ -199,7 +199,7 @@ liste(
     "Abgas-Prüfergebnisse.",
     "Je Fahrzeug einen Ordner führen: Scans, Kilometer, Wartung, Codierungs-Sicherungen, Berichte.",
     "Gebrauchtwagen-Check: gelöschte Fehler? passt der Tacho? gleiche Fahrgestellnummer überall?",
-    "Nachschlagen: erweiterte Identifikation, Codier-Helfer, Lexikon der Grundeinstellungen.",
+    "Nachschlagen: erweiterte Identifikation, Lexikon der Grundeinstellungen.",
 )
 h2("Was es bewusst nicht kann")
 liste(
@@ -269,7 +269,7 @@ tabelle(["Bereich", "Unterseiten"], [
     ["Fahrzeug", "Fahrzeuge &amp; Wartung · Service-Anzeige · Historie &amp; Trends · Softwarestände · Nachrüstung · "
                  "Codier-Sicherung · Codierung"],
     ["Werkzeuge", "Testlauf · Mitschnitt &amp; Lernhilfe · Fehlerbilder · Label-Editor · Eigene Namen · "
-                  "Codier-Helfer (Label) · Grundeinstellungen (Referenz)"],
+                  "Grundeinstellungen (Referenz)"],
 ], [32, 138])
 h2("Sprache")
 p("Oben rechts wählst du die Sprache (Feld mit der Weltkugel). Eingebaut sind Deutsch und Englisch. Eine weitere Sprache legst du "
@@ -357,7 +357,7 @@ p("Oft gebrauchte Blöcke merkst du dir mit dem <b>Stern</b> (☆ → ★) neben
   "Leiste <b>★ Favoriten</b> über dem Block; ein Klick öffnet und liest den Block sofort. Entfernen mit ✖ oder "
   "nochmal dem Stern.")
 bild("favoriten", "Messwertblock 2 des Motors mit eigenen Feldnamen und der Favoriten-Leiste darüber.", 105,
-     ausschnitt=(380, 612))
+     ausschnitt=(335, 564))
 p("Alle eigenen Namen auf einen Blick — und schnell neue eintragen — unter Werkzeuge → <b>Eigene Namen</b>: "
   "Adresse, Block, Feld (leer = Name des ganzen Blocks) und Name eingeben, <b>Speichern</b>.")
 bild("namen", "Werkzeuge → Eigene Namen: Schnell-Eingabe und Liste aller gespeicherten Namen.", 80)
@@ -473,12 +473,6 @@ p("Diagnose → Erweiterte Identifikation liest alle genormten Kennungen eines <
   "CAN-ID eingeben (z. B. 0x714 für das Kombi), <b>Lesen</b>. Für TP-2.0-Steuergeräte steht die Identifikation "
   "im Reiter TP 2.0.")
 bild("ident", "Diagnose → Erweiterte Identifikation des Kombiinstruments (0x714).", 80)
-h2("Codier-Helfer")
-p("Werkzeuge → Codier-Helfer zeigt zu einer Teilenummer, was die Kurzcodierung bedeutet und welche Login-Codes "
-  "im Label stehen. Er braucht <b>deine eigenen</b> Ross-Tech-Labeldateien im Klartext (.lbl) — zum Beispiel aus "
-  "deiner VCDS-Installation. Ordner einmal wählen, fertig. ECUWerkbank liest sie nur und kopiert nichts; "
-  "verschlüsselte Labels (.clb) gehen nicht.")
-bild("codierhelfer", "Werkzeuge → Codier-Helfer, noch ohne Label-Ordner.", 45)
 h2("Grundeinstellungen (Referenz)")
 p("Ein Lexikon der üblichen Werkstattfunktionen je System: Drosselklappe anlernen, Lenkwinkelsensor, "
   "ABS entlüften, Parkbremse, Service-Intervall … Zu jeder steht, wozu sie dient, worauf du achten musst und "
@@ -504,12 +498,6 @@ kasten("Gut zu wissen",
        "Die Label-Dateien ordnen nach <b>Adresse</b> zu, nicht nach Auto. Haben zwei Autos an derselben Adresse "
        "verschiedene Steuergeräte, können sich Messwert-Namen überschneiden. Fehlertexte und Codierung sind davon "
        "meist nicht betroffen.")
-h2("Ross-Tech-Labeldateien (.lbl)")
-p("Hast du VCDS, kannst du dessen Klartext-Labels (.lbl) <b>direkt lesen lassen</b>: im Reiter TP 2.0 unter "
-  "„Feldnamen aus Labeldateien (.lbl)“ den Ordner angeben. Die Feldnamen erscheinen dann bei den Messwertblöcken. "
-  "Nichts wird kopiert. Viele Labels für wichtige Steuergeräte (Motor, ABS, Gateway) sind allerdings "
-  "verschlüsselt (.clb) und nicht lesbar — dann bleibt der Weg über eigene Namen.")
-
 # ---------------------------------------------------------------- 13
 story.append(PageBreak())
 h1("13  Funktionen, die etwas am Auto ändern")
@@ -538,16 +526,16 @@ p("Im Reiter Diagnose → Grundeinstellung / Stellglied gibst du Steuergerät, R
   "von Hand ein. Bei <b>Sub</b> bedeutet 1 = starten, 2 = stoppen, 3 = Ergebnis abfragen. Vor dem Senden "
   "erscheint immer ein gelber Kasten mit genau dem, was gesendet wird. Erst <b>Ja, senden</b> schickt es ab.")
 bild("rueckfrage", "Die Rückfrage vor dem Senden einer Routine.", 70)
-h2("Grundeinstellung an TP-2.0-Steuergeräten (wie VCDS „04“)")
+h2("Grundeinstellung an TP-2.0-Steuergeräten (Funktion 04)")
 p("Welche Anfragen VW dafür über TP 2.0 schickt, ist nicht verlässlich veröffentlicht. ECUWerkbank rät das nicht, "
   "sondern <b>lernt den Ablauf aus deinem eigenen Mitschnitt</b>. Bis dahin ist das Senden für dieses "
   "Steuergerät gesperrt (Schloss-Symbol).")
 bild("grundeinstellung", "Diagnose → TP 2.0: der Abschnitt „Grundeinstellung“, noch gesperrt für den Motor (0x01).", 100,
-     ausschnitt=(330, 564))
+     ausschnitt=(300, 537))
 schritte(
-    "CAN-Adapter und VCDS-Kabel gleichzeitig ans Auto — dafür braucht es ein <b>OBD-Y-Kabel</b>.",
+    "CAN-Adapter und das Kabel eines Werkstatt-Diagnosegeräts gleichzeitig ans Auto — dafür braucht es ein <b>OBD-Y-Kabel</b>.",
     "Werkzeuge → Mitschnitt &amp; Lernhilfe: <b>Mitschnitt aufzeichnen</b>.",
-    "In VCDS an diesem Steuergerät „Grundeinstellung – 04“ wählen, eine harmlose Gruppe einschalten "
+    "Mit dem Diagnosegerät an diesem Steuergerät die Grundeinstellung (Funktion 04) wählen, eine harmlose Gruppe einschalten "
     "(z. B. Drosselklappe anlernen), ein paar Sekunden laufen lassen, ausschalten.",
     "Aufnahme stoppen. In ECUWerkbank dieselbe Gruppe eintragen, <b>Mitschnitt auswerten…</b>, das Ergebnis "
     "prüfen und <b>Übernehmen</b>.",
@@ -591,7 +579,6 @@ tabelle(["Befehl", "Was er tut"], [
     ["kwp-dtc / kwp-block", "TP 2.0: Fehler / Messwertblöcke (<font face='DV-M'>--address 0x01 --block 1,2</font>)"],
     ["ident --geraet 714", "Erweiterte Identifikation eines UDS-Steuergeräts"],
     ["grundeinstellung", "Lexikon der Grundeinstellungen (nur Nachschlagen)"],
-    ["codier-hilfe / lbl-ordner", "Codier-Helfer aus deinen .lbl-Labels / Label-Ordner einstellen"],
     ["batterie", "Batterie- und Starttest"],
     ["gemisch", "Gemisch-Assistent"],
     ["obd-tests", "Abgas-Prüfergebnisse (Mode 06)"],
@@ -640,8 +627,8 @@ tabelle(["Protokoll", "Adresse / ID", "Steuergerät", "Teilenummer"], [
     ["TP 2.0", "0x43", "Anhängersteuergerät", "1K0907383F"],
 ], [22, 27, 71, 50])
 klein("Diese Teilenummern gelten für das geprüfte Auto. Andere Ausstattungen haben andere Steuergeräte.")
-klein("ECUWerkbank ist ein unabhängiges Projekt und nicht mit der Volkswagen AG oder Ross-Tech verbunden. „VW“, "
-      "„Golf“, „VCDS“ und „Ross-Tech“ sind Marken ihrer Inhaber. Lizenz: MIT oder Apache-2.0, © 2026 dflow81.")
+klein("ECUWerkbank ist ein unabhängiges Projekt und nicht mit der Volkswagen AG oder Ross-Tech verbunden. Genannte "
+      "Marken gehören ihren Inhabern. Lizenz: MIT oder Apache-2.0, © 2026 dflow81.")
 
 
 # ---------------------------------------------------------------- Bauen
