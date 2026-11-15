@@ -201,7 +201,7 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 | Andere Marken: Steuergeräte suchen | ✅ | ⚠️ | ELM327: nur OBD-Adressen |
 | **TP 2.0 / KWP2000** (ältere Fahrzeuge, z. B. Golf 6 Komfort-Geräte) | ✅ | ❌ | ELM327 kann TP 2.0 nicht |
 | Messwertblöcke, ⭐ Favoriten, Blockscan | ✅ | ❌ | brauchen TP 2.0 |
-| **Gateway-Verbauliste und -Codierung** (direkt aus dem Gateway) | ✅ | ❌ | TP 2.0; am Golf 6 geprüft |
+| **Gateway-Verbauliste und -Codierung** (direkt aus dem Gateway) | ✅ | ❌ | geht mit dem CAN-Interface, am Golf 6 geprüft; der ELM327 kann kein TP 2.0 |
 | Motor-Checks (Steuerkette, Leerlauf …), Fahrt-Rekorder | ✅ | ❌ | lesen Messwertblöcke (TP 2.0) |
 | Grundeinstellung an TP-2.0-Geräten (Funktion 04) | ✅ | ❌ | erst nach einem eigenen Mitschnitt freigeschaltet |
 | Live-Grafik / Scope | ✅ | ⚠️ | ELM327: nur OBD- und UDS-Kanäle, keine Messwertblöcke |
@@ -1171,9 +1171,11 @@ und Stand in ECUWerkbank:
 | – | Mitschnitt aufzeichnen/auswerten | ✅ `record`, `decode-log` | ✅ inkl. Prüfbericht |
 | – | Service-Anzeige lesen / zurückstellen | 🟡 `service` (Kennungen je Fahrzeug lernen; Golf 6: km seit Service bestätigt) | – |
 | – | Verbauliste (verbaute Steuergeräte, nach System) | ✅ `verbauliste`, GUI Steuergeräte → „📋 Verbauliste nach System“ | ✅ aus dem Scan |
-| – | Gateway-Verbauliste direkt aus dem Gateway | ❌ (neuere UDS-Gateways noch offen) | ✅ `gateway-verbauliste` (Golf 6 geprüft) |
+| – | Gateway-Verbauliste direkt aus dem Gateway | ⏳ geplant (neuere Autos mit UDS-Gateway) | ✅ `gateway-verbauliste`, GUI-Knopf (Golf 6 geprüft) |
 | – | Transportmodus | ❌ | ❌ |
 | – | K-Line (vor ~2004) | – nicht über SocketCAN | – |
+
+✅ geht · 🟡 teilweise · ⏳ geplant · ❌ geht nicht · – gibt es dort nicht
 
 Als Nächstes:
 - Restliche Messwert-Formeln (Bremsdruck, Beschleunigung, Drehrate …) mit einer
