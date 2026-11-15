@@ -180,7 +180,29 @@ impl<'a> Uds<'a> {
         let resp = self.request(SID_READ_DTC, &[0x02, status_mask])?;
         // Viele Steuergeräte melden ALLE bekannten Codes, auch mit Status
         // 0x10/0x40 („Test noch nicht gelaufen“) — das sind keine Fehler.
-        Ok(dtc_liste(&resp).into_iter().filter(|d| d.status & status_mask & !0x50 != 0).collect())
+        let l: Vec<Dtc> = dtc_liste(&resp).into_iter().filter(|d| d.status & status_mask & !0x50 != 0).collect();
+        Ok(self.mit_format(l))
+    }
+
+    /// Fehlercode-Format des Steuergeräts (ReadDTCInformation 0x01, nur lesen):
+    /// 0x00 = ISO 15031-6 (P-Code + Fehlerart), 0x01 = ISO 14229-1 (Hersteller-
+    /// nummer ohne genormte Bedeutung), 0x04 = SAE J2012-DA. None = nicht gemeldet.
+    pub fn dtc_format(&self) -> Option<u8> {
+        let r = self.request(SID_READ_DTC, &[0x01, 0xFF]).ok()?;
+        // [01][Verfügbarkeitsmaske][Format][Anzahl hi lo]
+        (r.first() == Some(&0x01) && r.len() >= 3).then(|| r[2])
+    }
+
+    /// Codes als Herstellernummer kennzeichnen, wenn das Steuergerät dieses
+    /// Format meldet (VW-Komfortgeräte, z. B. RNS 310: 0x100006 = „1048582“).
+    /// Nur gefragt, wenn es überhaupt Codes gibt.
+    fn mit_format(&self, mut l: Vec<Dtc>) -> Vec<Dtc> {
+        if !l.is_empty() && self.dtc_format() == Some(DTC_FORMAT_ISO14229) {
+            for d in &mut l {
+                d.hersteller = true;
+            }
+        }
+        l
     }
 
     /// Alle Fehlercodes, die das Steuergerät kennt (nicht nur die gespeicherten):
@@ -189,8 +211,8 @@ impl<'a> Uds<'a> {
     /// ohnehin alle Codes mit „Test noch nicht gelaufen“. Nur lesen.
     pub fn read_supported_dtcs(&self) -> Result<(Vec<Dtc>, bool)> {
         match self.request(SID_READ_DTC, &[0x0A]) {
-            Ok(r) => Ok((dtc_liste(&r), true)),
-            Err(_) => Ok((dtc_liste(&self.request(SID_READ_DTC, &[0x02, 0xFF])?), false)),
+            Ok(r) => Ok((self.mit_format(dtc_liste(&r)), true)),
+            Err(_) => Ok((self.mit_format(dtc_liste(&self.request(SID_READ_DTC, &[0x02, 0xFF])?)), false)),
         }
     }
 
@@ -218,24 +240,37 @@ fn dtc_liste(resp: &[u8]) -> Vec<Dtc> {
         .as_chunks::<4>()
         .0
         .iter()
-        .map(|c| Dtc { raw: ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32, status: c[3] })
+        .map(|c| Dtc { raw: ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32, status: c[3], hersteller: false })
         .collect()
 }
+
+/// DTC-Format „ISO 14229-1“: die 3 Byte sind eine Herstellernummer.
+pub const DTC_FORMAT_ISO14229: u8 = 0x01;
 
 #[derive(Debug, Clone)]
 pub struct Dtc {
     pub raw: u32,
     pub status: u8,
+    /// Herstellernummer statt P-Code (Steuergerät meldet Format ISO 14229-1)
+    pub hersteller: bool,
 }
 
 impl Dtc {
-    /// Render as the standard Pxxxx/Cxxxx/Bxxxx/Uxxxx code.
     /// Fehlerart (drittes Byte, „failure type“), z. B. 0x29.
+    /// Bei Herstellernummern gibt es keine genormte Fehlerart (0).
     pub fn fehlerart(&self) -> u8 {
+        if self.hersteller {
+            return 0;
+        }
         (self.raw & 0xFF) as u8
     }
 
+    /// Anzeige-Code: genormt Pxxxx/Cxxxx/Bxxxx/Uxxxx, bei Herstellernummern
+    /// die ganze Zahl dezimal (so zeigen es auch Werkstatt-Diagnosegeräte).
     pub fn code(&self) -> String {
+        if self.hersteller {
+            return self.raw.to_string();
+        }
         let b = ((self.raw >> 16) & 0xFF) as u8;
         let letter = match b >> 6 {
             0 => 'P',
@@ -363,6 +398,15 @@ pub fn vag_sweep(iface: &str) -> Vec<(u16, u16)> {
 
 #[cfg(test)]
 mod tests_routine {
+
+    #[test]
+    fn hersteller_nummer_statt_p_code() {
+        let d = Dtc { raw: 0x100006, status: 0x09, hersteller: false };
+        assert_eq!((d.code(), d.fehlerart()), ("P1000".to_string(), 0x06));
+        let d = Dtc { hersteller: true, ..d };
+        assert_eq!((d.code(), d.fehlerart()), ("1048582".to_string(), 0));
+    }
+
     use super::*;
 
     #[test]

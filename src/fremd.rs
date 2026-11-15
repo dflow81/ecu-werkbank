@@ -215,7 +215,7 @@ pub fn lesen(be: &Backend, db: &LabelDb, tx: u16, rx: u16) -> Result<ModuleRepor
                 .unwrap_or_default()
                 .as_chunks::<3>().0.iter()
                 .map(|c| {
-                    let code = crate::uds::Dtc { raw: (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8), status: c[2] }.code();
+                    let code = crate::uds::Dtc { raw: (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8), status: c[2], hersteller: false }.code();
                     DtcEntry {
                         text: db.dtc_description(&code).unwrap_or("").to_string(),
                         code,

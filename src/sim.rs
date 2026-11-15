@@ -375,7 +375,8 @@ fn golf6_module() -> Module {
         u(0x714, 0x77E, "Kombiinstrument", "5K0920860F", "0402", "KOMBI", vec![([0x90, 0x12, 0x00], 0x50), ([0xD1, 0x00, 0x00], 0x50)]),
         u(0x715, 0x77F, "Airbag", "5K0959655", "0750", "AirbagVW10", vec![([0x95, 0x13, 0x00], 0x50)]),
         u(0x746, 0x7B0, "Klimaanlage", "5K0907044BD", "0405", "Climatronic", vec![]),
-        // Radio: P1000, Fehlerart 06, aktuell + gespeichert
+        // Radio: VW-Fehlernummer 0x100006 = 1048582 (Format ISO 14229-1, wie am
+        // echten RNS 310), aktuell + gespeichert
         u(0x76C, 0x7D6, "Radio/Navigation", "3C0035270", "0450", "RNS310", vec![([0x10, 0x00, 0x06], 0x09)]),
     ];
     let k = |addr: u8, tx: u16, ident: Ident, dtcs: Vec<(u16, u8)>| KwpModule { tester_tx: Some(tx), ..kwp(addr, ident, dtcs) };
@@ -891,6 +892,12 @@ pub fn uds_response(tx: u16, req: &[u8]) -> Option<Vec<u8>> {
         }
         // Alle bekannten Codes (reportSupportedDTC): die gespeicherten plus ein
         // paar frei erfundene, die nur „Test noch nicht gelaufen“ melden
+        // Fehlercode-Format: Golf 6 wie echt (VW-Nummern), Demo genormt (P-Codes)
+        0x19 if arg(1) == 0x01 => {
+            let format = if modell() == Modell::Golf6 { 0x01 } else { 0x00 };
+            let n = m.dtcs.len() as u16;
+            vec![0x59, 0x01, 0xFF, format, (n >> 8) as u8, n as u8]
+        }
         0x19 if arg(1) == 0x0A => {
             let mut r = vec![0x59, 0x0A, 0xFF];
             for (code, status) in &m.dtcs {
@@ -1223,6 +1230,10 @@ mod tests {
         assert_eq!(r.total_dtcs(), 5);
         let motor = r.modules.iter().find(|m| m.protocol == "TP 2.0" && m.address == Some(0x01)).unwrap();
         assert_eq!(motor.dtcs.as_ref().unwrap()[0].code, "08851");
+        // Radio meldet VW-Fehlernummern (Format ISO 14229-1) — Anzeige wie VCDS
+        let radio = r.modules.iter().find(|m| m.name.contains("Radio")).unwrap();
+        let d = &radio.dtcs.as_ref().unwrap()[0];
+        assert_eq!((d.code.as_str(), d.alt.as_deref()), ("1048582", None));
         assert!(motor.ident[0].starts_with("03C906016"));
         let abs = r.modules.iter().find(|m| m.address == Some(0x03) && m.protocol == "TP 2.0").unwrap();
         assert!(abs.ident.iter().any(|i| i == "ESP MK60EC1"), "{:?}", abs.ident);
