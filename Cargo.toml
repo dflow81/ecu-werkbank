@@ -1,6 +1,6 @@
 [package]
 name = "ecu-werkbank"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "ECUWerkbank: open diagnostic and coding workbench for German cars (UDS, TP 2.0, OBD-II)"
 authors = ["dflow81"]
