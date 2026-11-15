@@ -48,6 +48,7 @@ pub const STD_DIDS: &[(u16, &str)] = &[
     (0xF1A3, "Hardware-Version"),
     (0xF197, "System-/Gerätename"),
     (0xF1A2, "Codierung (ASAM/ODX)"),
+    (0xF1A5, "Betriebsnummer (letzte Codierung)"),
     (0xF19E, "ASAM/ODX-Datei"),
     (0xF18C, "Seriennummer (ECU)"),
     (0xF17C, "Fertigungskennung (FAZIT)"),
@@ -70,10 +71,28 @@ fn vielleicht_datum(d: &[u8]) -> Option<String> {
     None
 }
 
+/// Betriebsnummer der letzten Codierung aus 0xF1A5 (6 Byte = 48 Bit):
+/// Händler (21 Bit) | Importeur (10 Bit) | Werkstattcode (17 Bit).
+/// Am Golf 6 mit der Anzeige eines Werkstatt-Diagnosegeräts verglichen
+/// (ABS, Kombi, Bordnetz; 15.11.2026).
+pub fn betriebsnummer(d: &[u8]) -> Option<(u32, u16, u32)> {
+    let b: [u8; 6] = d.try_into().ok()?;
+    let v = b.iter().fold(0u64, |a, &x| (a << 8) | u64::from(x));
+    let werkstatt = (v & 0x1_FFFF) as u32;
+    let importeur = ((v >> 17) & 0x3FF) as u16;
+    let haendler = ((v >> 27) & 0x1F_FFFF) as u32;
+    Some((werkstatt, importeur, haendler))
+}
+
 /// Rohbytes einer Identifikations-Kennung lesbar machen: Text, Datum oder Hex.
 pub fn ident_wert(did: u16, d: &[u8]) -> String {
     if d.is_empty() {
         return String::new();
+    }
+    if did == 0xF1A5 {
+        if let Some((w, i, h)) = betriebsnummer(d) {
+            return tr!("Werkstatt {w} · Importeur {i} · Händler {h}", w = format!("{w:05}"), i = format!("{i:03}"), h = format!("{h:05}"));
+        }
     }
     let txt = ascii(d);
     // Programmierdatum als BCD
@@ -218,6 +237,15 @@ pub fn compare(old: &Stand, new: &Stand) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn betriebsnummer_wie_am_golf6() {
+        // ABS, Kombi, Bordnetz — Werte wie vom Werkstatt-Diagnosegerät angezeigt
+        assert_eq!(betriebsnummer(&[0x80, 0x00, 0x00, 0x02, 0xDA, 0x73]), Some((55923, 1, 1_048_576)));
+        assert_eq!(betriebsnummer(&[0x00, 0x04, 0xA0, 0x00, 0x00, 0x42]), Some((66, 0, 148)));
+        assert_eq!(betriebsnummer(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x42]), Some((66, 0, 0)));
+        assert_eq!(betriebsnummer(&[0x00, 0x42]), None);
+    }
 
     #[test]
     fn ident_wert_text_datum_hex() {
