@@ -478,7 +478,7 @@ impl App {
         // 1. UDS (neuere Steuergeräte)
         let uds_res = (|| -> anyhow::Result<Vec<String>> {
             let tp = self.backend().open(tx, rx)?;
-            let uds = Uds::new(&*tp);
+            let uds = Uds::new(&*tp).mit_tx(tx);
             uds.diagnostic_session(0x01)?;
             let dtcs = uds.read_dtcs(0xFF)?;
             Ok(dtcs
@@ -738,7 +738,7 @@ impl App {
             } else {
                 let (tx, rx) = ecu_werkbank::profil::parse_can(&m.can).ok_or_else(|| anyhow::anyhow!(tr!("CAN-IDs unbekannt")))?;
                 let tp = be.open(tx, rx)?;
-                let uds = Uds::new(&*tp);
+                let uds = Uds::new(&*tp).mit_tx(tx);
                 uds.diagnostic_session(0x01)?;
                 if ident {
                     let mut l = Vec::new();

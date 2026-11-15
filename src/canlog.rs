@@ -199,7 +199,7 @@ impl Report {
         if !self.formulas.is_empty() {
             let _ = writeln!(s, "\n  {}", tr!("Messwert-Formeln im Mitschnitt (Kennbyte: Anzahl, mit Anzeige vergleichen):"));
             for (f, n) in &self.formulas {
-                let probe = kwp::BlockValue { formula: *f, a: 1, b: 1 };
+                let probe = kwp::BlockValue { formula: *f, a: 1, b: 1, text: None };
                 let known = if probe.decode().is_some() { crate::trs!("bekannt") } else { crate::trs!("UNBEKANNT") };
                 let _ = writeln!(s, "    F{f:02X}: {n}×  ({known})");
             }

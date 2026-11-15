@@ -54,11 +54,20 @@ const NRC_BUSY_REPEAT: u8 = 0x21;
 
 pub struct Uds<'a> {
     tp: &'a dyn Transport,
+    /// Anfrage-ID des Steuergeräts, falls bekannt (für die Deutung der Fehlercodes)
+    tx: Option<u16>,
 }
 
 impl<'a> Uds<'a> {
     pub fn new(tp: &'a dyn Transport) -> Self {
-        Self { tp }
+        Self { tp, tx: None }
+    }
+
+    /// Anfrage-ID mitgeben: Herstelleradressen (nicht 0x7E0–0x7E7) melden bei
+    /// VW Fehlernummern, auch wenn sie das Format nicht nennen.
+    pub fn mit_tx(mut self, tx: u16) -> Self {
+        self.tx = Some(tx);
+        self
     }
 
     /// Send a request and return the positive-response payload (without the
@@ -194,10 +203,20 @@ impl<'a> Uds<'a> {
     }
 
     /// Codes als Herstellernummer kennzeichnen, wenn das Steuergerät dieses
-    /// Format meldet (VW-Komfortgeräte, z. B. RNS 310: 0x100006 = „1048582“).
+    /// Format meldet — oder das Format gar nicht nennt und auf einer
+    /// Herstelleradresse sitzt (Golf 6 RNS 310 lehnt 0x19 0x01 ab, zeigt im
+    /// Werkstatt-Diagnosegerät aber 0x100006 als „1048582“). Genormte P-Codes
+    /// bleiben bei gemeldetem Format 0x00/0x04 und auf den OBD-Adressen.
     /// Nur gefragt, wenn es überhaupt Codes gibt.
     fn mit_format(&self, mut l: Vec<Dtc>) -> Vec<Dtc> {
-        if !l.is_empty() && self.dtc_format() == Some(DTC_FORMAT_ISO14229) {
+        if l.is_empty() {
+            return l;
+        }
+        let hersteller = match self.dtc_format() {
+            Some(f) => f == DTC_FORMAT_ISO14229,
+            None => self.tx.is_some_and(|t| !(0x7E0..=0x7E7).contains(&t)),
+        };
+        if hersteller {
             for d in &mut l {
                 d.hersteller = true;
             }

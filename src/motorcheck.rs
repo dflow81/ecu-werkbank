@@ -366,7 +366,7 @@ mod tests {
     use super::*;
 
     fn v(formula: u8, a: u8, b: u8) -> BlockValue {
-        BlockValue { formula, a, b }
+        BlockValue { formula, a, b, text: None }
     }
 
     #[test]

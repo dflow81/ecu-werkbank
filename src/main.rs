@@ -2153,7 +2153,7 @@ fn show_labels(dir: &std::path::Path, db: &LabelDb) -> Result<()> {
 
 fn read_dtc(be: &Backend, tx: u16, rx: u16, mask: u8, db: &LabelDb) -> Result<()> {
     let tp = be.open(tx, rx)?;
-    let uds = Uds::new(&*tp);
+    let uds = Uds::new(&*tp).mit_tx(tx);
     uds.diagnostic_session(0x01)?;
     let dtcs = uds.read_dtcs(mask)?;
     if dtcs.is_empty() {

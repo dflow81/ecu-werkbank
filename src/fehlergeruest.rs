@@ -35,7 +35,7 @@ pub fn lesen(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> R
         fortschritt(&format!("{tx:#05x}"));
         let r = (|| -> Result<(Vec<u8>, Vec<u8>, (Vec<crate::uds::Dtc>, bool))> {
             let tp = be.open(tx, rx)?;
-            let uds = Uds::new(&*tp);
+            let uds = Uds::new(&*tp).mit_tx(tx);
             uds.diagnostic_session(crate::uds::SESSION_DEFAULT)?;
             let teil = uds.read_data_by_id(0xF187).unwrap_or_default();
             let sys = uds.read_data_by_id(0xF197).unwrap_or_default();

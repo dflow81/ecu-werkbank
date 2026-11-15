@@ -251,7 +251,7 @@ pub fn scan_opts(be: &Backend, db: &LabelDb, with_tp20: bool, voll: bool, mut pr
         type Snap = Vec<Vec<(String, String)>>;
         let probe = (|| -> Result<(Vec<u8>, Vec<u8>, Option<Vec<crate::uds::Dtc>>, Snap)> {
             let tp = be.open(tx, rx)?;
-            let uds = Uds::new(&*tp);
+            let uds = Uds::new(&*tp).mit_tx(tx);
             uds.diagnostic_session(crate::uds::SESSION_DEFAULT)?;
             let mut part = uds.read_data_by_id(0xF187).unwrap_or_default();
             if let Ok(sys) = uds.read_data_by_id(0xF197) {

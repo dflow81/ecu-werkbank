@@ -84,7 +84,13 @@ pub fn art(formel: u8) -> Option<&'static str> {
         0x1A => crate::trs!("Temperatur"),
         0x27 | 0x31 | 0x33 => crate::trs!("Menge je Hub"),
         0x37 => crate::trs!("Zeit"),
-        0x5E => crate::trs!("Drehmoment"),
+        0x5E | 0x34 => crate::trs!("Drehmoment"),
+        0x1F => crate::trs!("Lambda"),
+        0x3C => crate::trs!("Zeit"),
+        0x41 => crate::trs!("Weg"),
+        0x42 => crate::trs!("Spannung"),
+        0x60 => crate::trs!("Druck"),
+        0x5F => crate::trs!("Text"),
         _ => return None,
     })
 }
@@ -146,7 +152,7 @@ mod tests {
         let _g = crate::history::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("vag-mw-{}", std::process::id()));
         std::env::set_var("VAG_DATA_DIR", &dir);
-        let werte = [BlockValue { formula: 0x01, a: 200, b: 20 }, BlockValue { formula: 0x05, a: 10, b: 190 }, BlockValue { formula: 0x99, a: 1, b: 2 }];
+        let werte = [BlockValue { formula: 0x01, a: 200, b: 20, text: None }, BlockValue { formula: 0x05, a: 10, b: 190, text: None }, BlockValue { formula: 0x99, a: 1, b: 2, text: None }];
         let t = Texte::laden();
         assert_eq!(t.feld(1, 1, 1, &werte[0]), "~Drehzahl");
         assert_eq!(t.feld(1, 1, 3, &werte[2]), "Feld 3");

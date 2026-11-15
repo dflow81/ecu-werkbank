@@ -128,10 +128,10 @@ mod tests {
     fn golf6_bloecke_passen() {
         // Block 1 wie am echten Golf 6 / MED17 gelesen
         let b1 = [
-            BlockValue { formula: 0x01, a: 0xC8, b: 0x14 },
-            BlockValue { formula: 0x05, a: 0x0A, b: 0xBE },
-            BlockValue { formula: 0x14, a: 0x32, b: 0x80 },
-            BlockValue { formula: 0x10, a: 0xFF, b: 0x33 },
+            BlockValue { formula: 0x01, a: 0xC8, b: 0x14, text: None },
+            BlockValue { formula: 0x05, a: 0x0A, b: 0xBE, text: None },
+            BlockValue { formula: 0x14, a: 0x32, b: 0x80, text: None },
+            BlockValue { formula: 0x10, a: 0xFF, b: 0x33, text: None },
         ];
         let p = pruefen(&MOTOR_BENZIN[0], &b1);
         assert!(p.iter().all(|(_, x)| *x == Pruefung::Passt));

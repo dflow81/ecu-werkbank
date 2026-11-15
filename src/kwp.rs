@@ -242,13 +242,31 @@ pub struct BlockValue {
     pub formula: u8,
     pub a: u8,
     pub b: u8,
+    /// Textfeld (Formel 0x5F): a = Länge, danach so viele Zeichen
+    pub text: Option<String>,
 }
+
+/// Formel 0x5F: Text mit Längenbyte statt zwei Rohbytes (am Golf 6 gesehen:
+/// Motorkennung, Fahrgestellnummer, Seriennummern in Block 80–82 und 250).
+const FORMEL_TEXT: u8 = 0x5F;
 
 /// Ein Block hat bis zu 8 Felder (MED17 schickt immer 8). Leere Felder am Ende
 /// („25 00 00“) werden weggelassen; leere Felder in der Mitte bleiben, damit
 /// die Feldnummern stimmen.
 pub fn parse_block(r: &[u8]) -> Vec<BlockValue> {
-    let mut v: Vec<BlockValue> = r.as_chunks::<3>().0.iter().map(|c| BlockValue { formula: c[0], a: c[1], b: c[2] }).collect();
+    let mut v = Vec::new();
+    let mut i = 0;
+    while i + 3 <= r.len() {
+        let (formula, a, b) = (r[i], r[i + 1], r[i + 2]);
+        if formula == FORMEL_TEXT && i + 2 + a as usize <= r.len() {
+            let t: String = r[i + 2..i + 2 + a as usize].iter().map(|&c| if (0x20..0x7F).contains(&c) { c as char } else { ' ' }).collect();
+            v.push(BlockValue { formula, a, b, text: Some(t.trim().to_string()) });
+            i += 2 + a as usize;
+            continue;
+        }
+        v.push(BlockValue { formula, a, b, text: None });
+        i += 3;
+    }
     while v.last().is_some_and(BlockValue::is_leer) {
         v.pop();
     }
@@ -296,6 +314,14 @@ impl BlockValue {
             0x33 => ((b - 128.0) / 255.0 * a, "mg/H"),
             0x37 => (a * b / 200.0, "s"),
             0x5E => (a * (b / 50.0 - 1.0), "Nm"),
+            // Am Golf 6 (MED17) mit der Anzeige eines Werkstatt-Diagnosegeräts
+            // abgeleitet (15.11.2026), je mit den gesehenen Werten:
+            0x1F => (a * b / 2560.0, "λ"), // 20·128 → 1,00; 40·53 → 0,83; 80·35 → 1,09
+            0x34 => ((b - 50.0) * a / 50.0, "Nm"), // 73,254 → 297,8; 73,50 → 0
+            0x3C => ((a * 256.0 + b) / 100.0, "s"), // 255,255 → 655,35
+            0x41 => ((b - 127.0) * a / 100.0, "mm"), // 101,177 → 50,5; 0,177 → 0
+            0x42 => (a * b / 512.0, "V"), // 10,76 → 1,48; 10,23 → 0,45
+            0x60 => (a * b / 10.0, "mbar"), // 100,99 → 990
             _ => return None,
         })
     }
@@ -304,6 +330,9 @@ impl BlockValue {
     pub fn display(&self) -> String {
         if self.is_leer() {
             return "—".into();
+        }
+        if let Some(t) = &self.text {
+            return t.clone();
         }
         // Bitfeld (z. B. Grundeinstell-Bedingungen): a = Maske, b = Bits
         // TODO(verify): Zuordnung Maske/Bits aus der Community-Beschreibung
@@ -704,7 +733,7 @@ mod tests {
 
     #[test]
     fn weitere_formeln() {
-        let w = |formula, a, b| BlockValue { formula, a, b };
+        let w = |formula, a, b| BlockValue { formula, a, b, text: None };
         assert_eq!(w(0x1A, 40, 130).display(), "90.00 °C");
         assert_eq!(w(0x11, b'O', b'K').display(), "OK");
         assert_eq!(w(0x37, 200, 10).display(), "10.00 s");
@@ -749,6 +778,8 @@ mod tests {
         assert_eq!(v.len(), 4);
         assert_eq!(v[1].display(), "81.00 °C");
         // Leeres Feld in der Mitte bleibt (Feldnummern), wird als „—“ gezeigt
+        let t = parse_block(&[0x01, 0x32, 0x00, 0x5F, 0x04, b'C', b'A', b'X', b' ', 0x05, 0x0A, 0x6D]);
+        assert_eq!((t.len(), t[1].display().as_str(), t[2].display().as_str()), (3, "CAX", "9.00 °C"));
         let v = parse_block(&[0x01, 0xC8, 0x00, 0x25, 0, 0, 0x05, 0x0A, 0x6D, 0x25, 0, 0]);
         assert_eq!(v.len(), 3);
         assert_eq!(v[1].display(), "—");
@@ -816,7 +847,7 @@ mod tests {
 
     #[test]
     fn unknown_formula_shows_raw() {
-        let v = BlockValue { formula: 0xEE, a: 1, b: 2 };
+        let v = BlockValue { formula: 0xEE, a: 1, b: 2, text: None };
         assert_eq!(v.display(), "roh FEE 01 02");
     }
 
