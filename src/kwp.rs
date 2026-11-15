@@ -201,8 +201,10 @@ impl KwpDtc {
     }
 
     /// Statusbyte im Klartext nach ISO 14230-3 („statusOfDTC“):
-    /// Bits 6-5 = Speicherzustand, Bit 7 = Warnlampe, Bits 4-0 = Fehlerart
-    /// (Nummer; die Bedeutung legt der Hersteller fest).
+    /// Bits 6-5 = Speicherzustand, Bit 7 = Warnlampe, Bits 3-0 = Fehlerart
+    /// (Nummer; die Bedeutung legt der Hersteller fest). Bit 4 gehört nicht
+    /// zur Fehlerart: am Golf 6 zeigt ein Werkstatt-Diagnosegerät bei Status
+    /// 0x38 Fehlerart 8 (nicht 24) — verglichen am 15.11.2026.
     pub fn status_text(&self) -> String {
         let s = self.status;
         let zustand = match (s >> 5) & 0x03 {
@@ -215,7 +217,7 @@ impl KwpDtc {
         if s & 0x80 != 0 {
             t += ", Warnlampe an";
         }
-        let art = s & 0x1F;
+        let art = s & 0x0F;
         if art != 0 {
             t += &tr!(", Fehlerart {art}", art = art);
         }
@@ -324,7 +326,7 @@ impl BlockValue {
 /// Byte 0–11 Teilenummer, 12–15 Softwarestand, 16–24 Daten (u. a. Codierung),
 /// ab 25 Name. Liefert ["Teilenummer  SW", "Name"] oder None bei anderem Aufbau.
 /// Bit 7 im Softwarestand (Türen, Lenksäule: B1 34 30 31) wird ausgeblendet —
-/// TODO(verify): dass daraus „1401“ wird, ist angenommen.
+/// daraus wird „1401“ (am Golf 6 mit einem Werkstatt-Diagnosegerät verglichen).
 pub fn ident_9b(raw: &[u8]) -> Option<Vec<String>> {
     if raw.len() < 26 || !raw[..12].iter().all(|b| (0x20..0x7F).contains(b)) {
         return None;
@@ -848,6 +850,8 @@ mod tests {
         assert_eq!(d(0x6C), "aktuell vorhanden, Fehlerart 12 (0x6c)");
         assert_eq!(d(0x20), "sporadisch (gespeichert, gerade nicht vorhanden) (0x20)");
         assert_eq!(d(0xE3), "aktuell vorhanden, Warnlampe an, Fehlerart 3 (0xe3)");
+        // Golf 6, Tür Beifahrer 00929: Werkstatt-Diagnosegerät zeigt „008 … sporadisch“
+        assert_eq!(d(0x38), "sporadisch (gespeichert, gerade nicht vorhanden), Fehlerart 8 (0x38)");
     }
 
     #[test]
