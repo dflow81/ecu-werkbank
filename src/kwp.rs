@@ -460,8 +460,8 @@ impl TpCodierung {
 /// Kurzcodierung aus der 0x9B-Identifikation — nur beim Aufbau „03 xx xx xx“
 /// in Byte 16–19 (am Golf 6: Motor, Türen, Lenksäule). Gateway (10 …) und
 /// Servolenkung sind anders aufgebaut und bleiben außen vor.
-/// TODO(verify): Wert = Byte 17–19 ist aus dem Aufbau abgeleitet und noch
-/// nicht mit der Anzeige eines anderen Diagnosegeräts verglichen.
+/// Wert = Byte 17–19: am Golf 6 mit der Anzeige eines Werkstatt-Diagnosegeräts
+/// verglichen (15.11.2026) — Motor 72, Türen 180/436/144, Lenksäule 34 stimmen.
 pub fn kurzcodierung_9b(raw: &[u8]) -> Option<TpCodierung> {
     ident_9b(raw)?;
     let roh = raw.get(16..25)?.to_vec();

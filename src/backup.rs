@@ -154,7 +154,7 @@ pub fn backup(be: &Backend, db: &LabelDb, with_tp20: bool, mut progress: impl Fn
             use crate::kwp::TpCodierung;
             let (did, data_hex, note) = match &f.codierung {
                 Some(TpCodierung::Lang(b)) => (Some(crate::kwp::CODING_DID), hex(b), tr!("Codierung über TP 2.0 (Kennung 0x0600); Zurückschreiben noch nicht möglich")),
-                Some(TpCodierung::Kurz { wert, .. }) => (None, hex(&f.ident_raw), tr!("Roh-Identifikation, Kurzcodierung (vermutet): {a}; Zurückschreiben noch nicht möglich", a = format!("{wert:07}"))),
+                Some(TpCodierung::Kurz { wert, .. }) => (None, hex(&f.ident_raw), tr!("Roh-Identifikation, Kurzcodierung: {a}; Zurückschreiben noch nicht möglich", a = format!("{wert:07}"))),
                 None => (None, hex(&f.ident_raw), tr!("Roh-Identifikation (enthält die Codierung); Zurückschreiben noch nicht möglich")),
             };
             entries.push(CodingEntry {

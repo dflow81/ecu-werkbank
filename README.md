@@ -877,7 +877,7 @@ TP-2.0-Steuergeräte (nur lesen, Zurückschreiben noch nicht):
   ABS (18 Byte) liefern Byte für Byte dieselbe Codierung.
 - **Ältere** (Motor, Türen, Lenksäule) haben eine Kurzcodierung in der
   Identifikation (Byte 16–19 = `03 xx xx xx`); ECUWerkbank zeigt sie als Zahl
-  (vermutet, noch nicht mit anderem Gerät verglichen). Andere (Gateway, Lenkung):
+  (am Golf 6 mit einem Werkstatt-Diagnosegerät verglichen: stimmt). Andere (Gateway, Lenkung):
   Roh-Identifikation.
 
 ```bash

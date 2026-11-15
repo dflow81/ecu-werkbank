@@ -2861,9 +2861,8 @@ fn kwp_coding(be: &Backend, address: u8, db: &LabelDb) -> Result<()> {
             print_coding(None, Some(key), &b, db);
         }
         Some(TpCodierung::Kurz { wert, roh }) => {
-            println!("{}", tr!("Kurzcodierung {a} (vermutet): {b}", a = format!("{address:02X}"), b = format!("{wert:07}")));
+            println!("{}", tr!("Kurzcodierung {a}: {b}", a = format!("{address:02X}"), b = format!("{wert:07}")));
             println!("{}", tr!("Rohdaten der Identifikation, Byte 16–24: {a}", a = ecu_werkbank::backup::hex(&roh)));
-            println!("{}", tr!("Noch nicht bestätigt — bitte mit der Anzeige eines anderen Diagnosegeräts vergleichen."));
         }
         None => anyhow::bail!(tr!("Keine Codierung lesbar (weder in der Identifikation noch über Kennung 0x0600).")),
     }
