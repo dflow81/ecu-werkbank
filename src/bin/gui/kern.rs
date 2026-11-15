@@ -173,6 +173,8 @@ impl App {
             fg_texte: Default::default(),
             fg_nur_leer: false,
             si_job: None,
+            gw_vb_job: None,
+            gw_vb: None,
             tl_km: String::new(),
             tl_job: None,
             tl_progress: String::new(),
@@ -598,6 +600,8 @@ impl App {
                 if ui.button(tr!("💾 Verbauliste als Textdatei speichern")).clicked() {
                     vb_export = true;
                 }
+                ui.add_space(6.0);
+                self.ui_gateway_verbauliste(ui);
             });
         if vb_export {
             let txt = ecu_werkbank::verbauliste::text(&gruppen);
@@ -853,4 +857,55 @@ impl App {
         };
     }
 
+
+    /// Verbauliste direkt aus dem Gateway: was das Gateway als verbaut kennt
+    /// und wo es einen gespeicherten Fehler meldet (nur lesen, TP 2.0).
+    pub(super) fn ui_gateway_verbauliste(&mut self, ui: &mut egui::Ui) {
+        if let Some(rx) = &self.gw_vb_job {
+            if let Ok(r) = rx.try_recv() {
+                self.gw_vb = Some(r);
+                self.gw_vb_job = None;
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            let busy = self.gw_vb_job.is_some();
+            let ok = self.backend().supports_tp20();
+            if ui
+                .add_enabled(!busy && ok, egui::Button::new(tr!("🔌 Verbauliste aus dem Gateway lesen")))
+                .on_hover_text(tr!("Fragt das Gateway, welche Steuergeräte es als verbaut kennt und welche einen Fehler gespeichert haben. Nur lesen."))
+                .on_disabled_hover_text(tr!("Geht nur über TP 2.0 (CAN-Interface oder Demo)."))
+                .clicked()
+            {
+                let (tx, rx) = mpsc::channel();
+                let be = self.backend();
+                std::thread::spawn(move || {
+                    let _ = tx.send(ecu_werkbank::kwp::gateway_verbauliste(&be).map_err(|e| format!("{e:#}")));
+                });
+                self.gw_vb_job = Some(rx);
+            }
+            if busy {
+                ui.spinner();
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+            }
+        });
+        match &self.gw_vb {
+            Some(Ok(l)) => {
+                let mut verbaut: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
+                verbaut.sort_by_key(|e| e.adresse);
+                ui.weak(tr!("Laut Gateway verbaut: {a}, davon {b} mit Fehler.", a = verbaut.len(), b = verbaut.iter().filter(|e| e.fehler()).count()));
+                for e in verbaut {
+                    ui.horizontal_wrapped(|ui| {
+                        dot(ui, stufe_color(if e.fehler() { Stufe::Warnung } else { Stufe::Gut }));
+                        let name = ecu_werkbank::systems::name(u16::from(e.adresse));
+                        let st = if e.fehler() { tr!("Fehler gespeichert") } else { tr!("i.O.") };
+                        ui.label(format!("{:02X}  {}  —  {}", e.adresse, name, st));
+                    });
+                }
+            }
+            Some(Err(e)) => {
+                ui.colored_label(stufe_color(Stufe::Warnung), e);
+            }
+            None => {}
+        }
+    }
 }

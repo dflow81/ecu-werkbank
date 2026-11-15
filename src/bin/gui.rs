@@ -445,6 +445,9 @@ struct App {
     fg_nur_leer: bool,
     // Sicherheit & Assistenz
     si_job: Option<mpsc::Receiver<Result<ecu_werkbank::report::ScanReport, String>>>,
+    // Verbauliste direkt aus dem Gateway (TP 2.0)
+    gw_vb_job: Option<mpsc::Receiver<Result<Vec<ecu_werkbank::kwp::VerbauEintrag>, String>>>,
+    gw_vb: Option<Result<Vec<ecu_werkbank::kwp::VerbauEintrag>, String>>,
     /// Testlauf: Tachostand, laufender Job (Fortschritt / fertiger Text + Pfad), Ergebnis
     tl_km: String,
     tl_job: Option<mpsc::Receiver<TlMsg>>,

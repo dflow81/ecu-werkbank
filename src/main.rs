@@ -465,6 +465,8 @@ enum Command {
         #[arg(long)]
         no_tp20: bool,
     },
+    /// Verbauliste direkt aus dem Gateway (TP 2.0, nur lesen): welche Steuergeräte das Gateway als verbaut kennt und welche Fehler melden
+    GatewayVerbauliste,
     /// (2) Verbauliste: alle verbauten Steuergeräte, nach System geordnet, mit Teilenummer und Status
     Verbauliste {
         /// TP-2.0-Suche überspringen (schneller bei reinen UDS-Fahrzeugen)
@@ -1092,6 +1094,7 @@ fn main() -> Result<()> {
         Command::Rdid { tx, rx, did } => rdid(&be, tx, rx, did, &db),
         Command::RdidScan { tx, rx, von, bis, suche, sitzung } => rdid_scan(&be, tx, rx, von, bis, suche, sitzung as u8),
         Command::Autoscan { no_tp20 } => autoscan(&be, &db, !no_tp20),
+        Command::GatewayVerbauliste => gateway_verbauliste(&be),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())
         }
@@ -2769,7 +2772,7 @@ fn kwp_coding(be: &Backend, address: u8, db: &LabelDb) -> Result<()> {
     let key = ecu_werkbank::codiertexte::tp20_key(address);
     match kwp::codierung_lesen(&mut k, &ident_raw) {
         Some(TpCodierung::Lang(b)) => {
-            println!("{}", tr!("Codierung {a} (TP 2.0, Kennung 0x0600) = {b}", a = format!("{address:02X}"), b = ecu_werkbank::backup::hex(&b)));
+            println!("{}", tr!("Codierung {a} (TP 2.0) = {b}", a = format!("{address:02X}"), b = ecu_werkbank::backup::hex(&b)));
             println!("{}", tr!("Eigene Texte dazu: codiertext --tx {a} …", a = format!("{key:03X}")));
             print_coding(None, Some(key), &b, db);
         }
@@ -3959,5 +3962,21 @@ fn notfall_sicherung(be: &Backend, db: &LabelDb, fahrzeug: Option<&str>) -> Resu
         println!("  {}", d.display());
     }
     println!("{}", tr!("Ersatzteil-Pass: {a}", a = e.pdf.display()));
+    Ok(())
+}
+
+/// Verbauliste aus dem Gateway anzeigen (nur lesen).
+fn gateway_verbauliste(be: &Backend) -> Result<()> {
+    println!("{}", tr!("Verbauliste aus dem Gateway über {a} (nur lesen) …", a = be.describe()));
+    let l = kwp::gateway_verbauliste(be)?;
+    let mut verbaut: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
+    verbaut.sort_by_key(|e| e.adresse);
+    for e in &verbaut {
+        let name = ecu_werkbank::systems::name(u16::from(e.adresse));
+        let status = if e.fehler() { tr!("Fehler gespeichert") } else { tr!("i.O.") };
+        println!("  {a:02X}  {b:<28} {c}", a = e.adresse, b = name, c = status);
+    }
+    let fehler = verbaut.iter().filter(|e| e.fehler()).count();
+    println!("{}", tr!("\n{a} verbaut, davon {b} mit Fehler; {c} weitere Adressen kennt das Gateway als nicht verbaut.", a = verbaut.len(), b = fehler, c = l.len() - verbaut.len()));
     Ok(())
 }

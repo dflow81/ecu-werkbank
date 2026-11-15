@@ -86,6 +86,7 @@ pub fn art(formel: u8) -> Option<&'static str> {
         0x37 => crate::trs!("Zeit"),
         0x5E | 0x34 => crate::trs!("Drehmoment"),
         0x1F => crate::trs!("Lambda"),
+        0x51 => crate::trs!("Winkel"),
         0x3C => crate::trs!("Zeit"),
         0x41 => crate::trs!("Weg"),
         0x42 => crate::trs!("Spannung"),

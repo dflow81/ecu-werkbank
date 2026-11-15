@@ -429,9 +429,19 @@ Namen stammen aus der Bauteil-Kennung des Steuergeräts, nicht aus einer
 geratenen Nummern-Übersetzung. In der GUI im Reiter **„🔧 Steuergeräte“** unter
 **„📋 Verbauliste nach System“** (mit „💾 als Textdatei speichern“).
 
-> Hinweis: Beim Golf 6 ist das Gateway (J533) ein TP-2.0-Gerät und gibt seine
-> Codierung nicht über die übliche Kennung 0x0600 heraus; die Verbauliste wird
-> deshalb aus dem Scan aller Steuergeräte gebildet, nicht direkt aus dem Gateway.
+**Direkt aus dem Gateway** (TP 2.0, nur lesen): welche Steuergeräte das Gateway
+als verbaut kennt und bei welchen ein Fehler gespeichert ist — schnell, ohne
+jedes Steuergerät einzeln abzufragen:
+
+```bash
+./target/release/ecu-werkbank -i can0 gateway-verbauliste
+```
+
+In der GUI unter **„📋 Verbauliste nach System“ → „🔌 Verbauliste aus dem
+Gateway lesen“**. Die Gateway-Codierung liest `kwp-coding --address 1f`.
+Am Golf 6 per Mitschnitt mit einem Werkstatt-Diagnosegerät verglichen
+(15.11.2026): dieselben 20 Steuergeräte, dieselben 4 mit Fehler, dieselbe
+Codierung.
 
 ## Schnell-Check, Batterietest, Wartung
 
@@ -1158,7 +1168,8 @@ und Stand in ECUWerkbank:
 | – | Mitschnitt aufzeichnen/auswerten | ✅ `record`, `decode-log` | ✅ inkl. Prüfbericht |
 | – | Service-Anzeige lesen / zurückstellen | 🟡 `service` (Kennungen je Fahrzeug lernen) | – |
 | – | Verbauliste (verbaute Steuergeräte, nach System) | ✅ `verbauliste`, GUI Steuergeräte → „📋 Verbauliste nach System“ | ✅ aus dem Scan |
-| – | Gateway-Verbauliste direkt aus dem Gateway, Transportmodus | ❌ (Gateway gibt die Codierung beim Golf 6 nicht über 0x0600 heraus) | ❌ |
+| – | Gateway-Verbauliste direkt aus dem Gateway | ✅ `gateway-verbauliste` (TP 2.0, Golf 6 geprüft) | ❌ |
+| – | Transportmodus | ❌ | ❌ |
 | – | K-Line (vor ~2004) | – nicht über SocketCAN | – |
 
 Als Nächstes:

@@ -20,6 +20,14 @@ pub const SID_READ_BY_LOCAL_ID: u8 = 0x21;
 pub const SESSION_VAG_DIAG: u8 = 0x89;
 /// ReadEcuIdentification option: VAG part number / software / coding block.
 pub const ECU_ID_VAG: u8 = 0x9B;
+/// Identifikation 0x9A: Betriebsnummer, Softwarestand und (beim Gateway) die
+/// lange Codierung. Am Golf 6 per Mitschnitt gesehen (15.11.2026).
+pub const ECU_ID_9A: u8 = 0x9A;
+/// Identifikation 0x9F beim Gateway: die Verbauliste (alle bekannten
+/// Steuergeräte mit „verbaut“ und „Fehler gespeichert“).
+pub const ECU_ID_VERBAULISTE: u8 = 0x9F;
+/// TP-2.0-Adresse des Gateways (Golf 6)
+pub const GATEWAY: u8 = 0x1F;
 pub const SID_READ_DTC_STATUS: u8 = 0x17;
 
 const NEGATIVE_RESPONSE: u8 = 0x7F;
@@ -322,6 +330,10 @@ impl BlockValue {
             0x41 => ((b - 127.0) * a / 100.0, "mm"), // 101,177 → 50,5; 0,177 → 0
             0x42 => (a * b / 512.0, "V"), // 10,76 → 1,48; 10,23 → 0,45
             0x60 => (a * b / 10.0, "mbar"), // 100,99 → 990
+            // vorzeichenbehaftet, 16 Bit: Lenkwinkel −545,6° (CF 49) / +541,6°
+            // (30 5B), −4,59° (FF 97), Motor 116,68° (0A 6B)
+            0x51 => (f64::from(i16::from_be_bytes([self.a, self.b])) * 0.04375, "°"),
+            0x30 | 0x4B => (a * 256.0 + b, ""), // Zähler/Zahl: 0,5 → 5; 0,69 → 69
             _ => return None,
         })
     }
@@ -338,6 +350,14 @@ impl BlockValue {
         // TODO(verify): Zuordnung Maske/Bits aus der Community-Beschreibung
         if self.formula == 0x10 {
             return format!("{:04b} {:04b}", (self.b & self.a) >> 4, self.b & self.a & 0x0F);
+        }
+        // Hex-Anzeige (Golf 6 Lenkung: 90 03 → 0x9003)
+        if self.formula == 0x6B {
+            return format!("0x{:02X}{:02X}", self.a, self.b);
+        }
+        // 16 einzelne Bits
+        if self.formula == 0xA1 {
+            return format!("{:08b} {:08b}", self.a, self.b);
         }
         // zwei Zeichen Text
         if self.formula == 0x11 {
@@ -510,7 +530,10 @@ pub fn codierung_22(k: &mut Kwp) -> Option<Vec<u8>> {
 
 /// Codierung lesen: ältere Steuergeräte aus der Identifikation, neuere über 0x0600.
 pub fn codierung_lesen(k: &mut Kwp, ident_raw: &[u8]) -> Option<TpCodierung> {
-    kurzcodierung_9b(ident_raw).or_else(|| codierung_22(k).map(TpCodierung::Lang))
+    kurzcodierung_9b(ident_raw)
+        .or_else(|| codierung_22(k).map(TpCodierung::Lang))
+        // Gateway: lange Codierung steckt in der Identifikation 0x9A
+        .or_else(|| k.read_ecu_id(ECU_ID_9A).ok().and_then(|r| codierung_9a(&r)).map(TpCodierung::Lang))
 }
 
 /// Try every TP 2.0 logical address 0x01..=0x7F with a short setup timeout
@@ -720,8 +743,86 @@ fn nrc_name(nrc: u8) -> &'static str {
     }
 }
 
+/// Ein Eintrag der Gateway-Verbauliste (4 Byte je Steuergerät).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerbauEintrag {
+    /// Diagnoseadresse, z. B. 0x17 = Kombiinstrument
+    pub adresse: u8,
+    /// TP-2.0-Kanal (0 = keiner)
+    pub tp20: u8,
+    /// Bus-Kennung (am Golf 6: 0x00 Antrieb, 0x02 Komfort, 0x04 Infotainment …)
+    pub bus: u8,
+    /// Bit 0 = verbaut, Bit 2 = Fehler gespeichert (wie im Auto-Scan
+    /// eines Werkstatt-Diagnosegeräts „i.O. 0000“ / „Fehler 0010“)
+    pub status: u8,
+}
+
+impl VerbauEintrag {
+    pub fn verbaut(&self) -> bool {
+        self.status & 0x01 != 0
+    }
+    pub fn fehler(&self) -> bool {
+        self.status & 0x04 != 0
+    }
+}
+
+/// Antwort auf 0x1A 0x9F (ohne SID und Option) zerlegen:
+/// [Kopfbyte][Adresse, TP-2.0-Kanal, Bus, Status] × n, am Ende 0xFF.
+/// Am Golf 6 (1K0 907 530 AA) mit dem Auto-Scan eines Werkstatt-
+/// Diagnosegeräts verglichen: dieselben 20 Steuergeräte, dieselben 4 mit Fehler.
+pub fn verbauliste_9f(raw: &[u8]) -> Vec<VerbauEintrag> {
+    let mut v = Vec::new();
+    let mut i = 1;
+    while i + 4 <= raw.len() {
+        let r = &raw[i..i + 4];
+        v.push(VerbauEintrag { adresse: r[0], tp20: r[1], bus: r[2], status: r[3] });
+        i += 4;
+    }
+    v
+}
+
+/// Lange Codierung aus 0x1A 0x9A (ohne SID und Option), wie beim Gateway:
+/// [Betriebsnummer 6][Softwarestand 4][0x10][Länge][Codierung (Länge − 1)]…
+/// Golf 6 Gateway: E9 A0 7F 46 40 02 02 00 20 02 — gleich der Anzeige eines
+/// Werkstatt-Diagnosegeräts.
+pub fn codierung_9a(raw: &[u8]) -> Option<Vec<u8>> {
+    if raw.get(10) != Some(&0x10) {
+        return None;
+    }
+    let n = usize::from(*raw.get(11)?);
+    if n < 2 {
+        return None;
+    }
+    raw.get(12..12 + n - 1).map(<[u8]>::to_vec)
+}
+
+/// Verbauliste direkt aus dem Gateway lesen (nur lesen).
+pub fn gateway_verbauliste(be: &crate::transport::Backend) -> Result<Vec<VerbauEintrag>> {
+    let mut ch = open_session(be, GATEWAY)?;
+    let mut k = Kwp::new(&mut ch);
+    let raw = k.read_ecu_id(ECU_ID_VERBAULISTE)?;
+    let l = verbauliste_9f(&raw);
+    if l.is_empty() {
+        anyhow::bail!(tr!("Das Gateway hat keine Verbauliste geliefert."));
+    }
+    Ok(l)
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn gateway_verbauliste_und_codierung_wie_am_golf6() {
+        // gekürzt aus dem echten Mitschnitt: Motor (Fehler), Getriebe (nicht verbaut), Kombi, Tür BF (Fehler)
+        let raw = [0xF1, 0x01, 0x01, 0x00, 0x05, 0x02, 0x02, 0x00, 0x00, 0x17, 0x07, 0x06, 0x01, 0x52, 0x23, 0x02, 0x05, 0xFF];
+        let l = verbauliste_9f(&raw);
+        let verbaut: Vec<(u8, bool)> = l.iter().filter(|e| e.verbaut()).map(|e| (e.adresse, e.fehler())).collect();
+        assert_eq!(verbaut, vec![(0x01, true), (0x17, false), (0x52, true)]);
+        let r9a = [0, 0, 0, 0, 0, 0x42, b'0', b'0', b'8', b'1', 0x10, 0x0B, 0xE9, 0xA0, 0x7F, 0x46, 0x40, 0x02, 0x02, 0x00, 0x20, 0x02, 0xFF];
+        assert_eq!(codierung_9a(&r9a), Some(vec![0xE9, 0xA0, 0x7F, 0x46, 0x40, 0x02, 0x02, 0x00, 0x20, 0x02]));
+        assert_eq!(codierung_9a(&r9a[..5]), None);
+    }
+
     use super::*;
 
     #[test]
@@ -778,6 +879,8 @@ mod tests {
         assert_eq!(v.len(), 4);
         assert_eq!(v[1].display(), "81.00 °C");
         // Leeres Feld in der Mitte bleibt (Feldnummern), wird als „—“ gezeigt
+        let w = |formula, a, b| BlockValue { formula, a, b, text: None }.display();
+        assert_eq!((w(0x51, 0xCF, 0x49), w(0x51, 0x30, 0x5B), w(0x6B, 0x90, 0x03)), ("-545.61 °".into(), "541.58 °".into(), "0x9003".to_string()));
         let t = parse_block(&[0x01, 0x32, 0x00, 0x5F, 0x04, b'C', b'A', b'X', b' ', 0x05, 0x0A, 0x6D]);
         assert_eq!((t.len(), t[1].display().as_str(), t[2].display().as_str()), (3, "CAX", "9.00 °C"));
         let v = parse_block(&[0x01, 0xC8, 0x00, 0x25, 0, 0, 0x05, 0x0A, 0x6D, 0x25, 0, 0]);
