@@ -22,9 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Feste Rust-Version: ab Rust 1.100 lässt sich die von eframe 0.28 benutzte
+      # macOS-Bibliothek objc2 nicht mehr bauen (15.11.2026). Erst anheben, wenn
+      # eframe aktualisiert ist.
       - name: Rust vorbereiten
         run: |
-          rustup update stable
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup default 1.99.1
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Tests
