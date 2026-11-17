@@ -714,6 +714,36 @@ impl App {
 
         ui.add_space(10.0);
         ui.separator();
+        ui.strong(tr!("📋 Ganzes Steuergerät benennen"));
+        ui.label(tr!("Liest alle Messwertblöcke eines Steuergeräts (nur lesen) und zeigt jedes Feld mit seinem aktuellen Wert — du trägst nur noch die Namen ein. Geht bei älteren Steuergeräten (TP 2.0)."));
+        self.bs_poll(ui);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("Steuergerät (TP-2.0-Adresse):"));
+            ui.add_sized([70.0, 20.0], egui::TextEdit::singleline(&mut self.bn_addr).hint_text("0x01"));
+            let addr = parse_hex(&self.bn_addr).and_then(|a| u8::try_from(a).ok());
+            let busy = self.bs_job.is_some();
+            let ok = self.backend().supports_tp20();
+            if ui
+                .add_enabled(!busy && ok && addr.is_some(), egui::Button::new(tr!("🔍 Alle Blöcke lesen")))
+                .on_disabled_hover_text(tr!("Geht nur über TP 2.0 (CAN-Interface oder Demo)."))
+                .clicked()
+            {
+                self.bs_start(addr.expect("geprüft"));
+            }
+            if busy {
+                ui.add(egui::ProgressBar::new(f32::from(self.bs_at) / 255.0).desired_width(160.0).text(tr!("Block {a}", a = self.bs_at)));
+            }
+        });
+        ui.weak(tr!("Adressen am Golf 6: 01 Motor, 03 ABS, 09 Lenkung, 1D Einparkhilfe, 20 Bordnetz, 22–25 Türen, 2A Lenksäule, 43 Anhänger."));
+        if let Some((addr, bloecke)) = self.bs_result.clone() {
+            if !bloecke.is_empty() && self.bs_job.is_none() {
+                ui.add_space(4.0);
+                self.bs_namen_ui(ui, addr, &bloecke);
+            }
+        }
+
+        ui.add_space(10.0);
+        ui.separator();
         let eigene = ecu_werkbank::messwerttexte::alle();
         if eigene.is_empty() {
             ui.weak(tr!("Noch keine eigenen Namen gespeichert."));

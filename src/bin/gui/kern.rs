@@ -39,6 +39,7 @@ impl App {
             "tp20-block" | "favoriten" | "grundeinstellung" => (Tab::Tp20, false),
             "service-frage" => (Tab::Service, false),
             "editor-scan" => (Tab::Editor, false),
+            "namen-scan" => (Tab::Namen, false),
             "steuergeraete" => (Tab::Steuergeraete, false),
             _ => (Tab::Start, false),
         };
@@ -365,6 +366,10 @@ impl App {
             bs_at: 0,
             bs_result: None,
             bs_namen: Default::default(),
+            bn_nur_offen: false,
+            bn_suche: String::new(),
+            bn_roh_aus: true,
+            bn_addr: "0x01".into(),
             tp_block_key: (0, 0),
             mw_texte: ecu_werkbank::messwerttexte::Texte::laden(),
             favoriten: ecu_werkbank::favoriten::alle(),

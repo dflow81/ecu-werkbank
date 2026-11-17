@@ -694,6 +694,12 @@ struct App {
     bs_result: Option<(u8, Vec<(u8, Vec<kwp::BlockValue>)>)>,
     /// Eingaben beim Benennen aller Blöcke (Schlüssel wie messwerttexte)
     bs_namen: std::collections::BTreeMap<String, String>,
+    /// Benennen-Tabelle: nur Felder ohne Namen, Suchtext, Rohwerte ausblenden
+    bn_nur_offen: bool,
+    bn_suche: String,
+    bn_roh_aus: bool,
+    /// „Eigene Namen“: Steuergerät, dessen Blöcke gelesen werden
+    bn_addr: String,
     tp_block_key: (u8, u8),
     mw_texte: ecu_werkbank::messwerttexte::Texte,
     /// Grundeinstellung (TP 2.0): Gruppe, gelernter-aber-noch-nicht-übernommener Ablauf,
@@ -802,6 +808,10 @@ impl eframe::App for App {
                 self.tp_channel = None;
             }
             "sicherheit" => self.si_starten(),
+            "namen-scan" => {
+                self.bn_addr = "0x01".into();
+                self.bs_start(0x01);
+            }
             "grundeinstellung" => {
                 self.tp_addr = "0x01".into();
                 self.ge_gruppe = "60".into();

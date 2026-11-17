@@ -193,9 +193,8 @@ impl App {
         Ok(())
     }
 
-    /// Blockscan: alle Messwertblöcke des gewählten Steuergeräts (nur lesen).
-    pub(super) fn ui_blockscan(&mut self, ui: &mut egui::Ui) {
-        // Hintergrund-Job abholen
+    /// Laufenden Blockscan abholen (Fortschritt, Ergebnis).
+    pub(super) fn bs_poll(&mut self, ui: &egui::Ui) {
         if let Some(rx) = &self.bs_job {
             let mut fertig = None;
             while let Ok(m) = rx.try_recv() {
@@ -219,6 +218,30 @@ impl App {
             }
         }
 
+    }
+
+    /// Blockscan für ein Steuergerät starten (alle Blöcke 1–255, nur lesen).
+    pub(super) fn bs_start(&mut self, addr: u8) {
+        self.tp_live = false;
+        self.tp_channel = None;
+        let be = self.backend();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let r = kwp::blockscan(&be, addr, 1, 255, |b| {
+                let _ = tx.send(ScanMsg::Block(b));
+            })
+            .map_err(|e| format!("{e:#}"));
+            let _ = tx.send(ScanMsg::Fertig(r));
+        });
+        self.bs_job = Some(rx);
+        self.bs_at = 1;
+        self.bs_result = Some((addr, Vec::new()));
+    }
+
+    /// Blockscan: alle Messwertblöcke des gewählten Steuergeräts (nur lesen).
+    pub(super) fn ui_blockscan(&mut self, ui: &mut egui::Ui) {
+        self.bs_poll(ui);
+
         ui.add_space(8.0);
         ui.separator();
         ui.horizontal_wrapped(|ui| {
@@ -230,21 +253,7 @@ impl App {
                 .on_hover_text(tr!("Liest jeden Messwertblock einmal (nur lesen) und zeigt, welche es gibt."))
                 .clicked()
             {
-                let addr = addr.expect("geprüft");
-                self.tp_live = false;
-                self.tp_channel = None;
-                let be = self.backend();
-                let (tx, rx) = mpsc::channel();
-                std::thread::spawn(move || {
-                    let r = kwp::blockscan(&be, addr, 1, 255, |b| {
-                        let _ = tx.send(ScanMsg::Block(b));
-                    })
-                    .map_err(|e| format!("{e:#}"));
-                    let _ = tx.send(ScanMsg::Fertig(r));
-                });
-                self.bs_job = Some(rx);
-                self.bs_at = 1;
-                self.bs_result = Some((addr, Vec::new()));
+                self.bs_start(addr.expect("geprüft"));
             }
             if busy {
                 ui.add(egui::ProgressBar::new(f32::from(self.bs_at) / 255.0).desired_width(160.0).text(tr!("Block {a}", a = self.bs_at)));
@@ -302,6 +311,27 @@ impl App {
             .map(|(k, t)| (k.clone(), t.clone()))
             .collect();
         ui.label(tr!("Trag die Namen ein, die du kennst (z. B. aus einem anderen Diagnoseprogramm oder dem Reparaturleitfaden). Leer lassen geht auch. Grau steht, was ECUWerkbank schon weiß."));
+        // Fortschritt: benannte Felder (gespeichert oder gerade eingetippt)
+        let (mut gesamt, mut benannt) = (0, 0);
+        for (b, werte) in bloecke {
+            for (i, v) in werte.iter().enumerate() {
+                if v.is_leer() {
+                    continue;
+                }
+                gesamt += 1;
+                if self.bs_namen.get(&schluessel(addr, *b, Some(i as u8 + 1))).is_some_and(|t| !t.trim().is_empty()) {
+                    benannt += 1;
+                }
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            ui.add(egui::ProgressBar::new(if gesamt == 0 { 0.0 } else { benannt as f32 / gesamt as f32 }).desired_width(160.0).text(tr!("{a} von {b} Feldern benannt", a = benannt, b = gesamt)));
+            ui.checkbox(&mut self.bn_nur_offen, tr!("nur Felder ohne Namen"));
+            ui.checkbox(&mut self.bn_roh_aus, tr!("Rohwerte ohne Umrechnung ausblenden"));
+            ui.label(tr!("Suche:"));
+            ui.add(egui::TextEdit::singleline(&mut self.bn_suche).desired_width(140.0).hint_text(tr!("Wert oder Name")));
+        });
+        let (nur_offen, roh_aus, suche) = (self.bn_nur_offen, self.bn_roh_aus, self.bn_suche.trim().to_lowercase());
         if ui.add_enabled(!geaendert.is_empty(), egui::Button::new(tr!("💾 Namen speichern ({a})", a = geaendert.len()))).clicked() {
             self.status = match ecu_werkbank::messwerttexte::mehrere_setzen(&geaendert) {
                 Ok(()) => {
@@ -328,11 +358,18 @@ impl App {
                             continue;
                         }
                         let feld = i as u8 + 1;
-                        ui.label(tr!("  Feld {a}", a = feld));
                         let wert = match art(v.formula) {
                             Some(a) => format!("{}  (~{a})", v.display()),
                             None => v.display(),
                         };
+                        let name_jetzt = namen.get(&schluessel(addr, *b, Some(feld))).map(|t| t.trim().to_string()).unwrap_or_default();
+                        if (nur_offen && !name_jetzt.is_empty())
+                            || (roh_aus && v.decode().is_none() && v.text.is_none() && !matches!(v.formula, 0x10 | 0x11 | 0x6B | 0xA1))
+                            || (!suche.is_empty() && !wert.to_lowercase().contains(&suche) && !name_jetzt.to_lowercase().contains(&suche))
+                        {
+                            continue;
+                        }
+                        ui.label(tr!("  Feld {a}", a = feld));
                         ui.allocate_ui(egui::vec2(210.0, 18.0), |ui| {
                             ui.set_min_width(210.0);
                             ui.add(egui::Label::new(egui::RichText::new(&wert).monospace()).truncate()).on_hover_text(&wert);

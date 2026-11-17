@@ -1001,6 +1001,11 @@ Noch schneller geht es im GUI-Reiter **„Eigene Namen“** (Gruppe Werkzeuge):
 Steuergerät-Adresse, Block und Feld eingeben, Namen tippen, speichern — der Name
 gilt danach überall (Live-Werte, Testlauf, Rekorder, Kurven) und bleibt in
 `messwerttexte.toml`. Das ist der empfohlene Weg für eigene Messwert-Namen.
+Ganze Steuergeräte auf einmal: unter **„📋 Ganzes Steuergerät benennen“** die
+Adresse eingeben und **„🔍 Alle Blöcke lesen“** — danach steht jedes Feld mit
+seinem aktuellen Wert und der Art (Drehzahl, Temperatur …) in einer Liste, du
+tippst nur noch die Namen ein. Mit Fortschritt („37 von 120 Feldern benannt“),
+Filter „nur Felder ohne Namen“ und Suche.
 
 ## Testen ohne Auto und ohne sudo
 
