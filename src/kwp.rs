@@ -744,6 +744,71 @@ fn nrc_name(nrc: u8) -> &'static str {
     }
 }
 
+/// Ein Anpassungskanal (Funktion 10) eines TP-2.0-Steuergeräts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnpassKanal {
+    pub kanal: u8,
+    /// Gespeicherter Anpassungswert
+    pub wert: u16,
+    /// Anzeigefelder wie bei Messwertblöcken
+    pub felder: Vec<BlockValue>,
+}
+
+/// Ergebnis der Anpassungs-Routine (0x31 0xBA 01 03, ohne SID) zerlegen:
+/// [BA 01 03][Status 0x82][0x03][Wert hi lo][Länge][Felder (Länge − 1)][FF].
+/// Status 0x81 = noch nicht fertig → None. Am Golf 6 (Bordnetz 5K0 937 086)
+/// mitgeschnitten: Kanal 1 = 0, 3 = 0, 17 = 1, 23 = 10 — wie im
+/// Werkstatt-Diagnosegerät angezeigt.
+pub fn anpass_ergebnis(r: &[u8]) -> Option<(u16, Vec<BlockValue>)> {
+    if r.get(..3) != Some(&[0xBA, 0x01, 0x03]) || r.get(3) != Some(&0x82) {
+        return None;
+    }
+    let p = r.get(4..)?;
+    let wert = u16::from_be_bytes([*p.get(1)?, *p.get(2)?]);
+    let n = usize::from(*p.get(3)?);
+    let felder = p.get(4..4 + n.saturating_sub(1)).map(parse_block).unwrap_or_default();
+    Some((wert, felder))
+}
+
+/// Anpassungskanäle eines TP-2.0-Steuergeräts lesen (nur lesen), so wie ein
+/// Werkstatt-Diagnosegerät es tut: Routine 0x0103 starten (31 B8 01 03),
+/// Kanal wählen (31 B9 01 03 Kanal), Ergebnis holen (31 BA 01 03), Routine
+/// beenden (32 B8 01 03). Es wird nichts gespeichert oder geändert.
+pub fn anpassung_lesen(be: &crate::transport::Backend, adresse: u8, kanaele: &[u8]) -> Result<Vec<std::result::Result<AnpassKanal, String>>> {
+    let mut ch = open_session(be, adresse)?;
+    let mut k = Kwp::new(&mut ch);
+    let mut out = Vec::new();
+    for &kanal in kanaele {
+        let r = (|| -> Result<AnpassKanal> {
+            k.request(0x31, &[0xB8, 0x01, 0x03])?;
+            let _ = k.request(0x31, &[0xBA, 0x01, 0x03]);
+            k.request(0x31, &[0xB9, 0x01, 0x03, kanal])?;
+            for _ in 0..20 {
+                let r = k.request(0x31, &[0xBA, 0x01, 0x03])?;
+                if let Some((wert, felder)) = anpass_ergebnis(&r) {
+                    return Ok(AnpassKanal { kanal, wert, felder });
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            bail!(tr!("Kanal {a}: keine fertige Antwort", a = kanal))
+        })();
+        // Routine immer beenden (32 B8 01 03), wie das Werkstattgerät — sonst
+        // lehnt das Steuergerät den nächsten Kanal ab (NRC 0x22).
+        let _ = k.request(0x32, &[0xB8, 0x01, 0x03]);
+        out.push(r.map_err(|e| {
+            let t = format!("{e:#}");
+            if t.contains("NRC 0x31") {
+                tr!("Kanal {a}: nicht vorhanden", a = format!("{kanal:03}"))
+            } else if t.contains("NRC 0x11") {
+                tr!("Kanal {a}: dieses Steuergerät liest Anpassungen auf ältere Art — noch nicht eingebaut", a = format!("{kanal:03}"))
+            } else {
+                tr!("Kanal {a}: {b}", a = format!("{kanal:03}"), b = t)
+            }
+        }));
+    }
+    Ok(out)
+}
+
 /// Ein Eintrag der Gateway-Verbauliste (4 Byte je Steuergerät).
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerbauEintrag {
@@ -821,6 +886,16 @@ pub fn gateway_verbauliste(be: &crate::transport::Backend) -> Result<Vec<VerbauE
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn anpassung_wie_am_golf6() {
+        // Bordnetz, Kanal 23: Wert 10, Feld 3 = 10 s (Formel 0x37)
+        let r = [0xBA, 0x01, 0x03, 0x82, 0x03, 0x00, 0x0A, 0x0D, 0x25, 0x05, 0xA8, 0x25, 0x00, 0x00, 0x37, 0xC8, 0x0A, 0x25, 0x00, 0x6B, 0xFF];
+        let (wert, felder) = anpass_ergebnis(&r).unwrap();
+        assert_eq!((wert, felder.len(), felder[2].display().as_str()), (10, 4, "10.00 s"));
+        // noch nicht fertig
+        assert_eq!(anpass_ergebnis(&[0xBA, 0x01, 0x03, 0x81]), None);
+    }
 
     #[test]
     fn gateway_verbauliste_und_codierung_wie_am_golf6() {

@@ -467,6 +467,15 @@ enum Command {
     },
     /// Verbauliste direkt aus dem Gateway (TP 2.0, nur lesen): welche Steuergeräte das Gateway als verbaut kennt und welche Fehler melden
     GatewayVerbauliste,
+    /// Anpassungskanäle (Funktion 10) eines TP-2.0-Steuergeräts lesen (nur lesen)
+    KwpAnpassung {
+        /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
+        #[arg(long, value_parser = parse_hex)]
+        address: u16,
+        /// Kanalnummer(n) dezimal wie im Werkstattgerät, z. B. 1,3,17,23
+        #[arg(long, value_delimiter = ',', required = true)]
+        kanal: Vec<u8>,
+    },
     /// (2) Verbauliste: alle verbauten Steuergeräte, nach System geordnet, mit Teilenummer und Status
     Verbauliste {
         /// TP-2.0-Suche überspringen (schneller bei reinen UDS-Fahrzeugen)
@@ -1095,6 +1104,7 @@ fn main() -> Result<()> {
         Command::RdidScan { tx, rx, von, bis, suche, sitzung } => rdid_scan(&be, tx, rx, von, bis, suche, sitzung as u8),
         Command::Autoscan { no_tp20 } => autoscan(&be, &db, !no_tp20),
         Command::GatewayVerbauliste => gateway_verbauliste(&be),
+        Command::KwpAnpassung { address, kanal } => kwp_anpassung(&be, address as u8, &kanal),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())
         }
@@ -3978,5 +3988,20 @@ fn gateway_verbauliste(be: &Backend) -> Result<()> {
     }
     let fehler = verbaut.iter().filter(|e| e.fehler()).count();
     println!("{}", tr!("\n{a} verbaut, davon {b} mit Fehler; {c} weitere Adressen kennt das Gateway als nicht verbaut.", a = verbaut.len(), b = fehler, c = l.len() - verbaut.len()));
+    Ok(())
+}
+
+/// Anpassungskanäle eines TP-2.0-Steuergeräts anzeigen (nur lesen).
+fn kwp_anpassung(be: &Backend, address: u8, kanaele: &[u8]) -> Result<()> {
+    println!("{}", tr!("Anpassung Steuergerät {a} (nur lesen) …", a = format!("{address:02X}")));
+    for r in kwp::anpassung_lesen(be, address, kanaele)? {
+        match r {
+            Ok(k) => {
+                let felder: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
+                println!("{}", tr!("  Kanal {a}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), b = k.wert, c = felder.join("  |  ")));
+            }
+            Err(e) => println!("  {e}"),
+        }
+    }
     Ok(())
 }
