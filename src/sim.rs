@@ -175,6 +175,8 @@ struct KwpModule {
     dtcs: Vec<(u16, u8)>,
     eigen: Eigenheit,
     besetzt_gemeldet: bool,
+    /// Stellglieddiagnose: aktueller Schritt (None = nicht gestartet)
+    stell: Option<usize>,
     /// CAN-ID, auf der der Tester sendet (None = 0x740 + Adresse)
     tester_tx: Option<u16>,
     /// Lange Codierung (nur Geräte mit 0x22; Werte erfunden)
@@ -343,7 +345,7 @@ fn uds(addr: u16, tx: u16, name: &'static str, part: &'static str, system: &'sta
 }
 
 fn kwp(addr: u8, ident: Ident, dtcs: Vec<(u16, u8)>) -> KwpModule {
-    KwpModule { addr, ident, dtcs, eigen: Eigenheit::default(), besetzt_gemeldet: false, tester_tx: None, codierung: vec![0x0F, 0x00, 0x0A, 0x00, 0x41, 0x08] }
+    KwpModule { addr, ident, dtcs, eigen: Eigenheit::default(), besetzt_gemeldet: false, stell: None, tester_tx: None, codierung: vec![0x0F, 0x00, 0x0A, 0x00, 0x41, 0x08] }
 }
 
 type Module = (Vec<UdsModule>, Vec<KwpModule>, Vec<u8>);
@@ -956,6 +958,18 @@ const GOLF6_VERBAULISTE: &[u8] = &[
 /// Gateway 0x1A 0x9A wie am echten Golf 6: Betriebsnummer, SW 0081, Codierung.
 const GOLF6_GATEWAY_9A: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x30, 0x30, 0x38, 0x31, 0x10, 0x0B, 0xE9, 0xA0, 0x7F, 0x46, 0x40, 0x02, 0x02, 0x00, 0x20, 0x02, 0xFF];
 
+/// Stellglieddiagnose wie an der echten Fahrertür (Golf 6) mitgeschnitten:
+/// abwechselnd Bauteil (03 03 hi lo FF) und Rückmeldung (02 F a b).
+const GOLF6_STELLGLIED: &[&[u8]] = &[
+    &[0x03, 0x03, 0x08, 0x8C, 0xFF],
+    &[0x02, 0x21, 0x64, 0x64],
+    &[0x03, 0x03, 0x05, 0xCA, 0xFF],
+    &[0x02, 0x25, 0x00, 0xB3],
+    &[0x03, 0x03, 0x08, 0x8D, 0xFF],
+    &[0x02, 0x25, 0x00, 0x67],
+    &[0x03, 0x03, 0x04, 0x6B, 0xFF],
+];
+
 pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
     let mut c = car().lock().unwrap();
     let l = live_now(&mut c);
@@ -1000,6 +1014,23 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
             } else {
                 vec![vec![0x7F, 0x27, 0x35]]
             }
+        }
+        // Stellglieddiagnose (Routine 0x0102)
+        0x31 if req.get(1..4) == Some(&[0xB8, 0x01, 0x02]) => {
+            m.stell = Some(0);
+            vec![vec![0x71, 0xB8, 0x01, 0x02]]
+        }
+        0x31 if req.get(1..4) == Some(&[0xB9, 0x01, 0x02]) && m.stell.is_some() => {
+            m.stell = m.stell.map(|i| (i + 1).min(GOLF6_STELLGLIED.len() - 1));
+            vec![vec![0x71, 0xB9, 0x01, 0x02]]
+        }
+        0x31 if req.get(1..4) == Some(&[0xBA, 0x01, 0x02]) => match m.stell {
+            Some(i) => vec![[&[0x71, 0xBA, 0x01, 0x02][..], GOLF6_STELLGLIED[i]].concat()],
+            None => vec![vec![0x7F, 0x31, 0x22]],
+        },
+        0x32 if req.get(1..4) == Some(&[0xB8, 0x01, 0x02]) => {
+            m.stell = None;
+            vec![vec![0x72, 0xB8, 0x01, 0x02, 0x62]]
         }
         0x1A if req.get(1) == Some(&0x90) && !golf => {
             let vin = if manip && addr == 0x17 { "WVWZZZ1KZ8W123456" } else { VIN };
@@ -1295,6 +1326,29 @@ mod tests {
         let l = gw.unwrap();
         let v: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
         assert_eq!((v.len(), v.iter().filter(|e| e.fehler()).count()), (20, 4));
+    }
+
+    #[test]
+    fn stellglieddiagnose_in_der_simulation() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_modell(Modell::Golf6);
+        let mut gesehen = Vec::new();
+        let mut n = 0;
+        let r = crate::kwp::stellglieddiagnose(&crate::transport::Backend::Demo, 0x22, |s| {
+            if let Some(s) = s {
+                gesehen.push(s.clone());
+            }
+            n += 1;
+            match n {
+                2 | 4 => crate::kwp::StellBefehl::Weiter,
+                6 => crate::kwp::StellBefehl::Ende,
+                _ => crate::kwp::StellBefehl::Bleiben,
+            }
+        });
+        set_modell(Modell::Demo);
+        r.unwrap();
+        assert_eq!(gesehen.first(), Some(&crate::kwp::StellSchritt::Bauteil(2188)));
+        assert_eq!(gesehen.get(2), Some(&crate::kwp::StellSchritt::Bauteil(1482)));
     }
 
     #[test]

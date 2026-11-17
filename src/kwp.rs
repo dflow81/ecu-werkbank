@@ -809,6 +809,87 @@ pub fn anpassung_lesen(be: &crate::transport::Backend, adresse: u8, kanaele: &[u
     Ok(out)
 }
 
+/// Ein Schritt der Stellglieddiagnose (Funktion 03), wie das Steuergerät ihn meldet.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StellSchritt {
+    /// Gerade angesteuertes Bauteil (Bauteilnummer, wie bei Fehlercodes 5-stellig)
+    Bauteil(u16),
+    /// Zwischenstand/Rückmeldung als Messwert
+    Wert(BlockValue),
+    /// Unbekannter Aufbau (roh)
+    Roh(Vec<u8>),
+}
+
+impl StellSchritt {
+    pub fn text(&self) -> String {
+        match self {
+            StellSchritt::Bauteil(n) => tr!("Bauteil {a} wird angesteuert", a = format!("{n:05}")),
+            StellSchritt::Wert(v) => tr!("Rückmeldung: {a}", a = v.display()),
+            StellSchritt::Roh(r) => tr!("Antwort: {a}", a = r.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")),
+        }
+    }
+}
+
+/// Antwort auf 31 BA 01 02 (ohne SID) zerlegen. Am Golf 6 (Tür 1K0 959 701 AE)
+/// mitgeschnitten: [BA 01 02][03 03 hi lo FF] = Bauteil, [BA 01 02][02 F a b] = Wert.
+pub fn stell_ergebnis(r: &[u8]) -> Option<StellSchritt> {
+    if r.get(..3) != Some(&[0xBA, 0x01, 0x02]) {
+        return None;
+    }
+    let p = &r[3..];
+    Some(match p {
+        [0x03, 0x03, hi, lo, ..] => StellSchritt::Bauteil(u16::from_be_bytes([*hi, *lo])),
+        [0x02, f, a, b, ..] => StellSchritt::Wert(BlockValue { formula: *f, a: *a, b: *b, text: None }),
+        _ => StellSchritt::Roh(p.to_vec()),
+    })
+}
+
+/// Was der Aufrufer nach jeder Abfrage möchte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StellBefehl {
+    /// beim aktuellen Bauteil bleiben (weiter abfragen)
+    Bleiben,
+    /// nächstes Bauteil ansteuern
+    Weiter,
+    /// Stellglieddiagnose beenden
+    Ende,
+}
+
+/// Stellglieddiagnose (Funktion 03) eines TP-2.0-Steuergeräts, wie ein
+/// Werkstatt-Diagnosegerät sie macht: Routine 0x0102 starten (31 B8 01 02),
+/// laufend den Stand abfragen (31 BA 01 02), auf Wunsch zum nächsten Bauteil
+/// (31 B9 01 02), am Ende immer beenden (32 B8 01 02).
+/// ACHTUNG: dabei werden Bauteile am Auto wirklich angesteuert.
+/// `steuer` bekommt jeden neuen Stand und sagt, wie es weitergeht; es wird
+/// etwa alle 150 ms gefragt (hält zugleich die Verbindung offen).
+pub fn stellglieddiagnose(be: &crate::transport::Backend, adresse: u8, mut steuer: impl FnMut(Option<&StellSchritt>) -> StellBefehl) -> Result<()> {
+    let mut ch = open_session(be, adresse)?;
+    let mut k = Kwp::new(&mut ch);
+    k.request(0x31, &[0xB8, 0x01, 0x02])?;
+    let r = (|| -> Result<()> {
+        let mut letzter: Option<StellSchritt> = None;
+        loop {
+            let r = k.request(0x31, &[0xBA, 0x01, 0x02])?;
+            let s = stell_ergebnis(&r);
+            let neu = s.is_some() && s != letzter;
+            let befehl = steuer(if neu { s.as_ref() } else { None });
+            if neu {
+                letzter = s;
+            }
+            match befehl {
+                StellBefehl::Bleiben => std::thread::sleep(std::time::Duration::from_millis(150)),
+                StellBefehl::Weiter => {
+                    k.request(0x31, &[0xB9, 0x01, 0x02])?;
+                }
+                StellBefehl::Ende => return Ok(()),
+            }
+        }
+    })();
+    // immer beenden — auch nach einem Fehler
+    let _ = k.request(0x32, &[0xB8, 0x01, 0x02]);
+    r
+}
+
 /// Ein Eintrag der Gateway-Verbauliste (4 Byte je Steuergerät).
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerbauEintrag {
@@ -886,6 +967,14 @@ pub fn gateway_verbauliste(be: &crate::transport::Backend) -> Result<Vec<VerbauE
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn stellglied_antworten_wie_am_golf6() {
+        assert_eq!(stell_ergebnis(&[0xBA, 0x01, 0x02, 0x03, 0x03, 0x08, 0x8C, 0xFF]), Some(StellSchritt::Bauteil(2188)));
+        let w = stell_ergebnis(&[0xBA, 0x01, 0x02, 0x02, 0x21, 0x64, 0x64]).unwrap();
+        assert_eq!(w.text(), "Rückmeldung: 100.00 %");
+        assert_eq!(stell_ergebnis(&[0xBA, 0x01, 0x03, 0x82]), None);
+    }
 
     #[test]
     fn anpassung_wie_am_golf6() {

@@ -467,6 +467,15 @@ enum Command {
     },
     /// Verbauliste direkt aus dem Gateway (TP 2.0, nur lesen): welche Steuergeräte das Gateway als verbaut kennt und welche Fehler melden
     GatewayVerbauliste,
+    /// Stellglieddiagnose (Funktion 03) eines TP-2.0-Steuergeräts — steuert Bauteile wirklich an! Enter = nächstes Bauteil, q = Ende
+    KwpStellglied {
+        /// TP-2.0-Adresse (hex), z. B. 22 = Tür Fahrer beim Golf 6
+        #[arg(long, value_parser = parse_hex)]
+        address: u16,
+        /// Wirklich starten (ohne: nur Hinweis)
+        #[arg(long)]
+        ja: bool,
+    },
     /// Anpassungskanäle (Funktion 10) eines TP-2.0-Steuergeräts lesen (nur lesen)
     KwpAnpassung {
         /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
@@ -1104,6 +1113,7 @@ fn main() -> Result<()> {
         Command::RdidScan { tx, rx, von, bis, suche, sitzung } => rdid_scan(&be, tx, rx, von, bis, suche, sitzung as u8),
         Command::Autoscan { no_tp20 } => autoscan(&be, &db, !no_tp20),
         Command::GatewayVerbauliste => gateway_verbauliste(&be),
+        Command::KwpStellglied { address, ja } => kwp_stellglied(&be, address as u8, ja),
         Command::KwpAnpassung { address, kanal } => kwp_anpassung(&be, address as u8, &kanal),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())
@@ -4003,5 +4013,34 @@ fn kwp_anpassung(be: &Backend, address: u8, kanaele: &[u8]) -> Result<()> {
             Err(e) => println!("  {e}"),
         }
     }
+    Ok(())
+}
+
+/// Stellglieddiagnose im Terminal: Enter = nächstes Bauteil, q = Ende.
+fn kwp_stellglied(be: &Backend, address: u8, ja: bool) -> Result<()> {
+    println!("{}", tr!("Stellglieddiagnose Steuergerät {a}: Bauteile werden dabei WIRKLICH angesteuert (Fensterheber, Verriegelung, Lampen …).", a = format!("{address:02X}")));
+    if !ja {
+        println!("{}", tr!("Nichts gestartet. Fahrzeug sichern (Hände weg von Fenstern/Türen), dann mit --ja starten."));
+        return Ok(());
+    }
+    println!("{}", tr!("Enter = nächstes Bauteil, q + Enter = beenden."));
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut zeile = String::new();
+        while std::io::stdin().read_line(&mut zeile).is_ok() {
+            let ende = zeile.trim().eq_ignore_ascii_case("q") || zeile.is_empty();
+            if tx.send(if ende { kwp::StellBefehl::Ende } else { kwp::StellBefehl::Weiter }).is_err() || ende {
+                break;
+            }
+            zeile.clear();
+        }
+    });
+    kwp::stellglieddiagnose(be, address, |s| {
+        if let Some(s) = s {
+            println!("  {}", s.text());
+        }
+        rx.try_recv().unwrap_or(kwp::StellBefehl::Bleiben)
+    })?;
+    println!("{}", tr!("Stellglieddiagnose beendet."));
     Ok(())
 }

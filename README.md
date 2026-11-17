@@ -1157,7 +1157,7 @@ und Stand in ECUWerkbank:
 | 02 | Fehlerspeicher lesen | ✅ `dtc` (VW-Fehlernummern wie beim Werkstattgerät) | ✅ `kwp-dtc` (Fehlerart am Golf 6 bestätigt) |
 | 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | 🟡 Steuergeräte am Golf 6 lehnen ab; per Auto-Scan-Import ✅ |
 | – | Auto-Scan-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `autoscan-import` | ✅ `autoscan-import` |
-| 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ❌ |
+| 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ✅ `kwp-stellglied`, GUI TP 2.0 → „🔧 Stellglieddiagnose“ (Ablauf per Mitschnitt an der Golf-6-Tür gelernt) |
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |
@@ -1166,7 +1166,7 @@ und Stand in ECUWerkbank:
 | – | Fahrzeug-Historie, Vorher/Nachher | ✅ `history`, `compare` | ✅ |
 | 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste; Formeln am Golf 6 mit Werkstattgerät verglichen |
 | 09 | Einzelmesswerte | – | ❌ |
-| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 sichern (soweit das Gerät antwortet) |
+| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben noch nicht |
 | 11/16 | Login / Zugriffsberechtigung | 🟡 `login` (SecurityAccess, Bytecode vom Nutzer) | 🟡 `login --kwp` (am Auto ungeprüft) |
 | 15 | Readiness | ✅ `obd-info` + Fahranleitung (GUI) | – |
 | 18 | Fehlerpfade (alle möglichen Fehlercodes) | ✅ `fehler-geruest`, GUI Werkzeuge → Fehlerbilder | ❌ Dienst gibt es bei KWP nicht |

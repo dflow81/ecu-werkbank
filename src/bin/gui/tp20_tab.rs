@@ -385,6 +385,79 @@ impl App {
         });
     }
 
+    /// Stellglieddiagnose (Funktion 03) am gewählten TP-2.0-Steuergerät.
+    /// Steuert Bauteile wirklich an — nur nach Bestätigung, Schritt für Schritt.
+    pub(super) fn ui_stellglied(&mut self, ui: &mut egui::Ui) {
+        // Meldungen abholen
+        if let Some((_, rx)) = &self.sg_job {
+            let mut fertig = None;
+            while let Ok(m) = rx.try_recv() {
+                match m {
+                    SgMsg::Stand(t) => self.sg_log.push(t),
+                    SgMsg::Fertig(r) => fertig = Some(r),
+                }
+            }
+            match fertig {
+                Some(Ok(())) => {
+                    self.sg_log.push(tr!("Stellglieddiagnose beendet."));
+                    self.sg_job = None;
+                }
+                Some(Err(e)) => {
+                    self.sg_log.push(tr!("Abgebrochen: {e}", e = e));
+                    self.sg_job = None;
+                }
+                None => ui.ctx().request_repaint_after(std::time::Duration::from_millis(150)),
+            }
+        }
+        ui.add_space(8.0);
+        ui.separator();
+        let laeuft = self.sg_job.is_some();
+        egui::CollapsingHeader::new(tr!("🔧 Stellglieddiagnose (Funktion 03)")).id_source("stellglied-tp20").default_open(laeuft).show(ui, |ui| {
+            ui.colored_label(stufe_color(Stufe::Warnung), tr!("Achtung: Die Bauteile werden wirklich angesteuert — Fensterheber fahren, Verriegelung schaltet, Lampen gehen an. Hände weg von Fenstern und Türen."));
+            let Some(addr) = parse_hex(&self.tp_addr).filter(|a| *a <= 0xFF).map(|a| a as u8) else {
+                ui.weak(tr!("Oben eine Steuergerät-Adresse eingeben."));
+                return;
+            };
+            if !laeuft {
+                ui.checkbox(&mut self.sg_bestaetigt, tr!("Ich habe das Fahrzeug gesichert und weiß, dass sich Bauteile bewegen."));
+                if ui.add_enabled(self.sg_bestaetigt && self.backend().supports_tp20(), egui::Button::new(tr!("▶ Stellglieddiagnose starten ({a})", a = format!("{addr:02X}")))).clicked() {
+                    let (cmd_tx, cmd_rx) = mpsc::channel();
+                    let (msg_tx, msg_rx) = mpsc::channel();
+                    let be = self.backend();
+                    std::thread::spawn(move || {
+                        let r = kwp::stellglieddiagnose(&be, addr, |s| {
+                            if let Some(s) = s {
+                                let _ = msg_tx.send(SgMsg::Stand(s.text()));
+                            }
+                            cmd_rx.try_recv().unwrap_or(kwp::StellBefehl::Bleiben)
+                        });
+                        let _ = msg_tx.send(SgMsg::Fertig(r.map_err(|e| format!("{e:#}"))));
+                    });
+                    self.sg_log = vec![tr!("Gestartet an Steuergerät {a}.", a = format!("{addr:02X}"))];
+                    self.sg_job = Some((cmd_tx, msg_rx));
+                    self.sg_bestaetigt = false;
+                }
+            } else {
+                ui.horizontal(|ui| {
+                    if ui.button(tr!("⏭ Nächstes Bauteil")).clicked() {
+                        if let Some((tx, _)) = &self.sg_job {
+                            let _ = tx.send(kwp::StellBefehl::Weiter);
+                        }
+                    }
+                    if ui.button(tr!("⏹ Beenden")).clicked() {
+                        if let Some((tx, _)) = &self.sg_job {
+                            let _ = tx.send(kwp::StellBefehl::Ende);
+                        }
+                    }
+                    ui.spinner();
+                });
+            }
+            for z in self.sg_log.iter().rev().take(12) {
+                ui.monospace(z);
+            }
+        });
+    }
+
     /// VAG_FOTO: nach der Wartezeit ein Bild des Fensters als PPM speichern und
     /// das Programm schließen (für die Bilder im Handbuch, auch bei verdecktem Fenster).
     pub(super) fn foto_tick(&mut self, ctx: &egui::Context) {
@@ -830,6 +903,7 @@ impl App {
 
         self.ui_blockscan(ui);
         self.ui_grund(ui);
+        self.ui_stellglied(ui);
 
         ui.add_space(8.0);
         ui.separator();

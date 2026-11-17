@@ -275,6 +275,12 @@ fn install_fallback_fonts(ctx: &egui::Context) {
     }
 }
 
+/// Meldungen der Stellglieddiagnose aus dem Hintergrund
+enum SgMsg {
+    Stand(String),
+    Fertig(Result<(), String>),
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 enum Tab {
     Start,
@@ -694,6 +700,10 @@ struct App {
     bs_result: Option<(u8, Vec<(u8, Vec<kwp::BlockValue>)>)>,
     /// Eingaben beim Benennen aller Blöcke (Schlüssel wie messwerttexte)
     bs_namen: std::collections::BTreeMap<String, String>,
+    /// Stellglieddiagnose (TP 2.0): Bestätigung, laufender Job (Befehle hin, Meldungen zurück), Verlauf
+    sg_bestaetigt: bool,
+    sg_job: Option<(mpsc::Sender<kwp::StellBefehl>, mpsc::Receiver<SgMsg>)>,
+    sg_log: Vec<String>,
     /// Benennen-Tabelle: nur Felder ohne Namen, Suchtext, Rohwerte ausblenden
     bn_nur_offen: bool,
     bn_suche: String,
