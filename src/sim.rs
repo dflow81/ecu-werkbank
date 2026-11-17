@@ -382,7 +382,7 @@ fn golf6_module() -> Module {
         u(0x76C, 0x7D6, "Radio/Navigation", "3C0035270", "0450", "RNS310", vec![([0x10, 0x00, 0x06], 0x09)]),
     ];
     let k = |addr: u8, tx: u16, ident: Ident, dtcs: Vec<(u16, u8)>| KwpModule { tester_tx: Some(tx), ..kwp(addr, ident, dtcs) };
-    let mut motor = k(0x01, 0x740, Ident::Vag { teil: "03C906016", sw: *b"5049", name: "BMED17.5.5       G" }, vec![(8851, 0x20)]);
+    let mut motor = k(0x01, 0x740, Ident::Vag { teil: "03C906016", sw: *b"5049", name: "MED17.5.5       G" }, vec![(8851, 0x20)]);
     motor.eigen = Eigenheit { dtc_nur_typ0: true, ident_78: true, erst_besetzt: false };
     let mut abs = k(0x03, 0x790, Ident::Nur22 { teil: "1K0907379CD", sw: "0120", system: "ESP MK60EC1", hw: "1K0907379AD" }, vec![]);
     abs.eigen.erst_besetzt = true;
@@ -391,13 +391,13 @@ fn golf6_module() -> Module {
         abs,
         k(0x09, 0x7A8, Ident::Vag { teil: "1K0909144H", sw: *b"2901", name: "EPS_ZFLS Kl. 69" }, vec![]),
         k(0x1D, 0x7BA, Ident::Nur22 { teil: "1K9919475", sw: "0001", system: "PARKHILFE 8K", hw: "1K9919475" }, vec![(1627, 0x2E)]),
-        k(0x1F, 0x32E, Ident::Vag { teil: "1K0907530AA", sw: *b"0081", name: "BJ533  Gateway   H07" }, vec![]),
+        k(0x1F, 0x32E, Ident::Vag { teil: "1K0907530AA", sw: *b"0081", name: "J533  Gateway   H07" }, vec![]),
         k(0x20, 0x338, Ident::Nur22 { teil: "5K0937086", sw: "0019", system: "BCM PQ35 M", hw: "5K0937086" }, vec![]),
-        k(0x22, 0x310, Ident::Vag { teil: "1K0959701AE", sw: *b"1519", name: "BJ386  TUER-SG FT" }, vec![]),
-        k(0x23, 0x312, Ident::Vag { teil: "1K0959702AE", sw: *b"1519", name: "BJ387  TUER-SG BT" }, vec![(97, 0x6C), (929, 0x28)]),
-        k(0x24, 0x314, Ident::Vag { teil: "1K0959703AG", sw: [0xB1, b'4', b'0', b'1'], name: "BJ388   TUER-SG HL" }, vec![]),
-        k(0x25, 0x316, Ident::Vag { teil: "1K0959704AG", sw: [0xB1, b'4', b'0', b'1'], name: "BJ389   TUER-SG HR" }, vec![]),
-        k(0x2A, 0x2FC, Ident::Vag { teil: "1K0953549CQ", sw: [0xB0, b'1', b'1', b'1'], name: "BJ0527           053" }, vec![]),
+        k(0x22, 0x310, Ident::Vag { teil: "1K0959701AE", sw: *b"1519", name: "J386  TUER-SG FT" }, vec![]),
+        k(0x23, 0x312, Ident::Vag { teil: "1K0959702AE", sw: *b"1519", name: "J387  TUER-SG BT" }, vec![(97, 0x6C), (929, 0x28)]),
+        k(0x24, 0x314, Ident::Vag { teil: "1K0959703AG", sw: [0xB1, b'4', b'0', b'1'], name: "J388   TUER-SG HL" }, vec![]),
+        k(0x25, 0x316, Ident::Vag { teil: "1K0959704AG", sw: [0xB1, b'4', b'0', b'1'], name: "J389   TUER-SG HR" }, vec![]),
+        k(0x2A, 0x2FC, Ident::Vag { teil: "1K0953549CQ", sw: [0xB0, b'1', b'1', b'1'], name: "J0527           053" }, vec![]),
         k(0x43, 0x336, Ident::Nur22 { teil: "1K0907383F", sw: "0100", system: "ConWysTrailer", hw: "1K0907383F" }, vec![]),
     ];
     (uds, kwp, vec![0x29])
@@ -1050,7 +1050,7 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
                     r.extend_from_slice(format!("{teil:<12}").as_bytes());
                     r.extend_from_slice(sw);
                     // Nicht-Text-Bytes wie am MED17 gelesen
-                    r.extend_from_slice(&[0x03, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                    r.extend_from_slice(&[0x03, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42]);
                     r.extend_from_slice(format!("{name:<20}").as_bytes());
                     r
                 }

@@ -476,6 +476,17 @@ enum Command {
         #[arg(long)]
         ja: bool,
     },
+    /// Kurzcodierung eines TP-2.0-Steuergeräts schreiben (z. B. Tür, Motor) — mit Kontrolle; ohne --ja nur Vorschau
+    KwpCodierungSchreiben {
+        /// TP-2.0-Adresse (hex), z. B. 22 = Tür Fahrer beim Golf 6
+        #[arg(long, value_parser = parse_hex)]
+        address: u16,
+        /// Neue Kurzcodierung (dezimal, wie im Werkstattgerät), z. B. 180
+        #[arg(long)]
+        wert: u32,
+        #[arg(long)]
+        ja: bool,
+    },
     /// Anpassungskanäle (Funktion 10) eines TP-2.0-Steuergeräts lesen (nur lesen)
     KwpAnpassung {
         /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
@@ -1114,6 +1125,7 @@ fn main() -> Result<()> {
         Command::Autoscan { no_tp20 } => autoscan(&be, &db, !no_tp20),
         Command::GatewayVerbauliste => gateway_verbauliste(&be),
         Command::KwpStellglied { address, ja } => kwp_stellglied(&be, address as u8, ja),
+        Command::KwpCodierungSchreiben { address, wert, ja } => kwp_codierung_schreiben(&be, address as u8, wert, ja),
         Command::KwpAnpassung { address, kanal } => kwp_anpassung(&be, address as u8, &kanal),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())
@@ -4042,5 +4054,28 @@ fn kwp_stellglied(be: &Backend, address: u8, ja: bool) -> Result<()> {
         rx.try_recv().unwrap_or(kwp::StellBefehl::Bleiben)
     })?;
     println!("{}", tr!("Stellglieddiagnose beendet."));
+    Ok(())
+}
+
+/// Kurzcodierung schreiben (TP 2.0) — erst Vorschau, mit --ja wirklich.
+fn kwp_codierung_schreiben(be: &Backend, address: u8, wert: u32, ja: bool) -> Result<()> {
+    let mut ch = kwp_open(be, address)?;
+    let raw = Kwp::new(&mut ch).read_ecu_id(kwp::ECU_ID_VAG)?;
+    drop(ch);
+    let alt = match kwp::kurzcodierung_9b(&raw) {
+        Some(kwp::TpCodierung::Kurz { wert, .. }) => wert,
+        _ => anyhow::bail!(tr!("Steuergerät {a} hat keine Kurzcodierung (Aufbau 03 xx xx xx).", a = format!("{address:02X}"))),
+    };
+    println!("{}", tr!("Steuergerät {a}: Kurzcodierung jetzt {b}, neu {c}.", a = format!("{address:02X}"), b = format!("{alt:07}"), c = format!("{wert:07}")));
+    if !ja {
+        println!("{}", tr!("Nichts geschrieben. Den alten Wert notieren, dann mit --ja schreiben."));
+        return Ok(());
+    }
+    let (vorher, danach) = kwp::kurzcodierung_schreiben(be, address, wert)?;
+    if danach == wert {
+        println!("{}", tr!("Geschrieben und kontrolliert: {a} → {b}.", a = format!("{vorher:07}"), b = format!("{danach:07}")));
+    } else {
+        println!("{}", tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Wert war {c}.", a = format!("{danach:07}"), b = format!("{wert:07}"), c = format!("{vorher:07}")));
+    }
     Ok(())
 }

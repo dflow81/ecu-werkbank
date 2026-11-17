@@ -373,8 +373,8 @@ impl BlockValue {
 }
 
 /// VAG-Identifikation (0x1A 0x9B) mit festen Feldern, wie am Golf 6 gelesen:
-/// Byte 0–11 Teilenummer, 12–15 Softwarestand, 16–24 Daten (u. a. Codierung),
-/// ab 25 Name. Liefert ["Teilenummer  SW", "Name"] oder None bei anderem Aufbau.
+/// Byte 0–11 Teilenummer, 12–15 Softwarestand, 16–19 Codierung, 20–25
+/// Betriebsnummer, ab 26 Name. Liefert ["Teilenummer  SW", "Name"] oder None bei anderem Aufbau.
 /// Bit 7 im Softwarestand (Türen, Lenksäule: B1 34 30 31) wird ausgeblendet —
 /// daraus wird „1401“ (am Golf 6 mit einem Werkstatt-Diagnosegerät verglichen).
 pub fn ident_9b(raw: &[u8]) -> Option<Vec<String>> {
@@ -390,7 +390,10 @@ pub fn ident_9b(raw: &[u8]) -> Option<Vec<String>> {
     }
     let sw = txt(&raw[12..16]);
     let mut out = vec![format!("{teil}  {sw}").trim().to_string()];
-    let name = ident_strings(&raw[25..]).join(" ");
+    // Byte 20–25: Betriebsnummer der letzten Codierung (6 Byte wie 0xF1A5),
+    // Name erst ab Byte 26 — am Golf 6 mit dem Werkstattgerät verglichen
+    // (Tür: 00 00 00 00 00 42 = WSC 00066). Früher galt 0x42 als „B“ des Namens.
+    let name = ident_strings(&raw[26.min(raw.len())..]).join(" ");
     if !name.is_empty() {
         out.push(name);
     }
@@ -522,6 +525,44 @@ pub fn kurzcodierung_9b(raw: &[u8]) -> Option<TpCodierung> {
     }
     let wert = u32::from_be_bytes([0, roh[1], roh[2], roh[3]]);
     Some(TpCodierung::Kurz { wert, roh })
+}
+
+/// Daten für „Kurzcodierung schreiben“ (KWP 0x3B, Kennung 0x9A) aus der
+/// gelesenen Identifikation 0x9B: Betriebsnummer (Byte 20–25) und
+/// Softwarestand (Byte 12–15) bleiben unverändert, dahinter 03 + Codierung
+/// (3 Byte). Genau so hat ein Werkstatt-Diagnosegerät an der Golf-6-Tür
+/// geschrieben (Mitschnitt 17.11.2026). None, wenn das Gerät keine
+/// Kurzcodierung im Aufbau „03 xx xx xx“ hat oder der Wert zu groß ist.
+pub fn kurzcodierung_daten(raw_9b: &[u8], neu: u32) -> Option<Vec<u8>> {
+    kurzcodierung_9b(raw_9b)?;
+    if neu > 0xFF_FFFF || raw_9b.len() < 26 {
+        return None;
+    }
+    let mut d = vec![ECU_ID_9A];
+    d.extend_from_slice(&raw_9b[20..26]);
+    d.extend_from_slice(&raw_9b[12..16]);
+    d.push(0x03);
+    d.extend_from_slice(&neu.to_be_bytes()[1..]);
+    Some(d)
+}
+
+/// Kurzcodierung eines TP-2.0-Steuergeräts schreiben und zur Kontrolle neu
+/// lesen. Gibt (alter Wert, danach gelesener Wert) zurück.
+pub fn kurzcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu: u32) -> Result<(u32, u32)> {
+    let mut ch = open_session(be, adresse)?;
+    let mut k = Kwp::new(&mut ch);
+    let raw = k.read_ecu_id(ECU_ID_VAG)?;
+    let alt = match kurzcodierung_9b(&raw) {
+        Some(TpCodierung::Kurz { wert, .. }) => wert,
+        _ => bail!(tr!("Steuergerät {a} hat keine Kurzcodierung (Aufbau 03 xx xx xx).", a = format!("{adresse:02X}"))),
+    };
+    let daten = kurzcodierung_daten(&raw, neu).ok_or_else(|| anyhow::anyhow!(tr!("Codierung {a} passt nicht (höchstens 7 Stellen).", a = neu)))?;
+    k.request(0x3B, &daten)?;
+    let danach = match kurzcodierung_9b(&k.read_ecu_id(ECU_ID_VAG)?) {
+        Some(TpCodierung::Kurz { wert, .. }) => wert,
+        _ => bail!(tr!("Kontrolle: Codierung danach nicht lesbar.")),
+    };
+    Ok((alt, danach))
 }
 
 /// Lange Codierung über 0x22 0x0600; None, wenn das Steuergerät sie nicht kennt.
@@ -1024,6 +1065,15 @@ mod tests {
         raw.extend_from_slice(&[0x03, 0x00, 0x01, 0xB4, 0, 0, 0, 0, 0]);
         raw.extend_from_slice(b"BJ387  TUER-SG BT   ");
         assert_eq!(kurzcodierung_9b(&raw).map(|c| c.text()), Some("0000436".to_string()));
+        // Schreiben wie das Werkstattgerät an der Fahrertür: 3B 9A | Betriebsnr. | SW | 03 Codierung
+        let mut tuer = b"1K0959701AE 1519".to_vec();
+        tuer.extend_from_slice(&[0x03, 0x00, 0x00, 0xB4, 0, 0, 0, 0, 0, 0x42]);
+        tuer.extend_from_slice(b"J386  TUER-SG FT");
+        assert_eq!(
+            kurzcodierung_daten(&tuer, 180),
+            Some(vec![0x9A, 0, 0, 0, 0, 0, 0x42, b'1', b'5', b'1', b'9', 0x03, 0x00, 0x00, 0xB4])
+        );
+        assert_eq!(kurzcodierung_daten(&tuer, 0x100_0000), None);
         // Gateway: anderer Aufbau (10 …) → keine Kurzcodierung
         raw[16] = 0x10;
         assert_eq!(kurzcodierung_9b(&raw), None);
@@ -1035,12 +1085,12 @@ mod tests {
         let mut r = b"1K0959703AG ".to_vec();
         r.extend_from_slice(&[0xB1, 0x34, 0x30, 0x31, 0x03, 0x00, 0x00, 0x90, 0, 0, 0, 0, 0]);
         r.extend_from_slice(b"BJ388   TUER-SG HL   ");
-        assert_eq!(ident_9b(&r).unwrap(), vec!["1K0959703AG  1401".to_string(), "BJ388   TUER-SG HL".to_string()]);
+        assert_eq!(ident_9b(&r).unwrap(), vec!["1K0959703AG  1401".to_string(), "J388   TUER-SG HL".to_string()]);
         // Motor: Name direkt ab Byte 25
         let mut r = b"03C906016   5049".to_vec();
         r.extend_from_slice(&[0x03, 0x00, 0x00, 0x48, 0, 0, 0, 0, 0]);
         r.extend_from_slice(b"BMED17.5.5       G   ");
-        assert_eq!(ident_9b(&r).unwrap(), vec!["03C906016  5049".to_string(), "BMED17.5.5       G".to_string()]);
+        assert_eq!(ident_9b(&r).unwrap(), vec!["03C906016  5049".to_string(), "MED17.5.5       G".to_string()]);
         // anderer Aufbau (Demo: Teil, 00 01, Name) → None
         let mut demo = b"1K0920851  ".to_vec();
         demo.extend_from_slice(&[0x00, 0x01]);
