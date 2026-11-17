@@ -98,8 +98,18 @@ impl App {
         ui.add_space(6.0);
         ui.separator();
         self.ui_fahrzeug_module(ui);
+        // Steuergerät von Hand wählen (Diagnoseadresse + CAN-ID aus Labels) —
+        // nur aufgeklappt, solange es noch keinen Scan gibt
+        let hat_scan = self.active_vehicle.as_deref().is_some_and(|k| !ecu_werkbank::history::list(k).is_empty());
+        egui::CollapsingHeader::new(tr!("Steuergerät von Hand wählen (Diagnoseadresse)"))
+            .id_source("hand_auswahl")
+            .default_open(!hat_scan)
+            .show(ui, |ui| self.ui_hand_auswahl(ui));
+    }
+
+    /// Steuergerät über Diagnoseadresse wählen und dessen Funktionen.
+    pub(super) fn ui_hand_auswahl(&mut self, ui: &mut egui::Ui) {
         // --- VCDS-artiger Ablauf (eigenes Design): Steuergerät wählen » Funktionen ---
-        ui.heading(tr!("Alle Diagnoseadressen"));
         ui.label(tr!("Gängige Diagnoseadressen (für neuere UDS-Fahrzeuge mit Labels). Klick wählt das Steuergerät; CAN-IDs kommen aus deinem Label (falls hinterlegt)."));
         ui.add_space(6.0);
 
@@ -306,6 +316,7 @@ impl App {
             if let Some(e) = &laden {
                 let b = e.bytes();
                 self.code_tp20 = if e.protocol == "TP 2.0" { e.address.map(|a| a as u8) } else { None };
+                self.code_kurz = None;
                 self.code_tx = format!("{:#05x}", e.tx);
                 self.code_rx = format!("{:#05x}", e.rx);
                 self.code_ecu = e.address.or_else(|| self.db.ecus_with_can().into_iter().find(|x| x.1 == e.tx).map(|x| x.0));
@@ -324,15 +335,26 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 ui.label(tr!("TP 2.0 · Adresse {a}", a = format!("{addr:02X}")));
                 if ui.button(tr!("⬇ Vom Steuergerät lesen")).clicked() {
-                    let res = (|| -> anyhow::Result<Vec<u8>> {
+                    // lang (0x0600 / Gateway 0x9A) oder kurz (Identifikation 0x9B)
+                    let res = (|| -> anyhow::Result<kwp::TpCodierung> {
                         let mut ch = kwp::open_session(&self.backend(), addr)?;
-                        kwp::codierung_22(&mut Kwp::new(&mut ch)).ok_or_else(|| anyhow::anyhow!(tr!("Keine Codierung über Kennung 0x0600")))
+                        let mut k = Kwp::new(&mut ch);
+                        let raw = k.read_ecu_id(kwp::ECU_ID_VAG).unwrap_or_default();
+                        kwp::codierung_lesen(&mut k, &raw).ok_or_else(|| anyhow::anyhow!(tr!("Keine Codierung lesbar")))
                     })();
                     match res {
-                        Ok(b) => {
+                        Ok(kwp::TpCodierung::Lang(b)) => {
+                            self.code_kurz = None;
                             self.code_bytes = b.iter().map(|x| format!("{x:02X}")).collect();
                             self.status = tr!("Codierung gelesen: {a}", a = ecu_werkbank::backup::hex(&b));
                             self.code_quelle = Some((tr!("Stand im Steuergerät"), b));
+                        }
+                        Ok(kwp::TpCodierung::Kurz { wert, .. }) => {
+                            self.code_kurz = Some(wert);
+                            self.code_kurz_neu = format!("{wert:07}");
+                            self.code_kurz_ok = false;
+                            self.code_quelle = None;
+                            self.status = tr!("Kurzcodierung gelesen: {a}", a = format!("{wert:07}"));
                         }
                         Err(e) => self.status = tr!("Lesen: {e}", e = format!("{:#}", e)),
                     }
@@ -342,7 +364,35 @@ impl App {
                     self.code_quelle = None;
                 }
             });
-            ui.weak(tr!("TP 2.0: Lesen und Bits benennen geht; Schreiben ist hier noch nicht eingebaut."));
+            if let Some(alt) = self.code_kurz {
+                ui.horizontal_wrapped(|ui| {
+                    ui.strong(tr!("Kurzcodierung: {a}", a = format!("{alt:07}")));
+                    ui.label(tr!("neu:"));
+                    ui.add(egui::TextEdit::singleline(&mut self.code_kurz_neu).desired_width(90.0));
+                });
+                let neu = self.code_kurz_neu.trim().parse::<u32>().ok().filter(|n| *n <= 0xFF_FFFF);
+                ui.checkbox(&mut self.code_kurz_ok, tr!("Alten Wert {a} notiert — neue Codierung schreiben", a = format!("{alt:07}")));
+                if ui.add_enabled(self.code_kurz_ok && neu.is_some(), egui::Button::new(tr!("✍ Kurzcodierung schreiben"))).clicked() {
+                    let neu = neu.expect("geprüft");
+                    self.code_kurz_ok = false;
+                    match kwp::kurzcodierung_schreiben(&self.backend(), addr, neu) {
+                        Ok((vorher, danach)) if danach == neu => {
+                            self.code_kurz = Some(danach);
+                            self.status = tr!("Geschrieben und kontrolliert: {a} → {b}.", a = format!("{vorher:07}"), b = format!("{danach:07}"));
+                        }
+                        Ok((vorher, danach)) => {
+                            self.code_kurz = Some(danach);
+                            self.status = tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Wert war {c}.", a = format!("{danach:07}"), b = format!("{neu:07}"), c = format!("{vorher:07}"));
+                        }
+                        Err(e) => self.status = tr!("Schreiben: {e}", e = format!("{:#}", e)),
+                    }
+                }
+                if neu.is_none() {
+                    ui.weak(tr!("Bitte eine Zahl mit höchstens 7 Stellen eingeben."));
+                }
+            } else {
+                ui.weak(tr!("Lange Codierung (z. B. Bordnetz, ABS): lesen und Bits benennen — Schreiben noch nicht eingebaut. Kurzcodierung (Türen, Motor, Lenksäule): lesen und schreiben."));
+            }
         } else {
             ui.horizontal_wrapped(|ui| {
                 ui.label(tr!("Steuergerät TX/RX:"));

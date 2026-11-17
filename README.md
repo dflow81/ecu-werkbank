@@ -91,10 +91,10 @@ Fahrzeugakte). Alles Weitere ist in vier Gruppen sortiert:
 
 | Gruppe | Unterseiten |
 |---|---|
-| 🔧 Diagnose | Steuergeräte · Prüfen & Fehlersuche · OBD-II · Sicherheit & Assistenz · TP 2.0 (ältere) · Andere Marken · Grundeinstellung/Stellglied |
-| 📈 Messen | Live-Grafik · Zielbereich · Batterie · Partikelfilter · Rohwerte umrechnen |
-| 🚘 Fahrzeug | Fahrzeuge & Wartung · Historie & Trends · Softwarestände · Nachrüstung · Codier-Sicherung · Codierung |
-| 🛠 Werkzeuge | Mitschnitt & Lernhilfe · Fehlerbilder · Label-Editor · Eigene Namen |
+| 🔧 Diagnose | Steuergeräte · Ältere Steuergeräte (TP 2.0) · OBD-II · Codierung · Erweiterte Identifikation · Prüfen & Fehlersuche · Sicherheit & Assistenz · Andere Marken |
+| 📈 Messen | Live-Grafik · Zielbereich · Batterie · Partikelfilter · Motor-Checks · Fahrt-Rekorder · Rohwerte umrechnen |
+| 🚘 Fahrzeug | Fahrzeuge & Wartung · Service-Anzeige · Historie & Trends · Softwarestände · Codier-Sicherung · Nachrüstung |
+| 🛠 Werkzeuge | Testlauf · Mitschnitt & Lernhilfe · Eigene Namen · Label-Editor · Fehlerbilder · Grundeinstellungen (Referenz) · Experten: Routine & Stellglied (UDS) |
 
 Oben immer erreichbar: Verbindungsart, aktives Fahrzeug, 🔌 Verbindung,
 ✅ Schnell-Check, 📄 Fehler-PDF, Hell/Dunkel.
@@ -185,6 +185,14 @@ sudo ip link set up can0
 ./target/release/ecu-werkbank -i can0 clear --tx 0x7E0 --rx 0x7E8
 ```
 
+### Bedienung in der Oberfläche
+
+Wie beim Werkstatt-Diagnosegerät: **Diagnose → Steuergeräte**, einmal alle Steuergeräte
+auslesen, dann eines anklicken. Darunter erscheinen alle Funktionen dieses Steuergeräts:
+Fehler lesen/löschen, Identifikation, Messwerte, Codierung, Anpassung, Grundeinstellung
+und Stellglieddiagnose (je nachdem, was das Steuergerät kann). Ein Klick springt mit
+vorbelegter Adresse auf die passende Seite.
+
 ### Welcher Adapter kann was? (CAN-Interface vs. ELM327)
 
 **CAN-Interface** = SocketCAN-Adapter (z. B. USB-CAN, `-i can0`). **ELM327** =
@@ -261,7 +269,7 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 - **Readiness-Assistent (OBD-II):** je offenem Abgas-Test eine Fahranleitung, Fortschritt
   seit dem Löschen (km, Warmläufe, Motorlaufzeit) und — falls das Auto es meldet — welcher
   Test in der laufenden Fahrt schon geprüft wurde.
-- **Namen für Messwertblöcke und Anpassungen in einem Rutsch:** Diagnose → TP 2.0 →
+- **Namen für Messwertblöcke und Anpassungen in einem Rutsch:** Diagnose → Ältere Steuergeräte (TP 2.0) →
   „Alle Blöcke lesen (1–255)“ → „✏ Namen für alle Blöcke und Felder eintragen“ zeigt jedes
   Feld mit aktuellem Wert und Einheit zum Benennen. Fahrzeug → Codier-Sicherung →
   Anpassungen → „✏ Kennungen benennen“ listet alle Kennungen der neuesten
@@ -345,7 +353,7 @@ sudo ip link set can0 up
 ./target/release/ecu-werkbank -i can0 tp20 --address 0x01 --request 1a9b             # roher KWP-Request
 ```
 
-In der GUI (`./target/release/ecu-werkbank-gui`) gibt es dafür den Reiter **„TP 2.0“**:
+In der GUI (`./target/release/ecu-werkbank-gui`) gibt es dafür den Reiter **„Ältere Steuergeräte (TP 2.0)“**:
 Steuergeräte suchen (läuft im Hintergrund), Identifikation, Fehlerspeicher
 lesen/löschen und Messwertblöcke live. Start-Interface vorgeben mit
 `VAG_IFACE=can0`.
@@ -366,7 +374,7 @@ das Senden für dieses Steuergerät **gesperrt**:
    eines Werkstatt-Diagnosegeräts über ein OBD-Y-Kabel gleichzeitig am Auto).
 2. Mit dem Diagnosegerät am Steuergerät die Grundeinstellung (Funktion 04) für eine
    Gruppe einschalten, ein paar Sekunden laufen lassen, ausschalten.
-3. Aufnahme stoppen. Im Reiter „TP 2.0“ unter „⚙ Grundeinstellung“ dieselbe Gruppe
+3. Aufnahme stoppen. Im Reiter „Ältere Steuergeräte (TP 2.0)“ unter „⚙ Grundeinstellung“ dieselbe Gruppe
    eintragen, „📂 Mitschnitt auswerten…“, das Ergebnis prüfen und übernehmen.
 
 Danach lässt sich jede Gruppe dieses Steuergeräts starten (mit Rückfrage), die
@@ -375,7 +383,7 @@ Steuergerät im Mitschnitt bestätigt hat; beim Starten wird nur die Gruppennumm
 ausgetauscht. Der Ablauf liegt im Fahrzeugordner (`grundeinstellung.toml`) — ein
 am Golf gelernter Ablauf gilt nie für ein anderes Auto.
 
-Im Reiter **„Grundeinstellung / Stellglied“** (UDS-Steuergeräte, Routine 0x31 und
+Im Reiter **Werkzeuge → „Experten: Routine & Stellglied (UDS)“** (UDS-Steuergeräte, Routine 0x31 und
 Stellglied 0x2F) kommt vor jedem Senden eine Rückfrage; im Terminal zeigen
 `routine` und `iocontrol` ohne `--ja` nur an, was gesendet würde.
 
@@ -1157,7 +1165,7 @@ und Stand in ECUWerkbank:
 | 02 | Fehlerspeicher lesen | ✅ `dtc` (VW-Fehlernummern wie beim Werkstattgerät) | ✅ `kwp-dtc` (Fehlerart am Golf 6 bestätigt) |
 | 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | 🟡 Steuergeräte am Golf 6 lehnen ab; per Auto-Scan-Import ✅ |
 | – | Auto-Scan-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `autoscan-import` | ✅ `autoscan-import` |
-| 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ✅ `kwp-stellglied`, GUI TP 2.0 → „🔧 Stellglieddiagnose“ (Ablauf per Mitschnitt an der Golf-6-Tür gelernt) |
+| 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ✅ `kwp-stellglied`, GUI Steuergeräte → Steuergerät wählen → „▶ Stellglieddiagnose“ (Ablauf per Mitschnitt an der Golf-6-Tür gelernt) |
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |

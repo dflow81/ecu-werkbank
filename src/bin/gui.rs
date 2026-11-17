@@ -395,6 +395,10 @@ struct App {
     code_nur_benannt: bool,
     /// TP-2.0-Steuergerät (Adresse) statt UDS: nur lesen und benennen
     code_tp20: Option<u8>,
+    /// Kurzcodierung (TP 2.0): gelesener Wert, Eingabe neuer Wert, Bestätigung
+    code_kurz: Option<u32>,
+    code_kurz_neu: String,
+    code_kurz_ok: bool,
 
     // Softwarestände
     sw_last: Option<ecu_werkbank::swinfo::Stand>,
@@ -704,6 +708,12 @@ struct App {
     sg_bestaetigt: bool,
     sg_job: Option<(mpsc::Sender<kwp::StellBefehl>, mpsc::Receiver<SgMsg>)>,
     sg_log: Vec<String>,
+    /// Stellglied-Bereich beim nächsten Anzeigen aufklappen (Sprung von „Steuergeräte“)
+    sg_zeigen: bool,
+    /// Anpassung (TP 2.0): Kanäle als Eingabe, Ergebniszeilen, aufklappen
+    an_kanaele: String,
+    an_result: Vec<String>,
+    an_zeigen: bool,
     /// Benennen-Tabelle: nur Felder ohne Namen, Suchtext, Rohwerte ausblenden
     bn_nur_offen: bool,
     bn_suche: String,
@@ -733,6 +743,8 @@ struct App {
     tp_sweep: Option<mpsc::Receiver<SweepMsg>>,
     tp_sweep_at: u8,
     tp_found: Vec<Tp20Found>,
+    /// Zwischenspeicher der bekannten TP-2.0-Steuergeräte (Suche + letzter Scan), alle paar Sekunden neu
+    tp20_bekannt: Option<(std::time::Instant, Vec<(u8, String)>)>,
     /// Voller Suchlauf statt Schnell-Scan mit Fahrzeugprofil
     voll_scan: bool,
     /// Demo/Screenshot: Suche beim Start auslösen (VAG_TAB=tp20)
@@ -818,6 +830,14 @@ impl eframe::App for App {
                 self.tp_channel = None;
             }
             "sicherheit" => self.si_starten(),
+            "steuergeraete-wahl" => {
+                // erstes älteres Steuergerät aus dem letzten Scan wählen (für Bilder)
+                if let Some(k) = self.active_vehicle.clone() {
+                    if let Some((_, r)) = ecu_werkbank::history::list(&k).into_iter().last() {
+                        self.fz_sel = r.modules.iter().position(|m| m.protocol == "TP 2.0");
+                    }
+                }
+            }
             "namen-scan" => {
                 self.bn_addr = "0x01".into();
                 self.bs_start(0x01);
@@ -1677,15 +1697,16 @@ fn verlauf_diagramme(ui: &mut egui::Ui, v: &ecu_werkbank::vehicle::Vehicle) {
 
 /// Gruppen der Oberfläche mit ihren Unterseiten.
 const GROUPS: &[(&str, &[(Tab, &str)])] = &[
+    // Diagnose: wie beim Werkstattgerät — Steuergerät wählen, dann Funktion
     (trn!("🔧 Diagnose"), &[
         (Tab::Steuergeraete, trn!("Steuergeräte")),
-        (Tab::Diagnose, trn!("Prüfen & Fehlersuche")),
+        (Tab::Tp20, trn!("Ältere Steuergeräte (TP 2.0)")),
         (Tab::Obd, trn!("OBD-II")),
-        (Tab::Sicherheit, trn!("Sicherheit & Assistenz")),
-        (Tab::Tp20, trn!("TP 2.0 (ältere)")),
-        (Tab::Fremd, trn!("Andere Marken")),
-        (Tab::Service, trn!("Grundeinstellung / Stellglied")),
+        (Tab::Codierung, trn!("Codierung")),
         (Tab::Ident, trn!("Erweiterte Identifikation")),
+        (Tab::Diagnose, trn!("Prüfen & Fehlersuche")),
+        (Tab::Sicherheit, trn!("Sicherheit & Assistenz")),
+        (Tab::Fremd, trn!("Andere Marken")),
     ]),
     (trn!("📈 Messen"), &[
         (Tab::Scope, trn!("Live-Grafik")),
@@ -1701,17 +1722,17 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
         (Tab::ServiceAnzeige, trn!("Service-Anzeige")),
         (Tab::Historie, trn!("Historie & Trends")),
         (Tab::Software, trn!("Softwarestände")),
-        (Tab::Nachruestung, trn!("Nachrüstung")),
         (Tab::Sicherung, trn!("Codier-Sicherung")),
-        (Tab::Codierung, trn!("Codierung")),
+        (Tab::Nachruestung, trn!("Nachrüstung")),
     ]),
     (trn!("🛠 Werkzeuge"), &[
         (Tab::Testlauf, trn!("Testlauf")),
         (Tab::Mitschnitt, trn!("Mitschnitt & Lernhilfe")),
-        (Tab::Wissen, trn!("Fehlerbilder")),
-        (Tab::Editor, trn!("Label-Editor")),
         (Tab::Namen, trn!("Eigene Namen")),
+        (Tab::Editor, trn!("Label-Editor")),
+        (Tab::Wissen, trn!("Fehlerbilder")),
         (Tab::GrundLexikon, trn!("Grundeinstellungen (Referenz)")),
+        (Tab::Service, trn!("Experten: Routine & Stellglied (UDS)")),
     ]),
 ];
 

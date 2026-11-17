@@ -22,6 +22,71 @@ impl App {
         }
     }
 
+    /// Bekannte ältere Steuergeräte (TP 2.0): aus der Suche und dem letzten Scan des Fahrzeugs.
+    pub(super) fn tp20_bekannte(&mut self) -> Vec<(u8, String)> {
+        if let Some((t, l)) = &self.tp20_bekannt {
+            if t.elapsed() < std::time::Duration::from_secs(5) {
+                return l.clone();
+            }
+        }
+        let mut l: Vec<(u8, String)> = self.tp_found.iter().map(|f| (f.address, f.name.clone())).collect();
+        if let Some(k) = self.active_vehicle.as_deref() {
+            if let Some((_, r)) = ecu_werkbank::history::list(k).into_iter().last() {
+                for m in r.modules.iter().filter(|m| m.protocol == "TP 2.0") {
+                    if let Some(a) = m.address.and_then(|a| u8::try_from(a).ok()) {
+                        if !l.iter().any(|(x, _)| *x == a) {
+                            l.push((a, m.name.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        l.sort_by_key(|(a, _)| *a);
+        self.tp20_bekannt = Some((std::time::Instant::now(), l.clone()));
+        l
+    }
+
+    /// Lesbarer Name einer Messwertblock-Kurve: Steuergerät · Block · eigener
+    /// Feldname (sonst Blockname/„~Art“ und Feldnummer).
+    pub(super) fn kwp_kanal_name(&mut self, addr: u8, block: u8, field: usize, art: Option<&str>) -> String {
+        let geraet = self.tp20_bekannte().into_iter().find(|(a, _)| *a == addr).map(|(_, n)| n).filter(|n| !n.is_empty()).unwrap_or_else(|| format!("{addr:#04x}"));
+        let feld = field as u8 + 1;
+        match self.mw_texte.name(addr, block, feld) {
+            Some(t) => format!("{geraet} · {block:03} {t}"),
+            None => {
+                let blockname = self.mw_texte.block(addr, block).map(|b| format!(" {b}")).unwrap_or_default();
+                let art = art.map(|a| format!(" ~{a}")).unwrap_or_default();
+                format!("{geraet} · {block:03}{blockname} · {}{feld}{art}", tr!("Feld "))
+            }
+        }
+    }
+
+    /// Kurvennamen der Messwertblöcke auffrischen, wenn inzwischen eigene Namen
+    /// eingetragen wurden (Seite „Eigene Namen“ oder ✏).
+    pub(super) fn scope_namen_auffrischen(&mut self) {
+        let kanaele: Vec<(u8, u8, usize)> = self
+            .scope_series
+            .iter()
+            .map(|s| match s.kind {
+                ChanKind::Kwp { addr, block, field } => (addr, block, field),
+                _ => (0, 0, usize::MAX),
+            })
+            .collect();
+        let neu: Vec<Option<String>> = kanaele
+            .into_iter()
+            .map(|(addr, block, field)| {
+                (field != usize::MAX && self.mw_texte.name(addr, block, field as u8 + 1).is_some()).then(|| self.kwp_kanal_name(addr, block, field, None))
+            })
+            .collect();
+        for (s, n) in self.scope_series.iter_mut().zip(neu) {
+            if let Some(n) = n {
+                if s.name != n {
+                    s.name = n;
+                }
+            }
+        }
+    }
+
     /// Messwertblock als Kurven hinzufügen (Felder werden durch eine erste Abfrage erkannt).
     pub(super) fn scope_add_kwp_block_series(&mut self) {
         let res = (|| -> anyhow::Result<Vec<Series>> {
@@ -50,18 +115,13 @@ impl App {
                     v
                 }
             };
-            let label = self.mw_texte.block(addr, block).map(str::to_string).or_else(|| self.db.measuring(u16::from(addr), u16::from(block)).map(|m| m.name.clone())).unwrap_or_default();
             Ok(values
                 .iter()
                 .enumerate()
+                .filter(|(_, v)| !v.is_leer())
                 .map(|(i, v)| {
                     let unit = v.decode().map(|(_, u)| u).unwrap_or("");
-                    let feld = self.mw_texte.name(addr, block, i as u8 + 1).map(|t| format!(" {t}")).unwrap_or_default();
-                    let name = if label.is_empty() {
-                        format!("{addr:#04x} B{block:03}.{}{feld}", i + 1)
-                    } else {
-                        format!("{label} .{}{feld}", i + 1)
-                    };
+                    let name = self.kwp_kanal_name(addr, block, i, ecu_werkbank::messwerttexte::art(v.formula));
                     Series::new(&name, unit, ChanKind::Kwp { addr, block, field: i })
                 })
                 .collect())
@@ -353,6 +413,7 @@ impl App {
     }
 
     pub(super) fn ui_scope(&mut self, ui: &mut egui::Ui) {
+        self.scope_namen_auffrischen();
         ui.heading(tr!("Scope — Live-Grafik"));
         ui.horizontal_wrapped(|ui| {
             let btn = if self.scope_running { tr!("⏹ Stop") } else { tr!("▶ Start") };
@@ -497,7 +558,20 @@ impl App {
                 ui.separator();
                 platz(ui, 250.0);
                 ui.label(tr!("+ Messwertblock:"));
-                ui.add_sized([46.0, 20.0], egui::TextEdit::singleline(&mut self.scope_add_kwp_addr));
+                let bekannte = self.tp20_bekannte();
+                let akt = parse_hex(&self.scope_add_kwp_addr).and_then(|a| u8::try_from(a).ok());
+                let text = bekannte.iter().find(|(a, _)| Some(*a) == akt).map(|(a, n)| format!("{a:02X} {n}")).unwrap_or_else(|| tr!("Steuergerät wählen"));
+                egui::ComboBox::from_id_source("scope_kwp_geraet").selected_text(text).width(190.0).show_ui(ui, |ui| {
+                    if bekannte.is_empty() {
+                        ui.weak(tr!("Erst scannen oder unter „Ältere Steuergeräte“ suchen."));
+                    }
+                    for (a, n) in &bekannte {
+                        if ui.selectable_label(Some(*a) == akt, format!("{a:02X}  {n}")).clicked() {
+                            self.scope_add_kwp_addr = format!("{a:#04x}");
+                        }
+                    }
+                });
+                ui.add_sized([46.0, 20.0], egui::TextEdit::singleline(&mut self.scope_add_kwp_addr)).on_hover_text(tr!("Adresse von Hand (hex), falls das Steuergerät nicht in der Liste steht"));
                 ui.label(tr!("Block"));
                 ui.add_sized([34.0, 20.0], egui::TextEdit::singleline(&mut self.scope_add_kwp_block));
                 if ui.button(tr!("hinzufügen")).clicked() {

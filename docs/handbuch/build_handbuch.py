@@ -263,13 +263,13 @@ p("Ganz oben stehen immer: die <b>Verbindungsart</b> (echter Adapter oder Simula
   "Darunter die fünf Bereiche:")
 tabelle(["Bereich", "Unterseiten"], [
     ["Start", "Fahrzeug auf einen Blick"],
-    ["Diagnose", "Steuergeräte · Prüfen &amp; Fehlersuche · OBD-II · Sicherheit &amp; Assistenz · TP 2.0 (ältere) · "
-                 "Andere Marken · Grundeinstellung / Stellglied · Erweiterte Identifikation"],
+    ["Diagnose", "Steuergeräte · Ältere Steuergeräte (TP 2.0) · OBD-II · Codierung · Erweiterte Identifikation · "
+                 "Prüfen &amp; Fehlersuche · Sicherheit &amp; Assistenz · Andere Marken"],
     ["Messen", "Live-Grafik · Zielbereich · Batterie · Partikelfilter · Motor-Checks · Fahrt-Rekorder · Rohwerte umrechnen"],
-    ["Fahrzeug", "Fahrzeuge &amp; Wartung · Service-Anzeige · Historie &amp; Trends · Softwarestände · Nachrüstung · "
-                 "Codier-Sicherung · Codierung"],
-    ["Werkzeuge", "Testlauf · Mitschnitt &amp; Lernhilfe · Fehlerbilder · Label-Editor · Eigene Namen · "
-                  "Grundeinstellungen (Referenz)"],
+    ["Fahrzeug", "Fahrzeuge &amp; Wartung · Service-Anzeige · Historie &amp; Trends · Softwarestände · "
+                 "Codier-Sicherung · Nachrüstung"],
+    ["Werkzeuge", "Testlauf · Mitschnitt &amp; Lernhilfe · Eigene Namen · Label-Editor · Fehlerbilder · "
+                  "Grundeinstellungen (Referenz) · Experten: Routine &amp; Stellglied (UDS)"],
 ], [32, 138])
 h2("Sprache")
 p("Oben rechts wählst du die Sprache (Feld mit der Weltkugel). Eingebaut sind Deutsch und Englisch. Eine weitere Sprache legst du "
@@ -345,10 +345,10 @@ p("Diagnose → OBD-II zeigt Fahrgestellnummer, Motorkontrollleuchte, Readiness 
 bild("obd", "Diagnose → OBD-II mit Readiness, Readiness-Assistent und Live-Werten.", 100)
 h2("Messwertblöcke (TP 2.0)")
 p("Ältere Steuergeräte liefern ihre Werte in <b>Messwertblöcken</b> mit bis zu 8 Feldern. Unter Diagnose → "
-  "TP 2.0 (ältere) <b>Steuergeräte suchen</b>, Adresse wählen (Motor = 0x01) und einen Block lesen — einmal "
+  "Ältere Steuergeräte (TP 2.0) <b>Steuergeräte suchen</b>, Adresse wählen (Motor = 0x01) und einen Block lesen — einmal "
   "oder fortlaufend (<b>Live</b>). <b>Alle Blöcke lesen</b> zeigt in einem Durchgang, welche Blöcke ein "
   "Steuergerät überhaupt hat.")
-bild("tp20", "Diagnose → TP 2.0: alle gefundenen TP-2.0-Steuergeräte mit Kennung und Fehlerzahl.", 96)
+bild("tp20", "Diagnose → Ältere Steuergeräte (TP 2.0): alle gefundenen TP-2.0-Steuergeräte mit Kennung und Fehlerzahl.", 96)
 h2("Favoriten und eigene Namen")
 p("Ohne Beschriftung zeigt ECUWerkbank nur die <b>Art</b> eines Werts, mit „~“ davor (z. B. „~Drehzahl“). Den "
   "richtigen Namen trägst du einmal selbst ein — mit dem <b>✏</b> neben dem Feld oder dem Blocknamen. Er gilt "
@@ -510,10 +510,10 @@ tabelle(["Funktion", "Wo", "Hinweis"], [
     ["Fehler löschen (ein Steuergerät)", "Diagnose → Steuergeräte", "Fehler erst notieren oder als PDF sichern."],
     ["Alle Fehler löschen", "Diagnose → Steuergeräte", "Löscht auch die OBD-Readiness. Danach erst mehrere Fahrten "
                                                         "bis zur AU."],
-    ["Codierung schreiben / zurückspielen", "Fahrzeug → Codierung / Codier-Sicherung", "Nur mit Sicherung vorher."],
-    ["Routine, Stellglied (UDS)", "Diagnose → Grundeinstellung / Stellglied", "Nur, wenn du weißt, was "
+    ["Codierung schreiben / zurückspielen", "Diagnose → Codierung, Fahrzeug → Codier-Sicherung", "Nur mit Sicherung vorher."],
+    ["Routine, Stellglied (UDS)", "Werkzeuge → Experten: Routine & Stellglied (UDS)", "Nur, wenn du weißt, was "
                                                                               "das Steuergerät dabei tut."],
-    ["Grundeinstellung (TP 2.0)", "Diagnose → TP 2.0 (ältere)", "Erst nach einem eigenen Mitschnitt freigeschaltet."],
+    ["Grundeinstellung (TP 2.0)", "Diagnose → Ältere Steuergeräte (TP 2.0)", "Erst nach einem eigenen Mitschnitt freigeschaltet."],
     ["Service zurückstellen", "Fahrzeug → Service-Anzeige", "Erst nach dem Lernen. Alte Werte werden gesichert, "
                                                             "Rückgängig ist möglich."],
 ], [50, 55, 65])
@@ -522,7 +522,7 @@ kasten("Kilometerstand",
        "Service-Werte und der allgemeine Schreibbefehl — lehnt die Kilometer-Kennungen ab, auch mit "
        "<font face='DV-M'>--ja</font>. Tachomanipulation ist strafbar.", GELB)
 h2("Routine und Stellglied (UDS)")
-p("Im Reiter Diagnose → Grundeinstellung / Stellglied gibst du Steuergerät, Routine-ID bzw. Kennung und Werte "
+p("Im Reiter Werkzeuge → Experten: Routine & Stellglied (UDS) gibst du Steuergerät, Routine-ID bzw. Kennung und Werte "
   "von Hand ein. Bei <b>Sub</b> bedeutet 1 = starten, 2 = stoppen, 3 = Ergebnis abfragen. Vor dem Senden "
   "erscheint immer ein gelber Kasten mit genau dem, was gesendet wird. Erst <b>Ja, senden</b> schickt es ab.")
 bild("rueckfrage", "Die Rückfrage vor dem Senden einer Routine.", 70)
@@ -530,7 +530,7 @@ h2("Grundeinstellung an TP-2.0-Steuergeräten (Funktion 04)")
 p("Welche Anfragen VW dafür über TP 2.0 schickt, ist nicht verlässlich veröffentlicht. ECUWerkbank rät das nicht, "
   "sondern <b>lernt den Ablauf aus deinem eigenen Mitschnitt</b>. Bis dahin ist das Senden für dieses "
   "Steuergerät gesperrt (Schloss-Symbol).")
-bild("grundeinstellung", "Diagnose → TP 2.0: der Abschnitt „Grundeinstellung“, noch gesperrt für den Motor (0x01).", 100,
+bild("grundeinstellung", "Diagnose → Ältere Steuergeräte (TP 2.0): der Abschnitt „Grundeinstellung“, noch gesperrt für den Motor (0x01).", 100,
      ausschnitt=(300, 537))
 schritte(
     "CAN-Adapter und das Kabel eines Werkstatt-Diagnosegeräts gleichzeitig ans Auto — dafür braucht es ein <b>OBD-Y-Kabel</b>.",

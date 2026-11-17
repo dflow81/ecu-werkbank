@@ -412,7 +412,8 @@ impl App {
         ui.add_space(8.0);
         ui.separator();
         let laeuft = self.sg_job.is_some();
-        egui::CollapsingHeader::new(tr!("🔧 Stellglieddiagnose (Funktion 03)")).id_source("stellglied-tp20").default_open(laeuft).show(ui, |ui| {
+        let offen = laeuft || std::mem::take(&mut self.sg_zeigen);
+        egui::CollapsingHeader::new(tr!("🔧 Stellglieddiagnose (Funktion 03)")).id_source("stellglied-tp20").open(offen.then_some(true)).show(ui, |ui| {
             ui.colored_label(stufe_color(Stufe::Warnung), tr!("Achtung: Die Bauteile werden wirklich angesteuert — Fensterheber fahren, Verriegelung schaltet, Lampen gehen an. Hände weg von Fenstern und Türen."));
             let Some(addr) = parse_hex(&self.tp_addr).filter(|a| *a <= 0xFF).map(|a| a as u8) else {
                 ui.weak(tr!("Oben eine Steuergerät-Adresse eingeben."));
@@ -453,6 +454,43 @@ impl App {
                 });
             }
             for z in self.sg_log.iter().rev().take(12) {
+                ui.monospace(z);
+            }
+        });
+    }
+
+    /// Anpassung (Funktion 10) am gewählten TP-2.0-Steuergerät lesen (nur lesen).
+    pub(super) fn ui_anpassung_tp20(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(8.0);
+        ui.separator();
+        let offen = std::mem::take(&mut self.an_zeigen);
+        egui::CollapsingHeader::new(tr!("🔧 Anpassung (Funktion 10, nur lesen)")).id_source("anpassung-tp20").open(offen.then_some(true)).show(ui, |ui| {
+            ui.weak(tr!("Liest gespeicherte Anpassungswerte wie ein Werkstatt-Diagnosegerät (am Golf 6: Bordnetz, Einparkhilfe). Ältere Steuergeräte wie die Türen kennen das nicht. Schreiben ist nicht eingebaut."));
+            let Some(addr) = parse_hex(&self.tp_addr).filter(|a| *a <= 0xFF).map(|a| a as u8) else {
+                ui.weak(tr!("Oben eine Steuergerät-Adresse eingeben."));
+                return;
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr!("Kanäle (dezimal, mit Komma):"));
+                ui.add(egui::TextEdit::singleline(&mut self.an_kanaele).desired_width(160.0).hint_text("1,3,17"));
+                if ui.add_enabled(self.backend().supports_tp20(), egui::Button::new(tr!("📖 Lesen ({a})", a = format!("{addr:02X}")))).clicked() {
+                    let kanaele: Vec<u8> = self.an_kanaele.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+                    self.an_result = match kwp::anpassung_lesen(&self.backend(), addr, &kanaele) {
+                        Ok(l) => l
+                            .into_iter()
+                            .map(|r| match r {
+                                Ok(k) => {
+                                    let f: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
+                                    tr!("Kanal {a}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), b = k.wert, c = f.join("  |  "))
+                                }
+                                Err(e) => e,
+                            })
+                            .collect(),
+                        Err(e) => vec![format!("{e:#}")],
+                    };
+                }
+            });
+            for z in &self.an_result {
                 ui.monospace(z);
             }
         });
@@ -827,8 +865,8 @@ impl App {
     }
 
     pub(super) fn ui_tp20(&mut self, ui: &mut egui::Ui) {
-        ui.heading(tr!("TP 2.0 / KWP2000 — ältere Fahrzeuge (~2004–2010)"));
-        ui.label(tr!("Ältere Fahrzeuge (ca. 2004–2012) über SocketCAN. Am Golf 6 (2010) getestet. Die Logikadressen sind NICHT die gewohnten Diagnoseadressen — „Steuergeräte suchen“ zeigt Namen aus der Antwort."));
+        ui.heading(tr!("Ältere Steuergeräte (TP 2.0)"));
+        ui.label(tr!("Für Fahrzeuge etwa 2004–2012 (z. B. Golf 6). Erst „Steuergeräte suchen“, dann ein Steuergerät anklicken — darunter stehen Fehler, Messwerte, Grundeinstellung, Stellglieddiagnose und Anpassung. Geht nur mit dem CAN-Interface, nicht mit dem ELM327."));
         if !self.backend().supports_tp20() {
             ui.colored_label(egui::Color32::from_rgb(220, 160, 40), tr!("⚠ TP 2.0 geht nur mit SocketCAN oder Demo — oben umstellen."));
         }
@@ -904,6 +942,7 @@ impl App {
         self.ui_blockscan(ui);
         self.ui_grund(ui);
         self.ui_stellglied(ui);
+        self.ui_anpassung_tp20(ui);
 
         ui.add_space(8.0);
         ui.separator();

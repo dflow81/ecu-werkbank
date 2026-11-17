@@ -40,6 +40,7 @@ impl App {
             "service-frage" => (Tab::Service, false),
             "editor-scan" => (Tab::Editor, false),
             "namen-scan" => (Tab::Namen, false),
+            "steuergeraete-wahl" => (Tab::Steuergeraete, false),
             "steuergeraete" => (Tab::Steuergeraete, false),
             _ => (Tab::Start, false),
         };
@@ -131,6 +132,9 @@ impl App {
             code_edit: None,
             code_nur_benannt: false,
             code_tp20: None,
+            code_kurz: None,
+            code_kurz_neu: String::new(),
+            code_kurz_ok: false,
             sw_last: None,
             sw_diff: Vec::new(),
             ident_tx: "0x7E0".into(),
@@ -369,6 +373,10 @@ impl App {
             sg_bestaetigt: false,
             sg_job: None,
             sg_log: Vec::new(),
+            sg_zeigen: false,
+            an_kanaele: "1".into(),
+            an_result: Vec::new(),
+            an_zeigen: false,
             bn_nur_offen: false,
             bn_suche: String::new(),
             bn_roh_aus: true,
@@ -411,6 +419,7 @@ impl App {
             tp_sweep: None,
             tp_sweep_at: 0,
             tp_found: Vec::new(),
+            tp20_bekannt: None,
             voll_scan: false,
             tp_autostart: tabsel == "tp20",
             demo_autostart: tabsel.clone(),
@@ -574,7 +583,10 @@ impl App {
         let Some(key) = self.active_vehicle.clone() else { return };
         let Some((_, last)) = ecu_werkbank::history::list(&key).pop() else {
             ui.heading(tr!("Steuergeräte dieses Fahrzeugs"));
-            ui.weak(tr!("Noch kein Scan gespeichert — „📄 Als PDF speichern“ oder Schnell-Check einmal ausführen, dann stehen hier alle Steuergeräte des Autos."));
+            ui.label(tr!("Noch kein Scan gespeichert. Einmal alle Steuergeräte auslesen — danach stehen sie hier, und ein Klick auf eines zeigt alle Funktionen (Fehler, Messwerte, Codierung …)."));
+            if ui.add_enabled(self.pdf_job.is_none(), egui::Button::new(egui::RichText::new(tr!("🔎 Alle Steuergeräte auslesen")).size(16.0))).clicked() {
+                self.start_pdf();
+            }
             ui.add_space(6.0);
             ui.separator();
             return;
@@ -667,6 +679,60 @@ impl App {
                 if ui.button(tr!("🔎 Identifikation")).clicked() {
                     self.fz_read(&m, true);
                 }
+                // Weitere Funktionen dieses Steuergeräts — springt mit vorbelegter Adresse
+                // auf die passende Seite (wie „Steuergerät wählen » Funktion“ beim Werkstattgerät)
+                if m.protocol == "TP 2.0" {
+                    if let Some(a) = m.address.map(|a| a as u8) {
+                        let adr = format!("{a:#04x}");
+                        if ui.button(tr!("📊 Messwerte")).clicked() {
+                            self.tp_addr = adr.clone();
+                            self.tp_block = "1".into();
+                            self.tab = Tab::Tp20;
+                        }
+                        if ui.button(tr!("🔢 Codierung")).clicked() {
+                            self.code_kurz = None;
+                            self.code_tp20 = Some(a);
+                            self.code_quelle = None;
+                            self.code_read = None;
+                            self.code_confirm = false;
+                            self.tab = Tab::Codierung;
+                        }
+                        if ui.button(tr!("🔧 Anpassung")).clicked() {
+                            self.tp_addr = adr.clone();
+                            self.an_zeigen = true;
+                            self.tab = Tab::Tp20;
+                        }
+                        if ui.button(tr!("⚙ Grundeinstellung")).clicked() {
+                            self.tp_addr = adr.clone();
+                            self.ge_zeigen = true;
+                            self.tab = Tab::Tp20;
+                        }
+                        if ui.button(tr!("▶ Stellglieddiagnose")).clicked() {
+                            self.tp_addr = adr;
+                            self.sg_zeigen = true;
+                            self.tab = Tab::Tp20;
+                        }
+                    }
+                } else if let Some((tx, rx)) = ecu_werkbank::profil::parse_can(&m.can) {
+                    if ui.button(tr!("🔢 Codierung")).clicked() {
+                        self.code_tp20 = None;
+                        self.code_tx = format!("{tx:#05x}");
+                        self.code_rx = format!("{rx:#05x}");
+                        self.code_quelle = None;
+                        self.code_read = None;
+                        self.code_confirm = false;
+                        self.tab = Tab::Codierung;
+                    }
+                    if ui.button(tr!("🆔 Erweiterte Identifikation")).clicked() {
+                        self.ident_tx = format!("{tx:#05x}");
+                        self.tab = Tab::Ident;
+                    }
+                    if ui.button(tr!("⚙ Routine / Stellglied")).on_hover_text(tr!("Expertenseite: UDS-Routinen und Stellglieder mit Kennungen von Hand")).clicked() {
+                        self.svc_tx = format!("{tx:#05x}");
+                        self.svc_rx = format!("{rx:#05x}");
+                        self.tab = Tab::Service;
+                    }
+                }
                 if !self.fz_clear_confirm {
                     if ui.button(tr!("🧹 Fehler löschen…")).clicked() {
                         self.fz_clear_confirm = true;
@@ -738,9 +804,16 @@ impl App {
                 let mut ch = kwp::open_session(&be, a)?;
                 let mut k = Kwp::new(&mut ch);
                 if ident {
-                    let mut l = k.read_ecu_id(kwp::ECU_ID_VAG).map(|d| kwp::ident_strings(&d)).unwrap_or_default();
+                    let raw = k.read_ecu_id(kwp::ECU_ID_VAG).unwrap_or_default();
+                    let mut l = kwp::ident_9b(&raw).unwrap_or_else(|| kwp::ident_strings(&raw));
                     if l.is_empty() {
                         l = kwp::ident_22(&mut k);
+                    }
+                    if let Some(kwp::TpCodierung::Kurz { wert, .. }) = kwp::kurzcodierung_9b(&raw) {
+                        l.push(tr!("Codierung: {a}", a = format!("{wert:07}")));
+                    }
+                    if let Some((w, i, h)) = raw.get(20..26).filter(|_| kwp::kurzcodierung_9b(&raw).is_some()).and_then(ecu_werkbank::swinfo::betriebsnummer) {
+                        l.push(tr!("Betriebsnummer: Werkstatt {w} · Importeur {i} · Händler {h}", w = format!("{w:05}"), i = format!("{i:03}"), h = format!("{h:05}")));
                     }
                     return Ok((l, tr!("Identifikation gelesen (TP 2.0).")));
                 }
