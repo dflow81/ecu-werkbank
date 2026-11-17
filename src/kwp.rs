@@ -498,7 +498,7 @@ pub enum TpCodierung {
     /// Lange Codierung über 0x22 0x0600 (neuere Steuergeräte)
     Lang(Vec<u8>),
     /// Kurzcodierung aus der Identifikation 0x1A 0x9B (ältere Steuergeräte).
-    /// `roh` = Byte 16–24 der Identifikation, `wert` = Byte 17–19 als Zahl.
+    /// `roh` = Byte 16–25 der Identifikation (Codierung + Betriebsnummer), `wert` = Byte 17–19 als Zahl.
     /// Am Golf 6 gesehen bei Motor, Türen und Lenksäule (Byte 16 = 03).
     Kurz { wert: u32, roh: Vec<u8> },
 }
@@ -519,7 +519,7 @@ impl TpCodierung {
 /// verglichen (15.11.2026) — Motor 72, Türen 180/436/144, Lenksäule 34 stimmen.
 pub fn kurzcodierung_9b(raw: &[u8]) -> Option<TpCodierung> {
     ident_9b(raw)?;
-    let roh = raw.get(16..25)?.to_vec();
+    let roh = raw.get(16..26).or_else(|| raw.get(16..25))?.to_vec();
     if roh[0] != 0x03 {
         return None;
     }

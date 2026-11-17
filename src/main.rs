@@ -2336,7 +2336,8 @@ fn kwp_ident(be: &Backend, address: u8) -> Result<()> {
     let mut k = Kwp::new(&mut ch);
     let (data, lines) = match k.read_ecu_id(kwp::ECU_ID_VAG) {
         Ok(d) => {
-            let l = kwp::ident_strings(&d);
+            // fester VW-Aufbau (Teilenummer, SW, Name ab Byte 26), sonst Textstücke
+            let l = kwp::ident_9b(&d).unwrap_or_else(|| kwp::ident_strings(&d));
             (d, l)
         }
         // neuere Steuergeräte: 0x22 statt 0x1A
@@ -2810,7 +2811,9 @@ fn kwp_coding(be: &Backend, address: u8, db: &LabelDb) -> Result<()> {
         }
         Some(TpCodierung::Kurz { wert, roh }) => {
             println!("{}", tr!("Kurzcodierung {a}: {b}", a = format!("{address:02X}"), b = format!("{wert:07}")));
-            println!("{}", tr!("Rohdaten der Identifikation, Byte 16–24: {a}", a = ecu_werkbank::backup::hex(&roh)));
+            if let Some((w, i, h)) = roh.get(4..10).and_then(ecu_werkbank::swinfo::betriebsnummer) {
+                println!("{}", tr!("Betriebsnummer der letzten Codierung: Werkstatt {w} · Importeur {i} · Händler {h}", w = format!("{w:05}"), i = format!("{i:03}"), h = format!("{h:05}")));
+            }
         }
         None => anyhow::bail!(tr!("Keine Codierung lesbar (weder in der Identifikation noch über Kennung 0x0600).")),
     }
