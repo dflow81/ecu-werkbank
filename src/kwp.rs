@@ -797,6 +797,16 @@ pub fn codierung_9a(raw: &[u8]) -> Option<Vec<u8>> {
     raw.get(12..12 + n - 1).map(<[u8]>::to_vec)
 }
 
+/// TP-2.0-Kanäle der laut Gateway verbauten Steuergeräte (plus das Gateway
+/// selbst), sortiert — für einen schnellen Suchlauf wie beim Werkstattgerät.
+pub fn kanaele_aus_verbauliste(l: &[VerbauEintrag]) -> Vec<u8> {
+    let mut k: Vec<u8> = l.iter().filter(|e| e.verbaut() && e.tp20 != 0).map(|e| e.tp20).collect();
+    k.push(GATEWAY);
+    k.sort_unstable();
+    k.dedup();
+    k
+}
+
 /// Verbauliste direkt aus dem Gateway lesen (nur lesen).
 pub fn gateway_verbauliste(be: &crate::transport::Backend) -> Result<Vec<VerbauEintrag>> {
     let mut ch = open_session(be, GATEWAY)?;
@@ -819,6 +829,8 @@ mod tests {
         let l = verbauliste_9f(&raw);
         let verbaut: Vec<(u8, bool)> = l.iter().filter(|e| e.verbaut()).map(|e| (e.adresse, e.fehler())).collect();
         assert_eq!(verbaut, vec![(0x01, true), (0x17, false), (0x52, true)]);
+        // Suchlauf-Kanäle: Motor 0x01, Kombi 0x07, Tür BF 0x23, Gateway 0x1F
+        assert_eq!(kanaele_aus_verbauliste(&l), vec![0x01, 0x07, 0x1F, 0x23]);
         let r9a = [0, 0, 0, 0, 0, 0x42, b'0', b'0', b'8', b'1', 0x10, 0x0B, 0xE9, 0xA0, 0x7F, 0x46, 0x40, 0x02, 0x02, 0x00, 0x20, 0x02, 0xFF];
         assert_eq!(codierung_9a(&r9a), Some(vec![0xE9, 0xA0, 0x7F, 0x46, 0x40, 0x02, 0x02, 0x00, 0x20, 0x02]));
         assert_eq!(codierung_9a(&r9a[..5]), None);

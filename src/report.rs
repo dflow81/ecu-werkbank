@@ -316,9 +316,20 @@ pub fn scan_opts(be: &Backend, db: &LabelDb, with_tp20: bool, voll: bool, mut pr
 
     // --- TP 2.0 / KWP2000 ---
     if with_tp20 && be.supports_tp20() {
-        let found = match &profil {
-            Some((_, p)) => kwp::sweep_addrs(be, &p.tp20, |a| progress(&tr!("TP 2.0 {a}…", a = format!("{:#04x}", a))))?,
-            None => kwp::sweep(be, |a| progress(&tr!("TP 2.0 {a}…", a = format!("{:#04x}", a))))?,
+        // Ohne Profil wie ein Werkstatt-Diagnosegerät: erst die Verbauliste aus
+        // dem Gateway, dann nur deren TP-2.0-Kanäle (statt 0x01–0x7F). Der volle
+        // Suchlauf probiert weiter alle Adressen — findet auch Geräte, die das
+        // Gateway nicht kennt.
+        let gateway = if profil.is_none() && !voll {
+            progress(crate::trs!("Verbauliste aus dem Gateway…"));
+            kwp::gateway_verbauliste(be).ok().map(|l| kwp::kanaele_aus_verbauliste(&l))
+        } else {
+            None
+        };
+        let found = match (&profil, gateway) {
+            (Some((_, p)), _) => kwp::sweep_addrs(be, &p.tp20, |a| progress(&tr!("TP 2.0 {a}…", a = format!("{:#04x}", a))))?,
+            (None, Some(k)) => kwp::sweep_addrs(be, &k, |a| progress(&tr!("TP 2.0 {a}…", a = format!("{:#04x}", a))))?,
+            (None, None) => kwp::sweep(be, |a| progress(&tr!("TP 2.0 {a}…", a = format!("{:#04x}", a))))?,
         };
         for f in found {
             let umgebung = f.umgebung;
