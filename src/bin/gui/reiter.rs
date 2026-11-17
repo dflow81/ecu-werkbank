@@ -659,7 +659,7 @@ impl App {
 
     /// (3) Service: Grundeinstellung (RoutineControl) + Stellglied (IOControl).
     pub(super) fn ui_service(&mut self, ui: &mut egui::Ui) {
-        ui.heading(tr!("Service — Grundeinstellung & Stellglieddiagnose"));
+        ui.heading(tr!("Experten: Routine & Stellglied (UDS)"));
         ui.label(tr!("Sendet echte UDS-Dienste; braucht Adapter + Fahrzeug. IDs/Parameter sind ECU-spezifisch."));
         ui.weak(tr!("Vor dem Senden kommt immer eine Rückfrage. Nur am stehenden Auto, Zündung an, Motor aus (außer die Routine verlangt etwas anderes)."));
         ui.horizontal(|ui| {

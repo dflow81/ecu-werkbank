@@ -41,7 +41,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 HIER = Path(__file__).resolve().parent
 BILDER = HIER / "bilder"
 AUSGABE = HIER / "ecu-werkbank-Handbuch.pdf"
-STAND = "15.11.2026"
+STAND = "17.11.2026"
 
 FONTS = Path("/usr/share/fonts/truetype/dejavu")
 pdfmetrics.registerFont(TTFont("DV", str(FONTS / "DejaVuSans.ttf")))
@@ -357,7 +357,7 @@ p("Oft gebrauchte Blöcke merkst du dir mit dem <b>Stern</b> (☆ → ★) neben
   "Leiste <b>★ Favoriten</b> über dem Block; ein Klick öffnet und liest den Block sofort. Entfernen mit ✖ oder "
   "nochmal dem Stern.")
 bild("favoriten", "Messwertblock 2 des Motors mit eigenen Feldnamen und der Favoriten-Leiste darüber.", 105,
-     ausschnitt=(335, 564))
+     ausschnitt=(411, 640))
 p("Alle eigenen Namen auf einen Blick — und schnell neue eintragen — unter Werkzeuge → <b>Eigene Namen</b>: "
   "Adresse, Block, Feld (leer = Name des ganzen Blocks) und Name eingeben, <b>Speichern</b>.")
 bild("namen", "Werkzeuge → Eigene Namen: Schnell-Eingabe und Liste aller gespeicherten Namen.", 80)
@@ -531,7 +531,7 @@ p("Welche Anfragen VW dafür über TP 2.0 schickt, ist nicht verlässlich veröf
   "sondern <b>lernt den Ablauf aus deinem eigenen Mitschnitt</b>. Bis dahin ist das Senden für dieses "
   "Steuergerät gesperrt (Schloss-Symbol).")
 bild("grundeinstellung", "Diagnose → Ältere Steuergeräte (TP 2.0): der Abschnitt „Grundeinstellung“, noch gesperrt für den Motor (0x01).", 100,
-     ausschnitt=(300, 537))
+     ausschnitt=(306, 613))
 schritte(
     "CAN-Adapter und das Kabel eines Werkstatt-Diagnosegeräts gleichzeitig ans Auto — dafür braucht es ein <b>OBD-Y-Kabel</b>.",
     "Werkzeuge → Mitschnitt &amp; Lernhilfe: <b>Mitschnitt aufzeichnen</b>.",
