@@ -524,8 +524,8 @@ Weitere Hilfen in der GUI:
 ./target/release/ecu-werkbank -i can0 handy                 # oder in der GUI: Scope → 📱 Handy-Anzeige
 ```
 
-Die angezeigte Adresse (z. B. `http://192.168.1.50:8088/`) im Handy-Browser
-öffnen; Handy und Laptop im gleichen WLAN — im Auto am einfachsten den
+Die angezeigte Adresse (z. B. `http://192.168.1.50:8088/3f9a…/`) im Handy-Browser
+öffnen — mit dem Schlüssel am Ende, ohne ihn zeigt der Server nichts; Handy und Laptop im gleichen WLAN — im Auto am einfachsten den
 **Handy-Hotspot** einschalten und den Laptop damit verbinden. Ist die Firewall
 `ufw` aktiv (Standard bei Linux Mint), einmalig freigeben:
 
@@ -987,6 +987,17 @@ Messwert-Formeln kommen vor? Damit lassen sich die `TODO(verify)`-Stellen in
 während ein anderes, funktionierendes Diagnosegerät einen Kanal öffnet. In der
 GUI: Reiter **„Mitschnitt“**.
 
+### Mitschnitte in andere Programme, DBC-Signale
+
+```bash
+./target/release/ecu-werkbank log-export --log mitschnitt.log --out mitschnitt.pcap   # Wireshark
+./target/release/ecu-werkbank log-export --log mitschnitt.log --out mitschnitt.asc    # Vector/SavvyCAN
+./target/release/ecu-werkbank dbc-decode --dbc eigene.dbc --log mitschnitt.log [--nur Drehzahl]
+```
+
+`dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
+Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
+
 ## Eigene Label-Dateien (dein Inhalt)
 
 Lege `*.toml`-Dateien in den Ordner `labels/` (eine pro Steuergerät). Format und
@@ -1163,6 +1174,11 @@ Erkennung aus/an (gemerkt in `~/.local/share/ecu-werkbank/erkennung-aus`).
 
 ## Stand & Fahrplan
 
+Ausführlich: [ROADMAP.md](ROADMAP.md) (50 Funktionen nach Nutzen/Aufwand),
+Aufbau: [ARCHITECTURE.md](ARCHITECTURE.md), Sicherheit: [SECURITY_REVIEW.md](SECURITY_REVIEW.md),
+Änderungen: [CHANGELOG.md](CHANGELOG.md), Mitmachen: [CONTRIBUTING.md](CONTRIBUTING.md),
+Erweitern: [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md).
+
 Funktionsumfang gängiger Werkstatt-Diagnose (Funktionsnummern nach VAG-155x/VAS-505x)
 und Stand in ECUWerkbank:
 
@@ -1190,6 +1206,8 @@ und Stand in ECUWerkbank:
 | 33 | OBD-II/EOBD (Modi 01, 02, 03, 04, 07, 09, 0A) | ✅ `obd-*`, GUI „OBD-II“ (inkl. Freeze-Frame) | – |
 | – | Messwerte protokollieren (CSV) | ✅ `obd-live --csv` | ✅ `kwp-block --csv` |
 | – | Mitschnitt aufzeichnen/auswerten | ✅ `record`, `decode-log` | ✅ inkl. Prüfbericht |
+| – | Mitschnitt als PCAP/ASC, DBC-Signale | ✅ `log-export`, `dbc-decode` | ✅ |
+| – | Steuergerät neu starten, Fehleranzahl | ✅ `ecu-reset` (mit `--ja`), `dtc-anzahl` | – |
 | – | Service-Anzeige lesen / zurückstellen | 🟡 `service` (Kennungen je Fahrzeug lernen; Golf 6: km seit Service bestätigt) | – |
 | – | Verbauliste (verbaute Steuergeräte, nach System) | ✅ `verbauliste`, GUI Steuergeräte → „📋 Verbauliste nach System“ | ✅ aus dem Scan |
 | – | Gateway-Verbauliste direkt aus dem Gateway | ⏳ geplant (neuere Autos mit UDS-Gateway) | ✅ `gateway-verbauliste`, GUI-Knopf (Golf 6 geprüft) |
