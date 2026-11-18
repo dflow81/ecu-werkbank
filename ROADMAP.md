@@ -89,6 +89,8 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 
 **Quick Wins (erledigt am 18.11.2026):** Punkte 1–10.
 
+Alle Tests, die das Auto brauchen, stehen gesammelt in [AUTOTESTS.md](AUTOTESTS.md).
+
 **Version 1.0 — „Golf 6 vollständig, zweites Auto geprüft“:**
 11/12 am Auto bestätigen, 13–19, 20 (Herstellerdaten), 21–28, 30, 38, 44, 47, 49.
 Prüfstein: Polo 6R und Golf 6 komplett ohne Werkstattgerät diagnostizierbar.
