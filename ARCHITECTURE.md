@@ -156,7 +156,6 @@ Start direkt — nur Simulation.
 | NRC-Tabellen | dreifach: `uds.rs`, `kwp.rs`, `canlog.rs` | eine gemeinsame Tabelle |
 | Steuergeräte-Wissen | verteilt auf `systems.rs`, `kwp::tp20_name`, `profil.rs`, `sim.rs` | Daten-Ordner je Hersteller (siehe ROADMAP, Punkt „Herstellerdaten“) |
 | `unwrap()` außerhalb von Tests (≈300) | meist Mutex/Format, wenige echte Risiken | nach und nach durch `?`/`unwrap_or_else` ersetzen |
-| CI | nur ein manueller Mac-Lauf | Linux-Lauf mit `cargo test` + `clippy` bei jedem Push |
 | `canlog::Decoder` | liest ganze Datei in den Speicher | für sehr große Mitschnitte zeilenweise lesen |
 
 ## Leistung

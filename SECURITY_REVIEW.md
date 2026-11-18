@@ -33,11 +33,11 @@ schreiben) und **der Rechner/die Daten** (keine Angriffsfläche, keine Datenleck
 | DBC/candump lesen | reiner Text, Grenzen geprüft (Signal ≤ 64 Bit, Frame ≤ 64 Byte) | ✅ |
 | Personenbezogene Daten | VIN, Kennzeichen, Kilometerstand liegen nur lokal; Simulation und Handbuch nutzen erfundene VINs | ✅ |
 | Veröffentlichung | `.gitignore` schließt `label/`, `labels/` (außer Beispielen), `logs/` aus; vor jedem Push Prüfung auf VINs/Mitschnitte | ✅ (Ablauf) |
-| Abhängigkeiten | wenige, verbreitete Crates; `Cargo.lock` im Repo | 🟡 `cargo audit` in CI aufnehmen |
+| Abhängigkeiten | wenige, verbreitete Crates; `Cargo.lock` im Repo | ✅ `cargo audit` bei jedem Push |
 
 ## 3. Offene Punkte
 
-1. CI mit `cargo audit`, `cargo clippy -D warnings`, `cargo test` bei jedem Push.
+1. ~~CI mit `cargo audit`, `cargo clippy -D warnings`, `cargo test` bei jedem Push~~ — erledigt (`pruefen.yml`).
 2. ~~GUI: Bus-Aufrufe aus dem Zeichen-Thread nehmen~~ — erledigt: ein Arbeiter-Thread, Aufträge der Reihe nach, doppelte Klicks werden abgewiesen.
 3. Flash-Funktion erst mit vollständigem Schutzkonzept (siehe ROADMAP „Flashing“).
 4. Fremde Plugins/Skripte (geplant) nur mit klaren Rechten: Lesen frei, Schreiben nur über dieselben Bestätigungen wie im Programm.

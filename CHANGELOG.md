@@ -25,6 +25,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Handy-Anzeige: Adresse enthält einen zufälligen Schlüssel; andere Geräte im WLAN sehen nichts mehr.
 - Warten auf „Antwort folgt“ (UDS) höchstens 60 s.
 
+### Für Entwickler
+- Automatische Prüfung bei jedem Push: Tests, clippy ohne Warnungen, `cargo audit`.
+
 ### Behoben
 - TP-2.0-Befehle: `--address 22` ohne `0x` sprach Steuergerät 0x16 an statt 0x22.
 

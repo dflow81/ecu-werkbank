@@ -1,0 +1,58 @@
+# Prüft bei jedem Hochladen (Push) und jedem Pull-Request auf Linux:
+# Tests, clippy ohne Warnungen und bekannte Sicherheitslücken in Abhängigkeiten.
+# Baut KEINE fertigen Programme zum Herunterladen und lädt nichts hoch.
+name: Prüfen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Tests nie gegen echte Datenordner: alles in den Arbeitsordner des Laufs
+  VAG_DATA_DIR: ${{ github.workspace }}/../testdaten/daten
+  XDG_CONFIG_HOME: ${{ github.workspace }}/../testdaten/config
+  XDG_DATA_HOME: ${{ github.workspace }}/../testdaten/share
+
+jobs:
+  tests:
+    name: Tests und clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gleiche Rust-Version wie lokal und im Mac-Lauf (siehe mac.yml)
+      - name: Rust vorbereiten
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component clippy
+          rustup default 1.99.1
+
+      - name: Zwischenspeicher (schnellere Läufe)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-${{ hashFiles('Cargo.lock') }}
+
+      - name: clippy (Warnungen gelten als Fehler)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test
+
+  audit:
+    name: Abhängigkeiten auf Sicherheitslücken prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        run: cargo audit

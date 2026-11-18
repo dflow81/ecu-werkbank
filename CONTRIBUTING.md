@@ -25,6 +25,8 @@ cargo clippy --all-targets        # soll ohne Warnung durchlaufen
 ./target/release/ecu-werkbank -t golf6 autoscan    # simulierter Golf 6
 ```
 
+GitHub prüft dasselbe bei jedem Push und Pull-Request automatisch (`.github/workflows/pruefen.yml`).
+
 Tests nie gegen den echten Datenordner laufen lassen — eigene Ordner setzen:
 `VAG_DATA_DIR`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`. In Tests nur erfundene
 Fahrgestellnummern verwenden (z. B. `WVWZZZ1KZAM000017`).

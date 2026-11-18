@@ -42,7 +42,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 23 | DBC in der GUI (Signale live, ins Scope) | CANalyzer | hoch | mittel | niedrig | mittel | 1.0 | ⏳ |
 | 24 | Mitschnitt abspielen (Replay auf vcan) | CANalyzer | mittel | niedrig | mittel | mittel | 1.0 | ⏳ nur auf vcan, nie am Auto |
 | 25 | Bus-Arbeit der GUI im Hintergrund (kein Einfrieren) | – | hoch | mittel | niedrig | hoch | 1.0 | ✅ `gui/hintergrund.rs` |
-| 26 | Linux-CI: Tests + Clippy + cargo audit bei jedem Push | – | hoch | niedrig | niedrig | hoch | 1.0 | ⏳ |
+| 26 | Linux-CI: Tests + Clippy + cargo audit bei jedem Push | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `.github/workflows/pruefen.yml` |
 | 27 | CLI in Gruppen-Dateien aufteilen | – | mittel | mittel | niedrig | mittel | 1.0 | ⏳ |
 | 28 | Integrationstests über `vcan0` + `mockecu` | – | mittel | mittel | niedrig | mittel | 1.0 | 🟡 mockecu vorhanden |
 | 29 | Codierung: Klartext-Assistent mit Abhängigkeiten (Bit A nur mit Bit B) | ODIS, E-Sys | hoch | mittel | mittel | mittel | 2.0 | ⏳ |
