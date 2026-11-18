@@ -77,8 +77,8 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 | 51 | Datenbank-Kern: SQLite-Schema, Migrationen, Repository-Schicht | ODIS, ISTA+ | hoch | mittel | niedrig | hoch | 1.0 | ✅ `src/db/`, CLI `db` |
 | 52 | Vorhandenes Wissen übernehmen (Labels, `systems.rs`, Profile, Fehlertexte) | – | hoch | mittel | niedrig | hoch | 1.0 | ✅ Adressliste + Labels übernehmbar; Fehlertexte aus der Datenbank überall sichtbar |
 | 53 | Quellen- und Lizenzverwaltung je Datensatz (`data_source`) | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `db quellen`, `db entfernen`, `darf_weitergeben` |
-| 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | 🟡 DBC und Label-TOML; JSON/CSV fehlen |
-| 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ⏳ |
+| 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | ✅ `db dbc/paket/csv/labels`, Export `db export` |
+| 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ✅ `daten/community/`, `db eingebaut` |
 | 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ⏳ zusammen mit 39 |
 | 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
 | 58 | PDX-Import (ODX-Paket als ZIP) | ODIS | mittel | mittel | mittel | niedrig | 2.0 | ⏳ nach 57 |

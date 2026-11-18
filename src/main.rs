@@ -81,8 +81,33 @@ enum DbAktion {
     Status,
     /// Alle Quellen mit Art, Lizenz und Anzahl Einträge
     Quellen,
-    /// Normdaten und das eingebaute VW-Wissen (Adressliste) übernehmen
+    /// Normdaten und die mitgelieferten Community-Daten übernehmen/aktualisieren
     Eingebaut,
+    /// Datenpaket (TOML oder JSON) übernehmen; gleiche Quelle wird ersetzt
+    Paket {
+        #[arg(long)]
+        datei: PathBuf,
+        /// als Community-Daten (braucht eine Lizenz im Paket); Standard: eigene Daten
+        #[arg(long)]
+        community: bool,
+    },
+    /// CSV übernehmen: Fehlertexte (code;text) oder DIDs (did;name;einheit;faktor;offset)
+    Csv {
+        #[arg(long)]
+        datei: PathBuf,
+        #[arg(long, default_value = "")]
+        lizenz: String,
+    },
+    /// Alles Weitergebbare als Datenpaket schreiben (.toml oder .json) — z. B. als Beitrag
+    Export {
+        #[arg(long)]
+        ziel: PathBuf,
+        /// Lizenz für das Paket, z. B. CC0-1.0
+        #[arg(long)]
+        lizenz: String,
+        #[arg(long, default_value = "Eigene Fahrzeugdaten")]
+        name: String,
+    },
     /// Eigene Label-Dateien (TOML) übernehmen
     Labels {
         /// Ordner (Standard: der Label-Ordner)
@@ -4355,8 +4380,32 @@ fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std::path::Path
         }
         DbAktion::Eingebaut => {
             db.normdaten_eintragen()?;
-            let e = db.eingebautes_wissen_uebernehmen()?;
-            println!("{}", tr!("Übernommen: Normdaten (UDS-Dienste, Sitzungen) und {a}.", a = e.text()));
+            println!("{}", tr!("Normdaten (UDS-Dienste, Sitzungen) eingetragen."));
+            for (name, e) in db.community_uebernehmen()? {
+                println!("{}", tr!("Community „{a}“: {b}", a = name, b = e.text()));
+            }
+        }
+        DbAktion::Paket { datei, community } => {
+            use ecu_werkbank::db::{paket::Datenpaket, QuellArt};
+            let p = Datenpaket::lesen(&datei)?;
+            if community && p.quelle.lizenz.trim().is_empty() {
+                anyhow::bail!(tr!("Community-Daten brauchen eine Lizenz ([quelle] lizenz = …)."));
+            }
+            let e = db.paket_importieren(&p, if community { QuellArt::Community } else { QuellArt::User })?;
+            println!("{}", tr!("„{a}“ übernommen: {b} (Quelle {c}).", a = p.quelle.name, b = e.text(), c = e.quelle_id));
+        }
+        DbAktion::Csv { datei, lizenz } => {
+            let e = db.csv_importieren(&datei, &lizenz)?;
+            println!("{}", tr!("Übernommen: {a} (Quelle {b}).", a = e.text(), b = e.quelle_id));
+        }
+        DbAktion::Export { ziel, lizenz, name } => {
+            let (p, weg) = db.paket_exportieren(&name, &lizenz)?;
+            p.schreiben(&ziel)?;
+            let n: usize = p.hersteller.iter().map(|h| h.steuergeraete.len()).sum();
+            println!("{}", tr!("Geschrieben: {a} ({n} Steuergeräte, {f} allgemeine Fehlertexte).", a = ziel.display(), n = n, f = p.fehler.len()));
+            for w in weg {
+                println!("{}", tr!("  nicht enthalten (bleibt lokal): {a}", a = w));
+            }
         }
         DbAktion::Labels { ordner } => {
             let ordner = ordner.unwrap_or_else(|| labels_dir.to_path_buf());

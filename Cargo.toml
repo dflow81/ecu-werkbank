@@ -17,6 +17,7 @@ eframe = "0.28"
 egui_plot = "0.28"
 rfd = "0.15"
 rusqlite = { version = "0.43.0", features = ["bundled"] }
+serde_json = "1.0.154"
 
 # Direkter CAN-Zugang nur unter Linux (Windows: siehe src/can.rs)
 [target.'cfg(target_os = "linux")'.dependencies]

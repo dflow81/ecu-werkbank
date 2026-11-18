@@ -1,0 +1,163 @@
+# Adressliste Volkswagen-Konzern: Diagnoseadresse → Steuergerät.
+# Eigene Bezeichnungen von ECUWerkbank (keine Texte aus Werkstatt-Programmen).
+# Muss zu src/systems.rs passen (Test db::paket::tests::mitgelieferte_community_daten_passen_zum_programm).
+
+[quelle]
+name = "VW Adressliste (ECUWerkbank)"
+version = "1"
+lizenz = "CC0-1.0"
+herkunft = "Eigene Bezeichnungen der genormten VAG-Diagnoseadressen"
+
+[[hersteller]]
+name = "Volkswagen"
+wmi = ["WVW", "WV1", "WV2", "WV3"]
+
+[[hersteller.steuergeraet]]
+adresse = 0x01
+name = "Motor"
+gruppe = "Motor & Antrieb"
+
+[[hersteller.steuergeraet]]
+adresse = 0x02
+name = "Getriebe"
+gruppe = "Motor & Antrieb"
+
+[[hersteller.steuergeraet]]
+adresse = 0x03
+name = "Bremsen (ABS/ESP)"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x04
+name = "Lenkwinkelsensor"
+gruppe = "Sonstige"
+
+[[hersteller.steuergeraet]]
+adresse = 0x08
+name = "Klimaanlage"
+gruppe = "Klima & Heizung"
+
+[[hersteller.steuergeraet]]
+adresse = 0x09
+name = "Bordnetz"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x10
+name = "Einparkhilfe 2"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x13
+name = "Abstandsregelung (ACC)"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x15
+name = "Airbag"
+gruppe = "Airbag & Rückhaltesysteme"
+
+[[hersteller.steuergeraet]]
+adresse = 0x16
+name = "Lenkradelektronik"
+gruppe = "Instrumente & Gateway"
+
+[[hersteller.steuergeraet]]
+adresse = 0x17
+name = "Kombiinstrument"
+gruppe = "Instrumente & Gateway"
+
+[[hersteller.steuergeraet]]
+adresse = 0x19
+name = "Gateway"
+gruppe = "Instrumente & Gateway"
+
+[[hersteller.steuergeraet]]
+adresse = 0x25
+name = "Wegfahrsperre"
+gruppe = "Instrumente & Gateway"
+
+[[hersteller.steuergeraet]]
+adresse = 0x37
+name = "Navigation"
+gruppe = "Infotainment"
+
+[[hersteller.steuergeraet]]
+adresse = 0x3C
+name = "Spurwechselassistent"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x42
+name = "Türelektronik Fahrer"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x44
+name = "Lenkhilfe"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x46
+name = "Komfortsystem"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x52
+name = "Türelektronik Beifahrer"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x53
+name = "Parkbremse"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x55
+name = "Leuchtweitenregelung"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x56
+name = "Radio"
+gruppe = "Infotainment"
+
+[[hersteller.steuergeraet]]
+adresse = 0x5F
+name = "Informationselektronik"
+gruppe = "Infotainment"
+
+[[hersteller.steuergeraet]]
+adresse = 0x62
+name = "Türelektronik hinten links"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x65
+name = "Reifendruck"
+gruppe = "Airbag & Rückhaltesysteme"
+
+[[hersteller.steuergeraet]]
+adresse = 0x69
+name = "Anhängersteuergerät"
+gruppe = "Sonstige"
+
+[[hersteller.steuergeraet]]
+adresse = 0x6C
+name = "Rückfahrkamera"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0x72
+name = "Türelektronik hinten rechts"
+gruppe = "Karosserie & Komfort"
+
+[[hersteller.steuergeraet]]
+adresse = 0x76
+name = "Einparkhilfe"
+gruppe = "Fahrwerk & Assistenz"
+
+[[hersteller.steuergeraet]]
+adresse = 0xA5
+name = "Frontsensorik Fahrerassistenz"
+gruppe = "Fahrwerk & Assistenz"

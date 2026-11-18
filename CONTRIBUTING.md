@@ -7,6 +7,9 @@ Danke fürs Mitmachen! ECUWerkbank ist ein Hobby-Projekt für die offene Fahrzeu
 - **Mitschnitte** (candump) von Abläufen eines Werkstatt-Diagnosegeräts am eigenen Auto,
   zusammen mit dem, was das Gerät angezeigt hat. Daraus entstehen bestätigte Funktionen.
   Vorher Fahrgestellnummer und Kennzeichen entfernen.
+- **Datenpakete** für `daten/community/<hersteller>/` (Format siehe `src/db/paket.rs`):
+  eigene Bezeichnungen, Fehlertexte, Codier-Bits — mit Lizenz (z. B. CC0-1.0) und Herkunft.
+  `ecu-werkbank db export --ziel beitrag.toml --lizenz CC0-1.0` erzeugt eines aus der eigenen Datenbank.
 - **Rückmeldungen von anderen Autos** (Modell, Baujahr, Steuergeräte, was ging, was nicht).
 - Fehlerberichte mit genauer Befehlszeile und Ausgabe.
 

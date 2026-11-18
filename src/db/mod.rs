@@ -14,6 +14,8 @@ use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
+pub mod paket;
+
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
 const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql")];
 
@@ -363,30 +365,6 @@ impl Db {
         Ok(())
     }
 
-    /// Das im Programm eingebaute VW-Wissen (Adressliste) als Quelle „MANUAL“ übernehmen.
-    /// Ersetzt eine frühere Übernahme derselben Art.
-    pub fn eingebautes_wissen_uebernehmen(&self) -> Result<ImportErgebnis> {
-        const NAME: &str = "ECUWerkbank eingebaut";
-        self.con.execute("DELETE FROM data_source WHERE source_type = 'MANUAL' AND source_name = ?1", params![NAME])?;
-        let q = self.quelle_anlegen(QuellArt::Manual, NAME, env!("CARGO_PKG_VERSION"), "MIT OR Apache-2.0", "src/systems.rs (eigene Bezeichnungen der VAG-Adressliste)")?;
-        let vw = self.hersteller("Volkswagen", &["WVW", "WV1", "WV2", "WV3"], Some(q))?;
-        let tx = self.con.unchecked_transaction()?;
-        let mut erg = ImportErgebnis { quelle_id: q, ..Default::default() };
-        for a in 0..=0xFFu16 {
-            let name = crate::systems::name(a);
-            if name.is_empty() {
-                continue;
-            }
-            tx.execute(
-                "INSERT INTO ecu (manufacturer_id, ecu_name, ecu_family, diagnostic_address, source_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![vw, name, crate::systems::gruppe(a), a, q],
-            )?;
-            erg.steuergeraete += 1;
-        }
-        tx.commit()?;
-        Ok(erg)
-    }
-
     /// Eigene Label-Dateien (TOML) als Quelle „USER“ übernehmen.
     pub fn labels_importieren(&self, ordner: &Path, hersteller: i64) -> Result<ImportErgebnis> {
         let mut dateien: Vec<PathBuf> = std::fs::read_dir(ordner)
@@ -533,7 +511,7 @@ mod tests {
         let p = dir.join("t.sqlite");
         {
             let db = Db::oeffnen(&p).unwrap();
-            db.eingebautes_wissen_uebernehmen().unwrap();
+            db.community_uebernehmen().unwrap();
             db.sichern(&dir.join("kopie.sqlite")).unwrap();
         }
         let db = Db::oeffnen(&p).unwrap();
@@ -557,15 +535,6 @@ mod tests {
         let e = Db::oeffnen(&p).err().unwrap();
         assert!(format!("{e:#}").contains("neuer"), "{e:#}");
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn eingebautes_wissen_ersetzt_sich_selbst() {
-        let db = Db::im_speicher().unwrap();
-        let a = db.eingebautes_wissen_uebernehmen().unwrap();
-        let b = db.eingebautes_wissen_uebernehmen().unwrap();
-        assert_eq!(a.steuergeraete, b.steuergeraete);
-        assert_eq!(db.quellen().unwrap().len(), 1, "alte Übernahme ersetzt");
     }
 
     #[test]

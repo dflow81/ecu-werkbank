@@ -1006,16 +1006,22 @@ Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
 
 ```bash
 ./target/release/ecu-werkbank db                       # Übersicht
-./target/release/ecu-werkbank db eingebaut             # Normdaten + eingebaute VW-Adressliste
+./target/release/ecu-werkbank db eingebaut             # Normdaten + mitgelieferte Community-Daten
 ./target/release/ecu-werkbank db labels                # eigene Label-Dateien übernehmen
 ./target/release/ecu-werkbank db dbc --datei vw_pq.dbc --lizenz MIT --hersteller Volkswagen
+./target/release/ecu-werkbank db paket --datei meine-daten.toml   # Datenpaket (TOML/JSON)
+./target/release/ecu-werkbank db csv --datei fehler.csv           # code;text  oder  did;name;einheit;faktor;offset
+./target/release/ecu-werkbank db export --ziel beitrag.toml --lizenz CC0-1.0
 ./target/release/ecu-werkbank db quellen               # was ist drin, woher, welche Lizenz
 ./target/release/ecu-werkbank db entfernen --id 3      # Vorschau; mit --ja wirklich
 ./target/release/ecu-werkbank db sichern --ziel kopie.sqlite
 ```
 
 Daten ohne Lizenzangabe und selbst gekaufte Herstellerdaten bleiben immer nur
-bei dir. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
+bei dir; `db export` lässt sie weg und sagt, was fehlt. Das Format der
+Datenpakete steht in `src/db/paket.rs`, ein Beispiel in
+`daten/community/vw/adressliste.toml`. Tippfehler im Paket werden gemeldet,
+nicht still übergangen. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
 
 ### Live-CAN-Monitor (GUI)
 

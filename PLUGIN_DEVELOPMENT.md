@@ -21,7 +21,8 @@ Schreibt die Herkunft dazu.
 | Fehlerbilder (Erfahrungen je Modell) | Datenordner | TOML | Werkzeuge → Fehlerbilder |
 | Grundeinstellungs-/Stellglied-Abläufe | aus eigenem Mitschnitt gelernt | TOML | Mitschnitt & Lernhilfe |
 | Sprachen | `<Datenordner>/sprachen/<code>.toml` | TOML: deutscher Text = Übersetzung | `sprache vorlage <code>` |
-| CAN-Signale | eigene `.dbc`-Datei | DBC | `dbc-decode --dbc … --log …` |
+| CAN-Signale | eigene `.dbc`-Datei | DBC | `dbc-decode --dbc … --log …`, `db dbc` |
+| Fahrzeug-Datenbank | Datenpaket, CSV | TOML/JSON (`src/db/paket.rs`), CSV | `db paket`, `db csv`, `db export` |
 
 ## 2. Geplantes Format: Herstellerdaten
 

@@ -22,6 +22,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   `quellen`, `entfernen`, `sichern`. Jede Quelle mit Lizenz; selbst gekaufte Herstellerdaten
   (ODX/PDX, später) bleiben technisch gesperrt für die Weitergabe. Fehlertexte aus der Datenbank
   erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
+- Datenpakete (TOML/JSON) und CSV übernehmen, alles Weitergebbare als Paket exportieren
+  (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
 - **Dateien ins Fenster ziehen:** Mitschnitt (.log/.asc), DBC, Aufzeichnung (.csv) und Label (.toml)
   öffnen sich auf der passenden Seite.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.
