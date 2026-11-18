@@ -105,6 +105,12 @@ pub struct Coding {
     #[serde(default)]
     pub bit: Option<u8>,
     pub name: String,
+    /// Ist dieses Bit an, müssen diese Bits auch an sein ("Byte.Bit", z. B. "1.3")
+    #[serde(default)]
+    pub benoetigt: Vec<String>,
+    /// Ist dieses Bit an, müssen diese Bits aus sein
+    #[serde(default)]
+    pub schliesst_aus: Vec<String>,
 }
 
 /// Sollwert für einen Messwert (Ampel / Warnung).

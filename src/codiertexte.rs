@@ -54,6 +54,52 @@ pub fn setzen(tx: u16, byte: usize, bit: Option<u8>, text: &str) -> Result<()> {
 
 /// Geänderte Bits von `alt` nach `neu`: (Byte, Bit, alt, neu).
 /// Fehlende Bytes zählen als 0.
+/// „Byte.Bit“ lesen, z. B. "1.3" → (1, 3).
+pub fn bit_stelle(s: &str) -> Option<(usize, u8)> {
+    let (a, b) = s.trim().split_once('.')?;
+    let bit: u8 = b.trim().parse().ok()?;
+    (bit < 8).then_some((a.trim().parse().ok()?, bit))
+}
+
+fn bit_an(bytes: &[u8], byte: usize, bit: u8) -> Option<bool> {
+    bytes.get(byte).map(|b| b & (1 << bit) != 0)
+}
+
+/// Abhängigkeiten aus den Labels prüfen (`benoetigt`, `schliesst_aus`).
+/// Gibt Hinweise in Klartext zurück; leer = alles passt.
+pub fn regeln_pruefen(labels: &[Coding], bytes: &[u8]) -> Vec<String> {
+    let name = |byte: usize, bit: u8| {
+        labels
+            .iter()
+            .find(|c| usize::from(c.byte) == byte && c.bit == Some(bit))
+            .map(|c| format!("„{}“ (Byte {byte} Bit {bit})", c.name))
+            .unwrap_or_else(|| crate::tr!("Byte {a} Bit {b}", a = byte, b = bit))
+    };
+    let mut out = Vec::new();
+    for c in labels {
+        let Some(bit) = c.bit else { continue };
+        if bit_an(bytes, usize::from(c.byte), bit) != Some(true) {
+            continue;
+        }
+        let selbst = name(usize::from(c.byte), bit);
+        for r in &c.benoetigt {
+            match bit_stelle(r) {
+                Some((b, x)) if bit_an(bytes, b, x) == Some(false) => out.push(crate::tr!("{a} braucht {b} — das ist aus.", a = selbst, b = name(b, x))),
+                Some(_) => {}
+                None => out.push(crate::tr!("{a}: Regel „{r}“ nicht verstanden (Form: Byte.Bit)", a = selbst, r = r)),
+            }
+        }
+        for r in &c.schliesst_aus {
+            match bit_stelle(r) {
+                Some((b, x)) if bit_an(bytes, b, x) == Some(true) => out.push(crate::tr!("{a} verträgt sich nicht mit {b} — beide sind an.", a = selbst, b = name(b, x))),
+                Some(_) => {}
+                None => out.push(crate::tr!("{a}: Regel „{r}“ nicht verstanden (Form: Byte.Bit)", a = selbst, r = r)),
+            }
+        }
+    }
+    out
+}
+
 pub fn unterschiede(alt: &[u8], neu: &[u8]) -> Vec<(usize, u8, bool, bool)> {
     let mut v = Vec::new();
     for i in 0..alt.len().max(neu.len()) {
@@ -148,6 +194,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn abhaengigkeiten() {
+        let c = |byte, bit, name: &str, ben: &[&str], aus: &[&str]| Coding {
+            byte,
+            bit: Some(bit),
+            name: name.into(),
+            benoetigt: ben.iter().map(|s| s.to_string()).collect(),
+            schliesst_aus: aus.iter().map(|s| s.to_string()).collect(),
+        };
+        let labels = vec![c(0, 1, "Komfortblinken", &["0.0"], &[]), c(0, 0, "Blinker", &[], &[]), c(1, 2, "Tagfahrlicht", &[], &["1.3"]), c(1, 3, "Standlicht dauernd", &[], &[])];
+        assert!(regeln_pruefen(&labels, &[0b0000_0011, 0b0000_0100]).is_empty());
+        let h = regeln_pruefen(&labels, &[0b0000_0010, 0b0000_1100]);
+        assert_eq!(h.len(), 2, "{h:?}");
+        assert!(h[0].contains("„Komfortblinken“") && h[0].contains("„Blinker“"), "{h:?}");
+        assert!(h[1].contains("verträgt sich nicht"), "{h:?}");
+        // aus = keine Prüfung; kaputte Regel wird gemeldet
+        assert!(regeln_pruefen(&labels, &[0, 0]).is_empty());
+        let kaputt = vec![c(0, 0, "X", &["1"], &[])];
+        assert!(regeln_pruefen(&kaputt, &[1])[0].contains("nicht verstanden"));
+        assert_eq!(bit_stelle(" 2.7 "), Some((2, 7)));
+        assert_eq!(bit_stelle("2.8"), None);
+    }
+
+    #[test]
     fn texte_und_unterschiede() {
         let _g = crate::history::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("vag-ct-{}", std::process::id()));
@@ -156,7 +225,7 @@ mod tests {
         assert_eq!(unterschiede(&[0x01, 0x80], &[0x03, 0x00, 0x10]), vec![(0, 1, false, true), (1, 7, true, false), (2, 4, false, true)]);
         assert_eq!(bits(0x24), "0010 0100");
 
-        let labels = vec![Coding { byte: 0, bit: Some(0), name: "Label-Bit".into() }];
+        let labels = vec![Coding { byte: 0, bit: Some(0), name: "Label-Bit".into(), benoetigt: vec![], schliesst_aus: vec![] }];
         let t = Texte::laden();
         assert_eq!(t.name(0x714, &labels, 0, Some(0)).as_deref(), Some("Label-Bit"));
         assert_eq!(t.name(0x714, &labels, 0, Some(1)), None);

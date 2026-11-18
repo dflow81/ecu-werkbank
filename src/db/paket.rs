@@ -117,6 +117,16 @@ pub struct PaketCodierung {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bit: Option<u8>,
     pub name: String,
+    /// "Byte.Bit", die mit an sein müssen
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub benoetigt: Vec<String>,
+    /// "Byte.Bit", die nicht gleichzeitig an sein dürfen
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub schliesst_aus: Vec<String>,
+}
+
+fn liste(s: String) -> Vec<String> {
+    s.split(',').map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -187,7 +197,10 @@ impl Db {
                     erg.messwerte += 1;
                 }
                 for c in &s.codierung {
-                    tx.execute("INSERT INTO coding_item (ecu_id, byte_index, bit_index, label, source_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![ecu, c.byte, c.bit, c.name, q])?;
+                    tx.execute(
+                        "INSERT INTO coding_item (ecu_id, byte_index, bit_index, label, requires, excludes, source_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![ecu, c.byte, c.bit, c.name, c.benoetigt.join(","), c.schliesst_aus.join(","), q],
+                    )?;
                     erg.codierung += 1;
                 }
                 for a in &s.anpassung {
@@ -281,8 +294,8 @@ impl Db {
                 s.dids = self.kinder(eid, "SELECT did, name, unit, factor, \"offset\" FROM did WHERE ecu_id = ?1 ORDER BY did", |r| {
                     Ok(PaketDid { did: r.get(0)?, name: r.get(1)?, einheit: r.get(2)?, faktor: r.get(3)?, offset: r.get(4)? })
                 })?;
-                s.codierung = self.kinder(eid, "SELECT byte_index, bit_index, label FROM coding_item WHERE ecu_id = ?1 ORDER BY byte_index, bit_index", |r| {
-                    Ok(PaketCodierung { byte: r.get(0)?, bit: r.get(1)?, name: r.get(2)? })
+                s.codierung = self.kinder(eid, "SELECT byte_index, bit_index, label, requires, excludes FROM coding_item WHERE ecu_id = ?1 ORDER BY byte_index, bit_index", |r| {
+                    Ok(PaketCodierung { byte: r.get(0)?, bit: r.get(1)?, name: r.get(2)?, benoetigt: liste(r.get(3)?), schliesst_aus: liste(r.get(4)?) })
                 })?;
                 s.anpassung = self.kinder(eid, "SELECT channel, name FROM adaptation WHERE ecu_id = ?1 ORDER BY channel", |r| Ok(PaketAnpassung { kanal: r.get(0)?, name: r.get(1)? }))?;
                 h.steuergeraete.push(s);
@@ -358,7 +371,7 @@ adresse = 0x09
 name = "Bordnetz"
 protokoll = "TP20"
 fehler = [{ code = "01314", text = "Motorsteuergerät" }]
-codierung = [{ byte = 0, bit = 1, name = "Tagfahrlicht" }]
+codierung = [{ byte = 0, bit = 1, name = "Tagfahrlicht", schliesst_aus = ["0.2"] }]
 anpassung = [{ kanal = 23, name = "Komfortblinken" }]
 dids = [{ did = 0xF40C, name = "Drehzahl", einheit = "U/min", faktor = 0.25 }]
 "#,

@@ -18,7 +18,7 @@ pub mod api;
 pub mod paket;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
-const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql")];
+const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql")];
 
 /// Aktuelle Schema-Version dieses Programms.
 pub const SCHEMA_VERSION: u32 = MIGRATIONEN.len() as u32;
@@ -399,7 +399,10 @@ impl Db {
                 erg.messwerte += 1;
             }
             for c in &f.coding {
-                tx.execute("INSERT INTO coding_item (ecu_id, byte_index, bit_index, label, source_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![ecu, c.byte, c.bit, c.name, q])?;
+                tx.execute(
+                    "INSERT INTO coding_item (ecu_id, byte_index, bit_index, label, requires, excludes, source_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![ecu, c.byte, c.bit, c.name, c.benoetigt.join(","), c.schliesst_aus.join(","), q],
+                )?;
                 erg.codierung += 1;
             }
             for a in &f.adaptation {
@@ -522,6 +525,30 @@ mod tests {
         let kopie = Db::oeffnen(&dir.join("kopie.sqlite")).unwrap();
         assert_eq!(kopie.steuergeraet_name(vw.0, 0x01).unwrap().as_deref(), Some("Motor"));
         drop((db, kopie));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migration_von_version_1_mit_sicherung() {
+        let dir = std::env::temp_dir().join(format!("ecuwb-mig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("t.sqlite");
+        {
+            // Datei wie von einem Programm mit Schema 1
+            let con = Connection::open(&p).unwrap();
+            con.execute_batch(MIGRATIONEN[0]).unwrap();
+            con.pragma_update(None, "user_version", 1).unwrap();
+            con.execute("INSERT INTO data_source (source_type, source_name, imported_at) VALUES ('USER', 'alt', 'x')", []).unwrap();
+        }
+        let db = Db::oeffnen(&p).unwrap();
+        assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(db.quellen().unwrap().len(), 1, "Daten bleiben erhalten");
+        let kopie = p.with_extension("vor-v2.sqlite");
+        assert!(kopie.exists(), "Sicherung vor der Migration");
+        let alt = Connection::open(&kopie).unwrap();
+        assert_eq!(alt.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0)).unwrap(), 1);
+        drop((db, alt));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

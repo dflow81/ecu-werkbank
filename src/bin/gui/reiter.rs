@@ -672,6 +672,16 @@ impl App {
             }
         }
 
+        // Abhängigkeiten aus den Labels (benoetigt / schliesst_aus)
+        let regeln = codiertexte::regeln_pruefen(&labels, &bytes);
+        if !regeln.is_empty() {
+            ui.add_space(4.0);
+            ui.colored_label(stufe_color(Stufe::Warnung), tr!("⚠ Passt nicht zusammen (laut deinen Labels):"));
+            for h in &regeln {
+                ui.colored_label(stufe_color(Stufe::Warnung), format!("   {h}"));
+            }
+        }
+
         // Text-Editor
         let mut speichern: Option<Option<(usize, Option<u8>, String)>> = None; // Some(None) = schließen
         if let (Some((byte, bit, text)), Some(tx)) = (&mut self.code_edit, tx) {

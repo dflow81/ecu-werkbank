@@ -127,8 +127,8 @@ fn steuergeraet(db: &Db, id: i64) -> Antwort {
     e["dids"] = liste("SELECT did, name, unit, factor, \"offset\" FROM did WHERE ecu_id = ?1 ORDER BY did", |r| {
         Ok(json!({ "did": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)?, "einheit": r.get::<_, String>(2)?, "faktor": r.get::<_, f64>(3)?, "offset": r.get::<_, f64>(4)? }))
     })?;
-    e["codierung"] = liste("SELECT byte_index, bit_index, label FROM coding_item WHERE ecu_id = ?1 ORDER BY byte_index, bit_index", |r| {
-        Ok(json!({ "byte": r.get::<_, i64>(0)?, "bit": r.get::<_, Option<i64>>(1)?, "name": r.get::<_, String>(2)? }))
+    e["codierung"] = liste("SELECT byte_index, bit_index, label, requires, excludes FROM coding_item WHERE ecu_id = ?1 ORDER BY byte_index, bit_index", |r| {
+        Ok(json!({ "byte": r.get::<_, i64>(0)?, "bit": r.get::<_, Option<i64>>(1)?, "name": r.get::<_, String>(2)?, "benoetigt": r.get::<_, String>(3)?, "schliesst_aus": r.get::<_, String>(4)? }))
     })?;
     e["anpassung"] = liste("SELECT channel, name FROM adaptation WHERE ecu_id = ?1 ORDER BY channel", |r| Ok(json!({ "kanal": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)? })))?;
     Ok(e)

@@ -34,3 +34,24 @@ name = "Kühlmitteltemperatur"
 unit = "°C"
 factor = 1.0
 offset = -40.0
+
+# --- Codier-Bits mit Abhängigkeiten (Beispiel, erfundene Stellen) ---
+# benoetigt:     diese Bits müssen mit an sein ("Byte.Bit")
+# schliesst_aus: diese Bits dürfen nicht gleichzeitig an sein
+# Der Codier-Helfer warnt, wenn eine Regel verletzt ist.
+[[coding]]
+byte = 0
+bit = 0
+name = "Funktion A"
+
+[[coding]]
+byte = 0
+bit = 1
+name = "Zusatz zu A"
+benoetigt = ["0.0"]
+
+[[coding]]
+byte = 0
+bit = 2
+name = "Funktion B (nicht zusammen mit A)"
+schliesst_aus = ["0.0"]

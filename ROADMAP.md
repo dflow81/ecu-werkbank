@@ -45,7 +45,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 26 | Linux-CI: Tests + Clippy + cargo audit bei jedem Push | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `.github/workflows/pruefen.yml` |
 | 27 | CLI in Gruppen-Dateien aufteilen | – | mittel | mittel | niedrig | mittel | 1.0 | ⏳ |
 | 28 | Integrationstests über `vcan0` + `mockecu` | – | mittel | mittel | niedrig | mittel | 1.0 | 🟡 mockecu vorhanden |
-| 29 | Codierung: Klartext-Assistent mit Abhängigkeiten (Bit A nur mit Bit B) | ODIS, E-Sys | hoch | mittel | mittel | mittel | 2.0 | ⏳ |
+| 29 | Codierung: Klartext-Assistent mit Abhängigkeiten (Bit A nur mit Bit B) | ODIS, E-Sys | hoch | mittel | mittel | mittel | 2.0 | ✅ `benoetigt`/`schliesst_aus` in Labels, Datenpaketen und Datenbank (Schema 2); Warnung im Codier-Helfer und in der CLI |
 | 30 | Fahrzeug-Konfiguration als Ganzes vergleichen (vorher/nachher, zwei Autos) | E-Sys | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `konfig-vergleich` (CLI); GUI fehlt noch |
 | 31 | DoIP (Diagnose über Ethernet, neuere VW/BMW) | ODIS, ISTA+, E-Sys | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
 | 32 | 29-Bit-CAN-IDs und CAN FD | Xentry, Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 Mitschnitt liest sie |

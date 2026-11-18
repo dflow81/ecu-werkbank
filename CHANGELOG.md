@@ -28,6 +28,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   zufälliger Schlüssel in der Adresse; Python-Beispiel in `beispiele/api_abfrage.py`.
 - `konfig-vergleich`: Codierung, Anpassungen und Softwarestände in einem Bericht vergleichen —
   vorher/nachher oder zwei Fahrzeuge (`--a`, `--b`).
+- **Codier-Bits mit Abhängigkeiten:** in eigenen Labels `benoetigt = ["1.3"]` / `schliesst_aus = ["1.4"]`;
+  der Codier-Helfer und `decode-coding`/`kwp-langcodierung` warnen, wenn eine Regel verletzt ist.
+  Fahrzeug-Datenbank dafür auf Schema 2 (Umstellung automatisch, mit Kopie vorher).
 - **Firmenkopf für Berichte:** Werkstattname, Anschrift, Telefon in der Fußzeile jeder PDF-Seite
   (`firmenkopf --name …`, GUI Fahrzeug → Fahrzeuge & Wartung).
 - Mitschnitt-Prüfbericht mit **Auffälligkeiten**: Antwortzeiten, fehlende Antworten, gehäufte

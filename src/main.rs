@@ -1364,7 +1364,7 @@ fn main() -> Result<()> {
         Command::KwpStellglied { address, ja } => kwp_stellglied(&be, address as u8, ja),
         Command::KwpCodierungSchreiben { address, wert, ja } => kwp_codierung_schreiben(&be, address as u8, wert, ja),
         Command::KwpAnpassung { address, kanal } => kwp_anpassung(&be, address as u8, &kanal),
-        Command::KwpLangcodierung { address, neu, ja } => kwp_langcodierung(&be, address as u8, neu.as_deref(), ja),
+        Command::KwpLangcodierung { address, neu, ja } => kwp_langcodierung(&be, address as u8, neu.as_deref(), ja, &db),
         Command::KwpAnpassungSchreiben { address, kanal, wert, ja } => kwp_anpassung_schreiben(&be, address as u8, kanal, wert, ja),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())
@@ -2321,6 +2321,9 @@ fn print_coding(ecu: Option<u16>, tx: Option<u16>, bytes: &[u8], db: &LabelDb) {
     println!("{}", tr!("Aufschlüsselung:"));
     for z in texte.aufschluesseln(tx_key, labels, bytes) {
         println!("  {z}");
+    }
+    for h in ecu_werkbank::codiertexte::regeln_pruefen(labels, bytes) {
+        println!("  ⚠ {h}");
     }
     if labels.is_empty() && texte.anzahl(tx_key) == 0 {
         println!("{}", tr!("Noch keine Bit-Namen. Eintragen mit:  ecu-werkbank codiertext --tx … --byte … --bit … --text \"…\"  (oder in der GUI: Seite „Codierung“)"));
@@ -4415,7 +4418,7 @@ fn schreib_ergebnis(r: &kwp::Schreiben, zeige: impl Fn(&[u8]) -> String) {
     }
 }
 
-fn kwp_langcodierung(be: &Backend, address: u8, neu: Option<&str>, ja: bool) -> Result<()> {
+fn kwp_langcodierung(be: &Backend, address: u8, neu: Option<&str>, ja: bool, db: &LabelDb) -> Result<()> {
     let mut ch = kwp_open(be, address)?;
     let (art, alt) = kwp::langcodierung_lesen(&mut Kwp::new(&mut ch)).ok_or_else(|| anyhow::anyhow!(tr!("Steuergerät {a} hat keine lange Codierung.", a = format!("{address:02X}"))))?;
     drop(ch);
@@ -4434,6 +4437,9 @@ fn kwp_langcodierung(be: &Backend, address: u8, neu: Option<&str>, ja: bool) -> 
                 println!("  {}", tr!("Byte {i} Bit {bit}: {a} → {b}", i = i, bit = bit, a = a >> bit & 1, b = b >> bit & 1));
             }
         }
+    }
+    for h in ecu_werkbank::codiertexte::regeln_pruefen(db.coding(u16::from(address)).unwrap_or(&[]), &neu) {
+        println!("  ⚠ {h}");
     }
     if !ja {
         println!("{}", tr!("Nichts geschrieben (Anfrage wäre {a}). Den alten Stand notieren, dann mit --ja schreiben.", a = ecu_werkbank::backup::hex(&anfrage)));
