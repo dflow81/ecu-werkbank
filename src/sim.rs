@@ -181,6 +181,14 @@ struct KwpModule {
     tester_tx: Option<u16>,
     /// Lange Codierung (nur Geräte mit 0x22; Werte erfunden)
     codierung: Vec<u8>,
+    /// Anpassungskanäle (Kanal, Wert) für Routine 0x0103
+    anpass: Vec<(u8, u16)>,
+    /// Routine 0x0103: None = nicht gestartet, Some(None) = gestartet, Some(Some(k)) = Kanal k gewählt
+    anpass_lauf: Option<Option<u8>>,
+    /// Identifikation 0x9A (Gateway: Betriebsnummer, Software, lange Codierung)
+    ident_9a: Vec<u8>,
+    /// Kurzcodierung (Geräte mit 0x9B-Aufbau „03 xx xx xx“)
+    kurzcodierung: u32,
 }
 
 struct Car {
@@ -345,7 +353,7 @@ fn uds(addr: u16, tx: u16, name: &'static str, part: &'static str, system: &'sta
 }
 
 fn kwp(addr: u8, ident: Ident, dtcs: Vec<(u16, u8)>) -> KwpModule {
-    KwpModule { addr, ident, dtcs, eigen: Eigenheit::default(), besetzt_gemeldet: false, stell: None, tester_tx: None, codierung: vec![0x0F, 0x00, 0x0A, 0x00, 0x41, 0x08] }
+    KwpModule { addr, ident, dtcs, eigen: Eigenheit::default(), besetzt_gemeldet: false, stell: None, tester_tx: None, codierung: vec![0x0F, 0x00, 0x0A, 0x00, 0x41, 0x08], anpass: Vec::new(), anpass_lauf: None, ident_9a: Vec::new(), kurzcodierung: 72 }
 }
 
 type Module = (Vec<UdsModule>, Vec<KwpModule>, Vec<u8>);
@@ -391,8 +399,9 @@ fn golf6_module() -> Module {
         abs,
         k(0x09, 0x7A8, Ident::Vag { teil: "1K0909144H", sw: *b"2901", name: "EPS_ZFLS Kl. 69" }, vec![]),
         k(0x1D, 0x7BA, Ident::Nur22 { teil: "1K9919475", sw: "0001", system: "PARKHILFE 8K", hw: "1K9919475" }, vec![(1627, 0x2E)]),
-        k(0x1F, 0x32E, Ident::Vag { teil: "1K0907530AA", sw: *b"0081", name: "J533  Gateway   H07" }, vec![]),
-        k(0x20, 0x338, Ident::Nur22 { teil: "5K0937086", sw: "0019", system: "BCM PQ35 M", hw: "5K0937086" }, vec![]),
+        KwpModule { ident_9a: GOLF6_GATEWAY_9A.to_vec(), ..k(0x1F, 0x32E, Ident::Vag { teil: "1K0907530AA", sw: *b"0081", name: "J533  Gateway   H07" }, vec![]) },
+        // Bordnetz: Anpassungskanäle wie am Golf 6 gelesen (1 = 0, 3 = 0, 17 = 1, 23 = 10)
+        KwpModule { anpass: vec![(1, 0), (3, 0), (17, 1), (23, 10)], ..k(0x20, 0x338, Ident::Nur22 { teil: "5K0937086", sw: "0019", system: "BCM PQ35 M", hw: "5K0937086" }, vec![]) },
         k(0x22, 0x310, Ident::Vag { teil: "1K0959701AE", sw: *b"1519", name: "J386  TUER-SG FT" }, vec![]),
         k(0x23, 0x312, Ident::Vag { teil: "1K0959702AE", sw: *b"1519", name: "J387  TUER-SG BT" }, vec![(97, 0x6C), (929, 0x28)]),
         k(0x24, 0x314, Ident::Vag { teil: "1K0959703AG", sw: [0xB1, b'4', b'0', b'1'], name: "J388   TUER-SG HL" }, vec![]),
@@ -992,7 +1001,10 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
                 }
                 return vec![r];
             }
-            Some(0x9A) if golf => return vec![[&[0x5A, 0x9A][..], GOLF6_GATEWAY_9A].concat()],
+            Some(0x9A) if golf => {
+                let gw = c.kwp.iter().find(|m| m.addr == 0x1F).map(|m| m.ident_9a.clone()).unwrap_or_default();
+                return vec![[&[0x5A, 0x9A][..], &gw].concat()];
+            }
             _ => {}
         }
     }
@@ -1032,6 +1044,59 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
             m.stell = None;
             vec![vec![0x72, 0xB8, 0x01, 0x02, 0x62]]
         }
+        // Anpassung (Routine 0x0103) wie am Golf-6-Bordnetz mitgeschnitten
+        0x31 if req.get(1..4) == Some(&[0xB8, 0x01, 0x03]) && !m.anpass.is_empty() => {
+            m.anpass_lauf = Some(None);
+            vec![vec![0x71, 0xB8, 0x01, 0x03]]
+        }
+        0x31 if req.get(1..4) == Some(&[0xB9, 0x01, 0x03]) && m.anpass_lauf.is_some() => {
+            let kanal = req.get(4).copied().unwrap_or(0);
+            if m.anpass.iter().any(|(k, _)| *k == kanal) {
+                m.anpass_lauf = Some(Some(kanal));
+                vec![vec![0x71, 0xB9, 0x01, 0x03]]
+            } else {
+                vec![vec![0x7F, 0x31, 0x31]]
+            }
+        }
+        0x31 if req.get(1..4) == Some(&[0xBA, 0x01, 0x03]) => match m.anpass_lauf {
+            Some(Some(kanal)) => {
+                let [hi, lo] = m.anpass.iter().find(|(k, _)| *k == kanal).map(|(_, w)| *w).unwrap_or(0).to_be_bytes();
+                vec![vec![0x71, 0xBA, 0x01, 0x03, 0x82, 0x03, hi, lo, 0x07, 0x25, hi, lo, 0x25, 0x00, 0x6B, 0xFF]]
+            }
+            Some(None) => vec![vec![0x71, 0xBA, 0x01, 0x03, 0x81]],
+            None => vec![vec![0x7F, 0x31, 0x22]],
+        },
+        // Anpassung speichern — Aufbau ist eine Annahme (siehe kwp::anpass_schreib_anfrage)
+        0x31 if req.get(1..4) == Some(&[0xBB, 0x01, 0x03]) => match (m.anpass_lauf, req.get(4..7)) {
+            (Some(Some(kanal)), Some(&[k, hi, lo])) if k == kanal => {
+                if let Some(e) = m.anpass.iter_mut().find(|(x, _)| *x == kanal) {
+                    e.1 = u16::from_be_bytes([hi, lo]);
+                }
+                vec![vec![0x71, 0xBB, 0x01, 0x03]]
+            }
+            _ => vec![vec![0x7F, 0x31, 0x22]],
+        },
+        0x32 if req.get(1..4) == Some(&[0xB8, 0x01, 0x03]) => {
+            m.anpass_lauf = None;
+            vec![vec![0x72, 0xB8, 0x01, 0x03, 0x62]]
+        }
+        // Kurzcodierung schreiben: 3B 9A [Betriebsnummer 6][Software 4] 03 [Codierung 3]
+        0x3B if req.get(1) == Some(&0x9A) && matches!(m.ident, Ident::Vag { .. }) && m.ident_9a.is_empty() => match req.get(12..16) {
+            Some(&[0x03, a, b, c]) if req.len() == 16 => {
+                m.kurzcodierung = u32::from_be_bytes([0, a, b, c]);
+                vec![vec![0x7B, 0x9A]]
+            }
+            _ => vec![vec![0x7F, 0x3B, 0x31]],
+        },
+        // Gateway: lange Codierung schreiben (0x3B 0x9A), gleicher Aufbau wie gelesen
+        0x3B if req.get(1) == Some(&0x9A) && !m.ident_9a.is_empty() => {
+            if req.len() - 2 != m.ident_9a.len() || req[2..12] != m.ident_9a[..10] {
+                vec![vec![0x7F, 0x3B, 0x31]]
+            } else {
+                m.ident_9a = req[2..].to_vec();
+                vec![vec![0x7B, 0x9A]]
+            }
+        }
         0x1A if req.get(1) == Some(&0x90) && !golf => {
             let vin = if manip && addr == 0x17 { "WVWZZZ1KZ8W123456" } else { VIN };
             vec![[vec![0x5A, 0x90], vin.as_bytes().to_vec()].concat()]
@@ -1050,7 +1115,8 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
                     r.extend_from_slice(format!("{teil:<12}").as_bytes());
                     r.extend_from_slice(sw);
                     // Nicht-Text-Bytes wie am MED17 gelesen
-                    r.extend_from_slice(&[0x03, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42]);
+                    let [_, c1, c2, c3] = m.kurzcodierung.to_be_bytes();
+                    r.extend_from_slice(&[0x03, c1, c2, c3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42]);
                     r.extend_from_slice(format!("{name:<20}").as_bytes());
                     r
                 }
@@ -1326,6 +1392,53 @@ mod tests {
         let l = gw.unwrap();
         let v: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
         assert_eq!((v.len(), v.iter().filter(|e| e.fehler()).count()), (20, 4));
+    }
+
+    #[test]
+    fn tp20_schreiben_in_der_simulation() {
+        use crate::kwp::{self, Schreiben};
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_modell(Modell::Golf6);
+        let be = crate::transport::Backend::Demo;
+        let r = (|| -> anyhow::Result<()> {
+            // Anpassung: Bordnetz Kanal 23 von 10 auf 15, andere Kanäle bleiben
+            assert_eq!(kwp::anpassung_schreiben(&be, 0x20, 23, 15)?, Schreiben::Geschrieben { alt: vec![0, 10], danach: vec![0, 15] });
+            let l = kwp::anpassung_lesen(&be, 0x20, &[17, 99])?;
+            assert_eq!(l[0].as_ref().map(|a| a.wert), Ok(1));
+            assert!(l[1].is_err());
+            // Lange Codierung 0x0600 (ABS): ein Bit ändern
+            let mut ch = kwp::open_session(&be, 0x03)?;
+            let (art, alt) = kwp::langcodierung_lesen(&mut kwp::Kwp::new(&mut ch)).unwrap();
+            drop(ch);
+            assert_eq!(art, kwp::LangArt::Kennung0600);
+            let mut neu = alt.clone();
+            neu[0] ^= 0x01;
+            assert_eq!(kwp::langcodierung_schreiben(&be, 0x03, &neu)?, Schreiben::Geschrieben { alt: alt.clone(), danach: neu });
+            assert!(kwp::langcodierung_schreiben(&be, 0x03, &alt[1..]).is_err(), "falsche Länge");
+            // Gateway (0x9A): Codierung tauschen, Betriebsnummer bleibt
+            let gw_alt = kwp::codierung_9a(GOLF6_GATEWAY_9A).unwrap();
+            let mut gw_neu = gw_alt.clone();
+            gw_neu[9] = 0x03;
+            assert_eq!(kwp::langcodierung_schreiben(&be, 0x1F, &gw_neu)?, Schreiben::Geschrieben { alt: gw_alt, danach: gw_neu });
+            // Kurzcodierung Tür
+            assert_eq!(kwp::kurzcodierung_schreiben(&be, 0x22, 180)?, (72, 180));
+            Ok(())
+        })();
+        set_modell(Modell::Demo);
+        r.unwrap();
+    }
+
+    #[test]
+    fn langcodierung_anfragen() {
+        use crate::kwp::{langcodierung_anfrage, LangArt};
+        assert_eq!(langcodierung_anfrage(&LangArt::Kennung0600, &[1, 2], &[1, 3]).unwrap(), vec![0x2E, 0x06, 0x00, 1, 3]);
+        let mut neu = crate::kwp::codierung_9a(GOLF6_GATEWAY_9A).unwrap();
+        neu[0] = 0xE8;
+        let a = langcodierung_anfrage(&LangArt::Gateway9A(GOLF6_GATEWAY_9A.to_vec()), &neu, &neu).unwrap();
+        assert_eq!(&a[..2], &[0x3B, 0x9A]);
+        assert_eq!(&a[2..14], &GOLF6_GATEWAY_9A[..12]);
+        assert_eq!(a[14], 0xE8);
+        assert_eq!(a.last(), Some(&0xFF));
     }
 
     #[test]

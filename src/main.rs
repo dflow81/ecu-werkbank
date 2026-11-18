@@ -190,7 +190,7 @@ enum Command {
     /// TP 2.0 (ältere CAN-Fahrzeuge): Kanal öffnen und KWP2000-Payload senden
     Tp20 {
         /// TP-2.0-Logikadresse, z. B. 0x01 (Motor), 0x03 (ABS); Golf 6: 0x1F Gateway, 0x20 Bordnetz (Auto-Scan zeigt alle)
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
         /// KWP2000-Request als Hex, z. B. "1a9b" (ReadEcuId) oder "1800ff00"; mehrere im selben Kanal mit ";" trennen, z. B. "1089;2101"
         #[arg(long)]
@@ -199,17 +199,17 @@ enum Command {
     /// TP 2.0/KWP2000: Steuergerät identifizieren (Teilenummer, Bezeichnung)
     KwpIdent {
         /// TP-2.0-Logikadresse, z. B. 0x01 (Motor)
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
     },
     /// TP 2.0/KWP2000: Fehlerspeicher lesen
     KwpDtc {
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
     },
     /// TP 2.0/KWP2000: Fehlerspeicher löschen
     KwpClear {
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
     },
     /// TP 2.0/KWP2000: Messwertblöcke lesen (einmal oder fortlaufend, optional CSV)
@@ -340,7 +340,7 @@ enum Command {
     },
     /// Alle Messwertblöcke eines TP-2.0-Steuergeräts abfragen (nur lesen) und je Feld die Art zeigen
     KwpBlockscan {
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
         #[arg(long, default_value_t = 1)]
         von: u8,
@@ -349,14 +349,14 @@ enum Command {
     },
     /// Namensvorschläge für Messwertblöcke prüfen (nur wo die Formel am Auto passt); --ja übernimmt sie
     MesswertVorschlaege {
-        #[arg(long, value_parser = parse_hex, default_value = "1")]
+        #[arg(long, value_parser = parse_tp20, default_value = "1")]
         address: u16,
         /// Passende Vorschläge als eigene Messwert-Texte speichern (vorhandene bleiben)
         #[arg(long)]
         ja: bool,
     },
     KwpBlock {
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
         /// Blocknummer(n), dezimal, z. B. 1 oder 1,2,3
         #[arg(long, value_delimiter = ',', required = true)]
@@ -470,7 +470,7 @@ enum Command {
     /// Stellglieddiagnose (Funktion 03) eines TP-2.0-Steuergeräts — steuert Bauteile wirklich an! Enter = nächstes Bauteil, q = Ende
     KwpStellglied {
         /// TP-2.0-Adresse (hex), z. B. 22 = Tür Fahrer beim Golf 6
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
         /// Wirklich starten (ohne: nur Hinweis)
         #[arg(long)]
@@ -479,7 +479,7 @@ enum Command {
     /// Kurzcodierung eines TP-2.0-Steuergeräts schreiben (z. B. Tür, Motor) — mit Kontrolle; ohne --ja nur Vorschau
     KwpCodierungSchreiben {
         /// TP-2.0-Adresse (hex), z. B. 22 = Tür Fahrer beim Golf 6
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
         /// Neue Kurzcodierung (dezimal, wie im Werkstattgerät), z. B. 180
         #[arg(long)]
@@ -487,10 +487,35 @@ enum Command {
         #[arg(long)]
         ja: bool,
     },
+    /// Lange Codierung eines TP-2.0-Steuergeräts (z. B. Bordnetz, ABS, Gateway) lesen; mit --neu schreiben (ohne --ja nur Vorschau)
+    KwpLangcodierung {
+        /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
+        #[arg(long, value_parser = parse_tp20)]
+        address: u16,
+        /// Neue Codierung als Hex (gleiche Länge), z. B. 0F000A004108
+        #[arg(long)]
+        neu: Option<String>,
+        #[arg(long)]
+        ja: bool,
+    },
+    /// Einen Anpassungskanal (Funktion 10) eines TP-2.0-Steuergeräts ändern — mit Kontrolle; ohne --ja nur Vorschau
+    KwpAnpassungSchreiben {
+        /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
+        #[arg(long, value_parser = parse_tp20)]
+        address: u16,
+        /// Kanalnummer dezimal wie im Werkstattgerät, z. B. 23
+        #[arg(long)]
+        kanal: u8,
+        /// Neuer Wert (dezimal)
+        #[arg(long)]
+        wert: u16,
+        #[arg(long)]
+        ja: bool,
+    },
     /// Anpassungskanäle (Funktion 10) eines TP-2.0-Steuergeräts lesen (nur lesen)
     KwpAnpassung {
         /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         address: u16,
         /// Kanalnummer(n) dezimal wie im Werkstattgerät, z. B. 1,3,17,23
         #[arg(long, value_delimiter = ',', required = true)]
@@ -864,7 +889,7 @@ enum Command {
     /// Eigene Texte zu Messwertblöcken: ohne --text alle zeigen; mit --text setzen ("" löscht)
     Messwerttext {
         /// Steuergerät (TP-2.0-Adresse, hex), z. B. 01 = Motor
-        #[arg(long, value_parser = parse_hex)]
+        #[arg(long, value_parser = parse_tp20)]
         adresse: Option<u16>,
         #[arg(long)]
         block: Option<u8>,
@@ -1027,6 +1052,11 @@ fn parse_can_id(s: &str) -> Result<u16, String> {
     u16::from_str_radix(h, 16).map_err(|e| tr!("ungültige Zahl '{s}': {e}", s = s, e = e))
 }
 
+/// TP-2.0-Adresse: immer hexadezimal, mit oder ohne „0x“ (20 = 0x20 = Bordnetz).
+fn parse_tp20(s: &str) -> Result<u16, String> {
+    parse_can_id(s).and_then(|a| if a <= 0xFF { Ok(a) } else { Err(tr!("TP-2.0-Adresse '{s}' zu groß (00–FF)", s = s)) })
+}
+
 fn parse_hex(s: &str) -> Result<u16, String> {
     let s = s.trim();
     let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
@@ -1127,6 +1157,8 @@ fn main() -> Result<()> {
         Command::KwpStellglied { address, ja } => kwp_stellglied(&be, address as u8, ja),
         Command::KwpCodierungSchreiben { address, wert, ja } => kwp_codierung_schreiben(&be, address as u8, wert, ja),
         Command::KwpAnpassung { address, kanal } => kwp_anpassung(&be, address as u8, &kanal),
+        Command::KwpLangcodierung { address, neu, ja } => kwp_langcodierung(&be, address as u8, neu.as_deref(), ja),
+        Command::KwpAnpassungSchreiben { address, kanal, wert, ja } => kwp_anpassung_schreiben(&be, address as u8, kanal, wert, ja),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())
         }
@@ -4082,3 +4114,74 @@ fn kwp_codierung_schreiben(be: &Backend, address: u8, wert: u32, ja: bool) -> Re
     }
     Ok(())
 }
+
+/// Ergebnis eines TP-2.0-Schreibversuchs ausgeben.
+fn schreib_ergebnis(r: &kwp::Schreiben, zeige: impl Fn(&[u8]) -> String) {
+    match r {
+        kwp::Schreiben::Probelauf { anfrage, alt } => {
+            println!("{}", tr!("PROBELAUF — nichts gesendet. Dieser Schreibweg ist am Auto noch nicht mit einem Mitschnitt bestätigt."));
+            println!("{}", tr!("Jetzt: {a}", a = zeige(alt)));
+            println!("{}", tr!("Würde senden: {a}", a = ecu_werkbank::backup::hex(anfrage)));
+        }
+        kwp::Schreiben::Geschrieben { alt, danach } => {
+            println!("{}", tr!("Geschrieben. Vorher {a}, danach gelesen {b}.", a = zeige(alt), b = zeige(danach)));
+        }
+    }
+}
+
+fn kwp_langcodierung(be: &Backend, address: u8, neu: Option<&str>, ja: bool) -> Result<()> {
+    let mut ch = kwp_open(be, address)?;
+    let (art, alt) = kwp::langcodierung_lesen(&mut Kwp::new(&mut ch)).ok_or_else(|| anyhow::anyhow!(tr!("Steuergerät {a} hat keine lange Codierung.", a = format!("{address:02X}"))))?;
+    drop(ch);
+    let wo = match art {
+        kwp::LangArt::Kennung0600 => "0x0600",
+        kwp::LangArt::Gateway9A(_) => "0x9A",
+    };
+    println!("{}", tr!("Steuergerät {a}: lange Codierung ({b} Byte, {c})", a = format!("{address:02X}"), b = alt.len(), c = wo));
+    println!("  {}", ecu_werkbank::backup::hex(&alt));
+    let Some(neu) = neu else { return Ok(()) };
+    let neu: Vec<u8> = parse_hex_bytes(neu)?;
+    let anfrage = kwp::langcodierung_anfrage(&art, &alt, &neu)?;
+    for (i, (a, b)) in alt.iter().zip(&neu).enumerate() {
+        for bit in 0..8 {
+            if (a ^ b) >> bit & 1 == 1 {
+                println!("  {}", tr!("Byte {i} Bit {bit}: {a} → {b}", i = i, bit = bit, a = a >> bit & 1, b = b >> bit & 1));
+            }
+        }
+    }
+    if !ja {
+        println!("{}", tr!("Nichts geschrieben (Anfrage wäre {a}). Den alten Stand notieren, dann mit --ja schreiben.", a = ecu_werkbank::backup::hex(&anfrage)));
+        return Ok(());
+    }
+    let r = kwp::langcodierung_schreiben(be, address, &neu)?;
+    schreib_ergebnis(&r, ecu_werkbank::backup::hex);
+    if let kwp::Schreiben::Geschrieben { danach, .. } = &r {
+        if *danach != neu {
+            println!("{}", tr!("Achtung: danach gelesen ist nicht der neue Stand."));
+        }
+    }
+    Ok(())
+}
+
+fn kwp_anpassung_schreiben(be: &Backend, address: u8, kanal: u8, wert: u16, ja: bool) -> Result<()> {
+    let wert_text = |b: &[u8]| if b.len() == 2 { u16::from_be_bytes([b[0], b[1]]).to_string() } else { ecu_werkbank::backup::hex(b) };
+    if !ja {
+        let alt = match kwp::anpassung_lesen(be, address, &[kanal])?.pop() {
+            Some(Ok(a)) => a.wert,
+            Some(Err(e)) => anyhow::bail!(e),
+            None => anyhow::bail!(tr!("Kanal {a}: keine Antwort", a = kanal)),
+        };
+        println!("{}", tr!("Steuergerät {a}, Kanal {b}: jetzt {c}, neu {d}.", a = format!("{address:02X}"), b = format!("{kanal:03}"), c = alt, d = wert));
+        println!("{}", tr!("Nichts geschrieben. Den alten Wert notieren, dann mit --ja schreiben."));
+        return Ok(());
+    }
+    let r = kwp::anpassung_schreiben(be, address, kanal, wert)?;
+    schreib_ergebnis(&r, wert_text);
+    if let kwp::Schreiben::Geschrieben { danach, .. } = &r {
+        if *danach != wert.to_be_bytes() {
+            println!("{}", tr!("Achtung: danach gelesen ist nicht der neue Wert."));
+        }
+    }
+    Ok(())
+}
+

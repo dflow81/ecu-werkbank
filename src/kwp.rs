@@ -565,6 +565,89 @@ pub fn kurzcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu:
     Ok((alt, danach))
 }
 
+/// Lange Codierung über 0x0600 schreiben — am Auto mit einem Mitschnitt
+/// bestätigt? Solange `false`, macht [`langcodierung_schreiben`] am echten
+/// Auto nur einen Probelauf (zeigt die Anfrage, sendet nichts).
+/// Annahme: KWP 0x2E (WriteDataByCommonIdentifier) mit derselben Kennung,
+/// über die das Steuergerät die Codierung mit 0x22 liefert.
+pub const LANGCODIERUNG_GEPRUEFT: bool = false;
+/// Lange Codierung des Gateways (0x3B 0x9A) — siehe [`LANGCODIERUNG_GEPRUEFT`].
+/// Annahme: gleicher Aufbau wie die am Golf 6 mitgeschnittene Kurzcodierung
+/// (0x3B 0x9A [Betriebsnummer][Softwarestand][Codierblock]).
+pub const GATEWAY_CODIERUNG_GEPRUEFT: bool = false;
+/// Anpassung schreiben (Routine 0x0103) — siehe [`anpass_schreib_anfrage`].
+pub const ANPASSUNG_SCHREIBEN_GEPRUEFT: bool = false;
+
+/// Wo die lange Codierung eines TP-2.0-Steuergeräts steht.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LangArt {
+    /// 0x22/0x2E mit Kennung 0x0600 (Bordnetz, ABS, Einparkhilfe …)
+    Kennung0600,
+    /// Identifikation 0x9A wie beim Gateway (Rohdaten ohne SID/Option)
+    Gateway9A(Vec<u8>),
+}
+
+/// Ergebnis eines Schreibversuchs.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Schreiben {
+    /// Am echten Auto noch nicht freigegeben: diese Anfrage (mit SID) würde gesendet.
+    Probelauf { anfrage: Vec<u8>, alt: Vec<u8> },
+    /// Geschrieben; danach neu gelesen.
+    Geschrieben { alt: Vec<u8>, danach: Vec<u8> },
+}
+
+/// Darf ein ungeprüfter Schreibweg wirklich senden? Nur in der Simulation.
+pub fn darf_senden(be: &crate::transport::Backend, geprueft: bool) -> bool {
+    geprueft || matches!(be, crate::transport::Backend::Demo)
+}
+
+/// Anfrage (mit SID) für eine neue lange Codierung. Die Länge muss gleich bleiben.
+pub fn langcodierung_anfrage(art: &LangArt, alt: &[u8], neu: &[u8]) -> Result<Vec<u8>> {
+    if neu.len() != alt.len() {
+        bail!(tr!("Codierung muss {a} Byte lang sein (eingegeben: {b}).", a = alt.len(), b = neu.len()));
+    }
+    Ok(match art {
+        LangArt::Kennung0600 => [&[0x2E][..], &CODING_DID.to_be_bytes(), neu].concat(),
+        LangArt::Gateway9A(raw) => {
+            // Rohdaten übernehmen, nur die Codierbytes tauschen (Betriebsnummer,
+            // Softwarestand, Längenbyte und Abschluss bleiben)
+            let mut d = raw.clone();
+            d.get_mut(12..12 + neu.len()).ok_or_else(|| anyhow::anyhow!(tr!("Gateway-Codierung unvollständig gelesen")))?.copy_from_slice(neu);
+            [&[0x3B, ECU_ID_9A][..], &d].concat()
+        }
+    })
+}
+
+/// Lange Codierung und ihren Ort lesen.
+pub fn langcodierung_lesen(k: &mut Kwp) -> Option<(LangArt, Vec<u8>)> {
+    if let Some(c) = codierung_22(k) {
+        return Some((LangArt::Kennung0600, c));
+    }
+    let raw = k.read_ecu_id(ECU_ID_9A).ok()?;
+    let c = codierung_9a(&raw)?;
+    Some((LangArt::Gateway9A(raw), c))
+}
+
+/// Lange Codierung eines TP-2.0-Steuergeräts schreiben und zur Kontrolle neu
+/// lesen. Am echten Auto nur ein Probelauf, solange der Weg nicht mit einem
+/// Mitschnitt bestätigt ist ([`LANGCODIERUNG_GEPRUEFT`]).
+pub fn langcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu: &[u8]) -> Result<Schreiben> {
+    let mut ch = open_session(be, adresse)?;
+    let mut k = Kwp::new(&mut ch);
+    let (art, alt) = langcodierung_lesen(&mut k).ok_or_else(|| anyhow::anyhow!(tr!("Steuergerät {a} hat keine lange Codierung.", a = format!("{adresse:02X}"))))?;
+    let anfrage = langcodierung_anfrage(&art, &alt, neu)?;
+    let geprueft = match art {
+        LangArt::Kennung0600 => LANGCODIERUNG_GEPRUEFT,
+        LangArt::Gateway9A(_) => GATEWAY_CODIERUNG_GEPRUEFT,
+    };
+    if !darf_senden(be, geprueft) {
+        return Ok(Schreiben::Probelauf { anfrage, alt });
+    }
+    k.request(anfrage[0], &anfrage[1..])?;
+    let danach = langcodierung_lesen(&mut k).map(|(_, c)| c).ok_or_else(|| anyhow::anyhow!(tr!("Kontrolle: Codierung danach nicht lesbar.")))?;
+    Ok(Schreiben::Geschrieben { alt, danach })
+}
+
 /// Lange Codierung über 0x22 0x0600; None, wenn das Steuergerät sie nicht kennt.
 pub fn codierung_22(k: &mut Kwp) -> Option<Vec<u8>> {
     k.request(0x22, &CODING_DID.to_be_bytes()).ok().and_then(|r| r.get(2..).map(<[u8]>::to_vec)).filter(|d| !d.is_empty())
@@ -848,6 +931,48 @@ pub fn anpassung_lesen(be: &crate::transport::Backend, adresse: u8, kanaele: &[u
         }));
     }
     Ok(out)
+}
+
+/// Anfrage (mit SID) zum Speichern eines Anpassungswerts, nachdem der Kanal
+/// mit 31 B9 01 03 gewählt ist. ANNAHME, noch nicht mitgeschnitten: Routine
+/// 0x0103 mit Unterfunktion 0xBB, Kanal und Wert. Erst nach einem Mitschnitt
+/// (Werkstattgerät schreibt einen Kanal) hier anpassen und
+/// [`ANPASSUNG_SCHREIBEN_GEPRUEFT`] auf `true` setzen.
+pub fn anpass_schreib_anfrage(kanal: u8, wert: u16) -> Vec<u8> {
+    let [hi, lo] = wert.to_be_bytes();
+    vec![0x31, 0xBB, 0x01, 0x03, kanal, hi, lo]
+}
+
+/// Einen Anpassungskanal ändern: Kanal lesen, neuen Wert speichern, zur
+/// Kontrolle neu lesen. Am echten Auto nur ein Probelauf (liest den alten
+/// Wert, zeigt die Anfrage), solange [`ANPASSUNG_SCHREIBEN_GEPRUEFT`] `false` ist.
+pub fn anpassung_schreiben(be: &crate::transport::Backend, adresse: u8, kanal: u8, wert: u16) -> Result<Schreiben> {
+    let alt = match anpassung_lesen(be, adresse, &[kanal])?.pop() {
+        Some(Ok(a)) => a.wert,
+        Some(Err(e)) => bail!(e),
+        None => bail!(tr!("Kanal {a}: keine Antwort", a = kanal)),
+    };
+    let anfrage = anpass_schreib_anfrage(kanal, wert);
+    if !darf_senden(be, ANPASSUNG_SCHREIBEN_GEPRUEFT) {
+        return Ok(Schreiben::Probelauf { anfrage, alt: alt.to_be_bytes().to_vec() });
+    }
+    {
+        let mut ch = open_session(be, adresse)?;
+        let mut k = Kwp::new(&mut ch);
+        let r = (|| -> Result<()> {
+            k.request(0x31, &[0xB8, 0x01, 0x03])?;
+            k.request(0x31, &[0xB9, 0x01, 0x03, kanal])?;
+            k.request(anfrage[0], &anfrage[1..])?;
+            Ok(())
+        })();
+        let _ = k.request(0x32, &[0xB8, 0x01, 0x03]);
+        r?;
+    }
+    let danach = match anpassung_lesen(be, adresse, &[kanal])?.pop() {
+        Some(Ok(a)) => a.wert,
+        _ => bail!(tr!("Kontrolle: Kanal {a} danach nicht lesbar.", a = kanal)),
+    };
+    Ok(Schreiben::Geschrieben { alt: alt.to_be_bytes().to_vec(), danach: danach.to_be_bytes().to_vec() })
 }
 
 /// Ein Schritt der Stellglieddiagnose (Funktion 03), wie das Steuergerät ihn meldet.

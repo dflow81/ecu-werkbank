@@ -347,13 +347,16 @@ impl App {
                             self.code_kurz = None;
                             self.code_bytes = b.iter().map(|x| format!("{x:02X}")).collect();
                             self.status = tr!("Codierung gelesen: {a}", a = ecu_werkbank::backup::hex(&b));
-                            self.code_quelle = Some((tr!("Stand im Steuergerät"), b));
+                            self.code_quelle = Some((tr!("Stand im Steuergerät"), b.clone()));
+                            self.code_read = Some(b);
+                            self.code_confirm = false;
                         }
                         Ok(kwp::TpCodierung::Kurz { wert, .. }) => {
                             self.code_kurz = Some(wert);
                             self.code_kurz_neu = format!("{wert:07}");
                             self.code_kurz_ok = false;
                             self.code_quelle = None;
+                            self.code_read = None;
                             self.status = tr!("Kurzcodierung gelesen: {a}", a = format!("{wert:07}"));
                         }
                         Err(e) => self.status = tr!("Lesen: {e}", e = format!("{:#}", e)),
@@ -362,6 +365,7 @@ impl App {
                 if ui.small_button(tr!("UDS-Steuergerät eingeben")).clicked() {
                     self.code_tp20 = None;
                     self.code_quelle = None;
+                    self.code_read = None;
                 }
             });
             if let Some(alt) = self.code_kurz {
@@ -391,7 +395,10 @@ impl App {
                     ui.weak(tr!("Bitte eine Zahl mit höchstens 7 Stellen eingeben."));
                 }
             } else {
-                ui.weak(tr!("Lange Codierung (z. B. Bordnetz, ABS): lesen und Bits benennen — Schreiben noch nicht eingebaut. Kurzcodierung (Türen, Motor, Lenksäule): lesen und schreiben."));
+                ui.weak(tr!("Lange Codierung (z. B. Bordnetz, ABS, Gateway) und Kurzcodierung (Türen, Motor, Lenksäule): lesen und schreiben."));
+                if !kwp::darf_senden(&self.backend(), kwp::LANGCODIERUNG_GEPRUEFT) {
+                    ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Lange Codierung schreiben ist am Auto noch nicht bestätigt: es läuft erst ein Probelauf (zeigt, was gesendet würde, sendet nichts)."));
+                }
             }
         } else {
             ui.horizontal_wrapped(|ui| {
@@ -425,7 +432,7 @@ impl App {
             });
         }
 
-        // Schreiben: nur gegen einen frisch gelesenen Stand (nur UDS)
+        // Schreiben: nur gegen einen frisch gelesenen Stand (UDS oder TP 2.0 lang)
         if let (Some(old), Ok(new)) = (self.code_read.clone(), parse_hex_bytes(&self.code_bytes)) {
             if old != new {
                 ui.horizontal_wrapped(|ui| {
@@ -435,7 +442,48 @@ impl App {
                             self.code_confirm = true;
                         }
                     } else {
-                        if ui.button(tr!("Ja, schreiben")).clicked() {
+                        if self.code_tp20.is_some() && ui.button(tr!("Ja, schreiben")).clicked() {
+                            self.code_confirm = false;
+                            let addr = self.code_tp20.unwrap_or_default();
+                            // alten Stand vorher in eine Codier-Sicherung
+                            let sicherung = ecu_werkbank::backup::CodingBackup {
+                                created: ecu_werkbank::report::now_local(),
+                                timestamp: ecu_werkbank::report::unix_now(),
+                                vin: None,
+                                transport: self.backend().describe(),
+                                vehicle: ecu_werkbank::vehicle::resolve(None, self.active_vehicle.as_deref()).map(|v| v.key).unwrap_or_default(),
+                                entries: vec![ecu_werkbank::backup::CodingEntry {
+                                    protocol: "TP 2.0".into(),
+                                    address: Some(u16::from(addr)),
+                                    name: String::new(),
+                                    tx: 0,
+                                    rx: 0,
+                                    did: Some(kwp::CODING_DID),
+                                    part: String::new(),
+                                    data_hex: ecu_werkbank::backup::hex(&old),
+                                    note: tr!("vor dem Schreiben der langen Codierung"),
+                                }],
+                            };
+                            let sichern = kwp::darf_senden(&self.backend(), kwp::LANGCODIERUNG_GEPRUEFT || kwp::GATEWAY_CODIERUNG_GEPRUEFT);
+                            let geschrieben = match if sichern { ecu_werkbank::backup::save(&sicherung).map(|_| ()) } else { Ok(()) } {
+                                Ok(_) => kwp::langcodierung_schreiben(&self.backend(), addr, &new),
+                                Err(e) => Err(e.context(tr!("Sicherung vorher fehlgeschlagen — nichts geschrieben"))),
+                            };
+                            self.status = match geschrieben {
+                                Ok(kwp::Schreiben::Probelauf { anfrage, .. }) => tr!("Probelauf — nichts gesendet (noch nicht am Auto bestätigt). Würde senden: {a}", a = ecu_werkbank::backup::hex(&anfrage)),
+                                Ok(kwp::Schreiben::Geschrieben { alt, danach }) => {
+                                    let t = if danach == new {
+                                        tr!("Codierung geschrieben und kontrolliert. Alter Stand: {a}", a = ecu_werkbank::backup::hex(&alt))
+                                    } else {
+                                        tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Stand: {c}", a = ecu_werkbank::backup::hex(&danach), b = ecu_werkbank::backup::hex(&new), c = ecu_werkbank::backup::hex(&alt))
+                                    };
+                                    self.code_read = Some(danach.clone());
+                                    self.code_quelle = Some((tr!("Stand im Steuergerät"), danach));
+                                    t
+                                }
+                                Err(e) => tr!("Schreiben fehlgeschlagen: {e}", e = format!("{:#}", e)),
+                            };
+                        } else if self.code_tp20.is_none() && ui.button(tr!("Ja, schreiben")).clicked() {
                             self.code_confirm = false;
                             let did = self.code_ecu.and_then(|a| self.db.coding_did(a)).unwrap_or(ecu_werkbank::backup::VAG_CODING_DID);
                             let (tx, rx) = (parse_hex(&self.code_tx).unwrap_or(0x7E0), parse_hex(&self.code_rx).unwrap_or(0x7E8));

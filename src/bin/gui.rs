@@ -714,6 +714,10 @@ struct App {
     an_kanaele: String,
     an_result: Vec<String>,
     an_zeigen: bool,
+    /// Anpassung schreiben: Kanal, neuer Wert, Bestätigung
+    an_kanal: String,
+    an_wert: String,
+    an_ok: bool,
     /// Benennen-Tabelle: nur Felder ohne Namen, Suchtext, Rohwerte ausblenden
     bn_nur_offen: bool,
     bn_suche: String,
@@ -841,6 +845,16 @@ impl eframe::App for App {
             "namen-scan" => {
                 self.bn_addr = "0x01".into();
                 self.bs_start(0x01);
+            }
+            "anpassung" => {
+                self.tp_addr = "0x20".into();
+                self.an_kanaele = "1,3,17,23".into();
+                self.an_zeigen = true;
+                self.an_kanal = "23".into();
+                self.an_wert = "15".into();
+                if let Ok(l) = ecu_werkbank::kwp::anpassung_lesen(&self.backend(), 0x20, &[1, 3, 17, 23]) {
+                    self.an_result = l.into_iter().map(|r| r.map(|k| tr!("Kanal {a}: Wert {b}", a = format!("{:03}", k.kanal), b = k.wert)).unwrap_or_else(|e| e)).collect();
+                }
             }
             "grundeinstellung" => {
                 self.tp_addr = "0x01".into();

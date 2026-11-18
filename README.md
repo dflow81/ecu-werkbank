@@ -871,7 +871,7 @@ Berichten zurück. Vorhandene Dateien bleiben, außer mit `--ueberschreiben`.
 UDS-Steuergeräte: Codierung über DID 0x0600 (oder `coding_did` aus dem Label),
 Zurückschreiben mit anschließender Kontrolle. Manche Steuergeräte verlangen
 dafür eine Zugriffsberechtigung — dann bricht es mit einer klaren Meldung ab.
-TP-2.0-Steuergeräte (nur lesen, Zurückschreiben noch nicht):
+TP-2.0-Steuergeräte:
 - **Neuere** (Golf 6: Bordnetz 20, ABS 03, Einparkhilfe 1D, Anhänger 43) verstehen
   Kennungen wie UDS — die lange Codierung kommt über Kennung 0x0600 und lässt sich
   im Codier-Helfer Bit für Bit ansehen und benennen. Am Golf 6 per Mitschnitt mit
@@ -881,9 +881,17 @@ TP-2.0-Steuergeräte (nur lesen, Zurückschreiben noch nicht):
   Identifikation (Byte 16–19 = `03 xx xx xx`); ECUWerkbank zeigt sie als Zahl
   (am Golf 6 mit einem Werkstatt-Diagnosegerät verglichen: stimmt). Andere (Gateway, Lenkung):
   Roh-Identifikation.
+- **Lange Codierung schreiben** (`kwp-langcodierung --neu … --ja`, GUI Seite „Codierung“):
+  Bordnetz/ABS über Kennung 0x0600, Gateway über die Identifikation 0x9A, danach
+  wird zur Kontrolle neu gelesen. **Noch nicht am Auto bestätigt:** am echten Auto
+  läuft deshalb erst ein Probelauf — er zeigt die Anfrage, sendet aber nichts. Das
+  wird freigeschaltet, sobald ein Mitschnitt die Anfrage bestätigt. Gleiches gilt für
+  `kwp-anpassung-schreiben` (Anpassungskanal ändern).
+- TP-2.0-Adressen gibt man immer hexadezimal an, mit oder ohne `0x` (`20` = `0x20` = Bordnetz).
 
 ```bash
 ./target/release/ecu-werkbank -i can0 kwp-coding --address 20     # Bordnetz lesen
+./target/release/ecu-werkbank -i can0 kwp-langcodierung --address 20 --neu <hex>   # Vorschau: welche Bits sich ändern
 ./target/release/ecu-werkbank codiertext --tx 220 --byte 0 --bit 2 --text "…"   # TP 2.0: 200 + Adresse
 ```
 
@@ -1169,12 +1177,12 @@ und Stand in ECUWerkbank:
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |
-| 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben noch nicht |
+| 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben `kwp-langcodierung --neu` (🟡 eingebaut, am Auto noch Probelauf) |
 | – | Codierungs-Sicherung / Vergleich / Zurückschreiben | ✅ `coding-*` | 🟡 nur sichern |
 | – | Fahrzeug-Historie, Vorher/Nachher | ✅ `history`, `compare` | ✅ |
 | 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste; Formeln am Golf 6 mit Werkstattgerät verglichen |
 | 09 | Einzelmesswerte | – | ❌ |
-| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben noch nicht |
+| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben `kwp-anpassung-schreiben` (🟡 eingebaut, am Auto noch Probelauf) |
 | 11/16 | Login / Zugriffsberechtigung | 🟡 `login` (SecurityAccess, Bytecode vom Nutzer) | 🟡 `login --kwp` (am Auto ungeprüft) |
 | 15 | Readiness | ✅ `obd-info` + Fahranleitung (GUI) | – |
 | 18 | Fehlerpfade (alle möglichen Fehlercodes) | ✅ `fehler-geruest`, GUI Werkzeuge → Fehlerbilder | ❌ Dienst gibt es bei KWP nicht |
@@ -1193,7 +1201,8 @@ und Stand in ECUWerkbank:
 Als Nächstes:
 - Restliche Messwert-Formeln (Bremsdruck, Beschleunigung, Drehrate …) mit einer
   gleichzeitigen Vergleichsmessung festnageln
-- KWP2000: Codierung und Anpassung schreiben, Grundeinstellung
+- KWP2000: lange Codierung und Anpassung schreiben am Golf 6 per Mitschnitt bestätigen
+  (bis dahin zeigt ECUWerkbank am echten Auto nur, was es senden würde), Grundeinstellung
 - Umgebungsbedingungen bei TP-2.0-Fehlern direkt lesen (Mitschnitt am Golf auswerten)
 - Gateway-Verbauliste bei neueren UDS-Gateways
 - Erkenntnisse vom Golf 6 an einem zweiten Auto (Polo 6R) prüfen

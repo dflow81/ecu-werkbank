@@ -464,8 +464,8 @@ impl App {
         ui.add_space(8.0);
         ui.separator();
         let offen = std::mem::take(&mut self.an_zeigen);
-        egui::CollapsingHeader::new(tr!("🔧 Anpassung (Funktion 10, nur lesen)")).id_source("anpassung-tp20").open(offen.then_some(true)).show(ui, |ui| {
-            ui.weak(tr!("Liest gespeicherte Anpassungswerte wie ein Werkstatt-Diagnosegerät (am Golf 6: Bordnetz, Einparkhilfe). Ältere Steuergeräte wie die Türen kennen das nicht. Schreiben ist nicht eingebaut."));
+        egui::CollapsingHeader::new(tr!("🔧 Anpassung (Funktion 10)")).id_source("anpassung-tp20").open(offen.then_some(true)).show(ui, |ui| {
+            ui.weak(tr!("Liest gespeicherte Anpassungswerte wie ein Werkstatt-Diagnosegerät (am Golf 6: Bordnetz, Einparkhilfe). Ältere Steuergeräte wie die Türen kennen das nicht."));
             let Some(addr) = parse_hex(&self.tp_addr).filter(|a| *a <= 0xFF).map(|a| a as u8) else {
                 ui.weak(tr!("Oben eine Steuergerät-Adresse eingeben."));
                 return;
@@ -492,6 +492,36 @@ impl App {
             });
             for z in &self.an_result {
                 ui.monospace(z);
+            }
+            ui.add_space(6.0);
+            ui.strong(tr!("Wert ändern"));
+            if !kwp::darf_senden(&self.backend(), kwp::ANPASSUNG_SCHREIBEN_GEPRUEFT) {
+                ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Am Auto noch nicht bestätigt: es läuft erst ein Probelauf (liest den alten Wert, zeigt, was gesendet würde, sendet nichts)."));
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr!("Kanal:"));
+                ui.add(egui::TextEdit::singleline(&mut self.an_kanal).desired_width(40.0).hint_text("23"));
+                ui.label(tr!("neuer Wert:"));
+                ui.add(egui::TextEdit::singleline(&mut self.an_wert).desired_width(70.0));
+            });
+            let kanal = self.an_kanal.trim().parse::<u8>().ok();
+            let wert = self.an_wert.trim().parse::<u16>().ok();
+            ui.checkbox(&mut self.an_ok, tr!("Alten Wert gelesen und notiert — neuen Wert speichern"));
+            if ui.add_enabled(self.an_ok && kanal.is_some() && wert.is_some() && self.backend().supports_tp20(), egui::Button::new(tr!("✍ Anpassung speichern"))).clicked() {
+                self.an_ok = false;
+                let (kanal, wert) = (kanal.unwrap_or_default(), wert.unwrap_or_default());
+                let w = |b: &[u8]| if b.len() == 2 { u16::from_be_bytes([b[0], b[1]]).to_string() } else { ecu_werkbank::backup::hex(b) };
+                let zeile = match kwp::anpassung_schreiben(&self.backend(), addr, kanal, wert) {
+                    Ok(kwp::Schreiben::Probelauf { anfrage, alt }) => tr!("Kanal {a}: Probelauf — nichts gesendet. Jetzt {b}, würde senden: {c}", a = format!("{kanal:03}"), b = w(&alt), c = ecu_werkbank::backup::hex(&anfrage)),
+                    Ok(kwp::Schreiben::Geschrieben { alt, danach }) if danach == wert.to_be_bytes() => tr!("Kanal {a}: gespeichert und kontrolliert, {b} → {c}", a = format!("{kanal:03}"), b = w(&alt), c = w(&danach)),
+                    Ok(kwp::Schreiben::Geschrieben { alt, danach }) => tr!("Kanal {a}: Achtung, danach gelesen {b} (alter Wert {c})", a = format!("{kanal:03}"), b = w(&danach), c = w(&alt)),
+                    Err(e) => format!("{e:#}"),
+                };
+                self.status = zeile.clone();
+                self.an_result.push(zeile);
+            }
+            if !self.an_wert.trim().is_empty() && wert.is_none() {
+                ui.weak(tr!("Bitte eine ganze Zahl von 0 bis 65535 eingeben."));
             }
         });
     }
