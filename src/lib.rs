@@ -18,6 +18,7 @@ pub mod control;
 pub mod connect;
 pub mod csvlog;
 pub mod datensicherung;
+pub mod auffaelligkeiten;
 pub mod canmonitor;
 pub mod db;
 pub mod dbc;

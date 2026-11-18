@@ -26,6 +26,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
 - **Firmenkopf für Berichte:** Werkstattname, Anschrift, Telefon in der Fußzeile jeder PDF-Seite
   (`firmenkopf --name …`, GUI Fahrzeug → Fahrzeuge & Wartung).
+- Mitschnitt-Prüfbericht mit **Auffälligkeiten**: Antwortzeiten, fehlende Antworten, gehäufte
+  Ablehnungen, Pausen (`decode-log`, GUI Mitschnitt).
 - **Dateien ins Fenster ziehen:** Mitschnitt (.log/.asc), DBC, Aufzeichnung (.csv) und Label (.toml)
   öffnen sich auf der passenden Seite.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.

@@ -8,7 +8,7 @@ impl App {
             Ok(text) => {
                 let d = ecu_werkbank::canlog::Decoder::decode_text(&text);
                 self.log_lines = d.lines().iter().map(|l| gui_text(l)).collect();
-                self.log_report = gui_text(&d.report.text());
+                self.log_report = gui_text(&d.pruefbericht());
                 self.log_path = path.display().to_string();
                 self.log_text = text;
                 self.learn.clear();
@@ -33,7 +33,7 @@ impl App {
                 self.learn.clear();
                 let d = ecu_werkbank::canlog::Decoder::decode_text(&self.log_text);
                 self.log_lines = d.lines().iter().map(|l| gui_text(l)).collect();
-                self.log_report = gui_text(&d.report.text());
+                self.log_report = gui_text(&d.pruefbericht());
                 self.log_path = tr!("(Beispiel)");
             }
             if !self.log_path.is_empty() {

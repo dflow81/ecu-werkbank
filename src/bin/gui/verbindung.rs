@@ -565,7 +565,7 @@ impl App {
                     self.log_cmp = Some((tr!("(Beispiel ohne Aktion)"), ecu_werkbank::canlog::demo_log()));
                     let d = ecu_werkbank::canlog::Decoder::decode_text(&self.log_text);
                     self.log_lines = d.lines().iter().map(|l| gui_text(l)).collect();
-                    self.log_report = gui_text(&d.report.text());
+                    self.log_report = gui_text(&d.pruefbericht());
                     self.log_path = tr!("(Beispiel mit Aktion)");
                 }
                 if ui.add_enabled(!self.log_text.is_empty(), egui::Button::new(tr!("💡 Vorschläge erzeugen"))).clicked() {

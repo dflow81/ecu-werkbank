@@ -243,6 +243,11 @@ impl Decoder {
         Self::default()
     }
 
+    /// Prüfbericht samt Auffälligkeiten (Antwortzeiten, Ablehnungen, fehlende Antworten).
+    pub fn pruefbericht(&self) -> String {
+        format!("{}{}", self.report.text(), crate::auffaelligkeiten::analysieren(&self.messages).text())
+    }
+
     /// Ganzen Logtext dekodieren.
     pub fn decode_text(text: &str) -> Self {
         let mut d = Self::new();
@@ -462,7 +467,7 @@ impl Decoder {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Proto {
     Kwp,
     Uds,

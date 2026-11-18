@@ -109,7 +109,7 @@ Hintergrund nicht dazwischenfunkt).
 | Diagnose | `report`, `check`, `autotest`, `swinfo`, `verbauliste`, `systems`, `profil`, `fremd`, `readiness`, `guide`, `dtc_db`, `fehlergeruest` |
 | Codierung/Anpassung | `backup`, `anpassung`, `codiertexte`, `kennungstexte`, `service`, `km`, `retrofit`, `kwp_grund`, `grundeinstellung` |
 | Messen | `motorcheck`, `rekorder`, `mixture`, `dpf`, `battery`, `control`, `csvlog`, `chart`, `limits`, `trend`, `favoriten`, `messwerttexte`, `mwvorschlag` |
-| CAN-Analyse | `canlog`, `learn`, `spurexport`, `dbc`, `canmonitor` |
+| CAN-Analyse | `canlog`, `auffaelligkeiten`, `learn`, `spurexport`, `dbc`, `canmonitor` |
 | Daten/Ablage | `db` (Fahrzeug-Datenbank, SQLite), `labels`, `vehicle`, `history`, `datensicherung`, `notfall`, `zip`, `kalender`, `kosten`, `akte`, `wissen`, `fehlertexte`, `vcds` (Import von Auto-Scan-Texten) |
 | Ausgabe | `pdf`, `web`, `i18n` |
 | Test | `sim`, `bin/mockecu` |

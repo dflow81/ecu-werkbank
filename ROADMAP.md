@@ -60,7 +60,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 41 | Python-Anbindung (pyo3 oder REST) | – | mittel | mittel | niedrig | niedrig | Vision | ⏳ |
 | 42 | Plugin-Schnittstelle für Fahrzeug-Funktionen | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |
 | 43 | Fehler-Erklärung lokal (eigene Wissensbasis + Wahrscheinlichkeit aus eigener Historie) | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 Fehlerbilder, Prüfpläne |
-| 44 | Mitschnitt-Analyse mit Auffälligkeiten (Zeitüberschreitungen, NRC-Häufung) | – | mittel | niedrig | niedrig | mittel | 1.0 | 🟡 Prüfbericht in `canlog` |
+| 44 | Mitschnitt-Analyse mit Auffälligkeiten (Zeitüberschreitungen, NRC-Häufung) | – | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `auffaelligkeiten.rs` im Prüfbericht (`decode-log`, GUI) |
 | 45 | MDF4-/BLF-Export | CANalyzer | niedrig | hoch | niedrig | niedrig | Vision | ⏳ |
 | 46 | Dashboard / frei belegbare Instrumente | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 Armaturen/Scope |
 | 47 | Drag-and-Drop (Mitschnitte, Sicherungen, DBC ins Fenster ziehen) | – | niedrig | niedrig | niedrig | mittel | 1.0 | ✅ `gui/ablegen.rs` (Sicherungen nur mit Hinweis) |

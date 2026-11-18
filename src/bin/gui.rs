@@ -791,7 +791,7 @@ impl eframe::App for App {
             "mitschnitt" => {
                 let d = ecu_werkbank::canlog::Decoder::decode_text(&ecu_werkbank::canlog::demo_log());
                 self.log_lines = d.lines().iter().map(|l| gui_text(l)).collect();
-                self.log_report = gui_text(&d.report.text());
+                self.log_report = gui_text(&d.pruefbericht());
                 self.log_path = tr!("(Beispiel)");
             }
             "editor" => self.ed_open(self.labels_dir.join("beispiel.toml")),

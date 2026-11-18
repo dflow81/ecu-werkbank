@@ -3275,7 +3275,7 @@ fn decode_log(file: &std::path::Path, report_only: bool) -> Result<()> {
         }
         println!();
     }
-    print!("{}", d.report.text());
+    print!("{}", d.pruefbericht());
     Ok(())
 }
 
