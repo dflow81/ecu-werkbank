@@ -304,6 +304,8 @@ pub fn default_dir() -> std::path::PathBuf {
 pub struct LabelDb {
     ecu_names: HashMap<u16, String>,
     dtcs: HashMap<String, String>,          // code -> description
+    /// Fehlertexte aus der Fahrzeug-Datenbank (nach den Labels, vor der eingebauten Liste)
+    db_dtcs: HashMap<String, String>,
     measuring: HashMap<(u16, u16), Measuring>, // (ecu, id) -> label
     adaptation: HashMap<(u16, u16), Adaptation>, // (ecu, channel) -> label
     coding: HashMap<u16, Vec<Coding>>,        // ecu -> coding bits
@@ -333,6 +335,7 @@ impl LabelDb {
         for (code, text) in crate::fehlertexte::alle() {
             db.dtcs.insert(code, text);
         }
+        db.db_dtcs = crate::db::fehlertexte_falls_vorhanden().into_iter().collect();
         Ok(db)
     }
 
@@ -453,6 +456,7 @@ impl LabelDb {
             .get(&code.to_uppercase())
             .map(|s| s.as_str())
             .filter(|s| !s.is_empty())
+            .or_else(|| self.db_dtcs.get(&code.to_uppercase()).map(|s| s.as_str()))
             .or_else(|| crate::dtc_db::lookup(code))
     }
 

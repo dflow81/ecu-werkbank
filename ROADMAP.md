@@ -75,7 +75,7 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 | # | Funktion | Vorbild | Nutzen | Aufwand | Risiko | Priorität | Stufe | Status |
 |---|---|---|---|---|---|---|---|---|
 | 51 | Datenbank-Kern: SQLite-Schema, Migrationen, Repository-Schicht | ODIS, ISTA+ | hoch | mittel | niedrig | hoch | 1.0 | ✅ `src/db/`, CLI `db` |
-| 52 | Vorhandenes Wissen übernehmen (Labels, `systems.rs`, Profile, Fehlertexte) | – | hoch | mittel | niedrig | hoch | 1.0 | 🟡 Adressliste + Labels; GUI/CLI lesen noch aus den alten Quellen |
+| 52 | Vorhandenes Wissen übernehmen (Labels, `systems.rs`, Profile, Fehlertexte) | – | hoch | mittel | niedrig | hoch | 1.0 | ✅ Adressliste + Labels übernehmbar; Fehlertexte aus der Datenbank überall sichtbar |
 | 53 | Quellen- und Lizenzverwaltung je Datensatz (`data_source`) | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `db quellen`, `db entfernen`, `darf_weitergeben` |
 | 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | 🟡 DBC und Label-TOML; JSON/CSV fehlen |
 | 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ⏳ |

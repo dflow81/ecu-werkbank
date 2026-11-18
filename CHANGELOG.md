@@ -20,7 +20,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - DBC-Signale aus dem CAN-Monitor mit 📈 in die **Live-Grafik** übernehmen (mit Grenzwert-Warnung und CSV).
 - **Fahrzeug-Datenbank** (SQLite, nur lokal): `ecu-werkbank db` mit `eingebaut`, `labels`, `dbc`,
   `quellen`, `entfernen`, `sichern`. Jede Quelle mit Lizenz; selbst gekaufte Herstellerdaten
-  (ODX/PDX, später) bleiben technisch gesperrt für die Weitergabe.
+  (ODX/PDX, später) bleiben technisch gesperrt für die Weitergabe. Fehlertexte aus der Datenbank
+  erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
 - **Dateien ins Fenster ziehen:** Mitschnitt (.log/.asc), DBC, Aufzeichnung (.csv) und Label (.toml)
   öffnen sich auf der passenden Seite.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.

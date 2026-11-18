@@ -146,6 +146,18 @@ impl Db {
         Ok(db)
     }
 
+    /// Bestehende Datenbank nur lesend öffnen (keine Migration, nichts wird angelegt).
+    /// Fehler, wenn die Datei fehlt oder eine andere Schema-Version hat.
+    pub fn nur_lesen(pfad: &Path) -> Result<Db> {
+        let con = Connection::open_with_flags(pfad, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        let db = Db { con };
+        let v = db.schema_version()?;
+        if v != SCHEMA_VERSION {
+            bail!(crate::tr!("Datenbank hat Schema-Version {a}, erwartet {b} — einmal „ecu-werkbank db“ ausführen.", a = v, b = SCHEMA_VERSION));
+        }
+        Ok(db)
+    }
+
     /// Leere Datenbank im Speicher (Tests, Probeläufe).
     pub fn im_speicher() -> Result<Db> {
         let db = Db { con: Connection::open_in_memory()? };
@@ -284,6 +296,13 @@ impl Db {
             .con
             .query_row("SELECT title FROM dtc WHERE dtc_code = ?1 ORDER BY source_id DESC LIMIT 1", params![code.trim().to_ascii_uppercase()], |r| r.get(0))
             .optional()?)
+    }
+
+    /// Alle Fehlertexte (Code → Text); bei mehreren Quellen gewinnt die neueste.
+    pub fn alle_fehlertexte(&self) -> Result<Vec<(String, String)>> {
+        let mut st = self.con.prepare("SELECT dtc_code, title FROM dtc WHERE title <> '' ORDER BY source_id")?;
+        let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(v)
     }
 
     /// Alle CAN-Botschaften eines Herstellers (oder ohne Hersteller) als DBC-Struktur,
@@ -440,6 +459,16 @@ impl Db {
         tx.commit()?;
         Ok(erg)
     }
+}
+
+/// Fehlertexte aus der Nutzer-Datenbank, falls es sie gibt (sonst leer).
+/// Öffnet nur lesend und legt nichts an — für den Programmstart.
+pub fn fehlertexte_falls_vorhanden() -> Vec<(String, String)> {
+    let p = standard_pfad();
+    if !p.exists() {
+        return Vec::new();
+    }
+    Db::nur_lesen(&p).and_then(|db| db.alle_fehlertexte()).unwrap_or_default()
 }
 
 /// Wertetexte als `0=aus;1=an` (ohne JSON-Abhängigkeit; `;` und `=` im Text werden ersetzt).
@@ -621,6 +650,28 @@ mod tests {
         let abfrage = t.elapsed() / 100;
         let groesse = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0) + std::fs::metadata(p.with_extension("sqlite-wal")).map(|m| m.len()).unwrap_or(0);
         println!("Import 1 Mio. Signale: {import:?}, Abfrage je Botschaft: {abfrage:?}, Größe: {} MB", groesse / 1_000_000);
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nur_lesen_und_fehlertexte() {
+        let dir = std::env::temp_dir().join(format!("ecuwb-nl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = dir.join("t.sqlite");
+        assert!(Db::nur_lesen(&p).is_err(), "fehlende Datei wird nicht angelegt");
+        assert!(!p.exists());
+        {
+            let db = Db::oeffnen(&p).unwrap();
+            let q = db.quelle_anlegen(QuellArt::User, "a", "", "", "").unwrap();
+            db.con.execute("INSERT INTO dtc (dtc_code, title, source_id) VALUES ('P0301', 'alt', ?1)", params![q]).unwrap();
+            let q2 = db.quelle_anlegen(QuellArt::User, "b", "", "", "").unwrap();
+            db.con.execute("INSERT INTO dtc (dtc_code, title, source_id) VALUES ('P0301', 'neu', ?1)", params![q2]).unwrap();
+        }
+        let db = Db::nur_lesen(&p).unwrap();
+        let m: std::collections::HashMap<_, _> = db.alle_fehlertexte().unwrap().into_iter().collect();
+        assert_eq!(m["P0301"], "neu", "neueste Quelle gewinnt");
+        assert!(db.quelle_anlegen(QuellArt::User, "x", "", "", "").is_err(), "nur lesen");
         drop(db);
         let _ = std::fs::remove_dir_all(&dir);
     }
