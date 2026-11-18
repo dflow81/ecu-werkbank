@@ -82,7 +82,7 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 | 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `db::api`; ODX/PDX-Zeilen werden nie ausgegeben |
 | 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | 🟡 `db odx`: Steuergeräte, Fehler, 0x22-DIDs; Skalierung/Codierung fehlen; mit echter Datei noch nicht geprüft |
 | 58 | PDX-Import (ODX-Paket als ZIP) | ODIS | mittel | mittel | mittel | niedrig | 2.0 | ✅ `db odx` erkennt PDX (gespeichert/deflate) |
-| 59 | Rollen und Rechte (lesen, codieren, flashen, verwalten) | ODIS | mittel | niedrig | niedrig | mittel | 2.0 | ⏳ wichtig erst mit REST |
+| 59 | ~~Rollen und Rechte (lesen, codieren, flashen, verwalten)~~ | ODIS | – | – | – | **gestrichen** | – | ❌ nicht gebraucht (Entscheidung 18.11.2026); Ein-Personen-Programm, Schnittstelle nur lesend |
 | 60 | Plugin-Ordner `plugins/` (Hersteller, Importer, Decoder, Codierer, Flasher, Analyse) | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |
 
 ## Stufen
@@ -100,7 +100,7 @@ Prüfstein: Polo 6R und Golf 6 komplett ohne Werkstattgerät diagnostizierbar.
 
 **Langfristige Vision:** 37 (Flashen), 41, 42, 45, 60.
 
-**Fahrzeug-Datenbank:** 51–54 zu 1.0, 55–59 zu 2.0, 60 Vision.
+**Fahrzeug-Datenbank:** 51–54 zu 1.0, 55–58 zu 2.0, 60 Vision (59 gestrichen).
 
 ## Plan: Herstellerdaten (Punkt 20)
 
@@ -182,7 +182,7 @@ erDiagram
 Tabellen wie im Vorschlag: `manufacturer`, `vehicle_model`, `vehicle_variant`, `ecu`,
 `did`, `dtc`, `uds_service`, `diagnostic_session`, `security_access`, `routine`,
 `coding_item`, `measurement`, `flash_container`, `can_message`, `can_signal`,
-`data_source`, `permission`. **Ergänzungen:**
+`data_source` (die Tabelle `permission` steht noch im Schema 1, wird aber nicht genutzt — Punkt 59 gestrichen). **Ergänzungen:**
 
 | Ergänzung | Warum |
 |---|---|
@@ -249,7 +249,6 @@ Nur `127.0.0.1`, Schlüssel wie bei der Handy-Anzeige, Version im Pfad:
 GET  /api/v1/hersteller                     GET  /api/v1/steuergeraete/{id}/dids
 GET  /api/v1/fahrzeuge?vin=WVW…             GET  /api/v1/steuergeraete/{id}/fehler/{code}
 GET  /api/v1/can/botschaften/{id}/signale   GET  /api/v1/quellen
-POST /api/v1/import   (nur Rolle „verwalten“, Datei + Quellenangabe)
 ```
 
 Die Schnittstelle schreibt nur in die Datenbank, nie ans Auto. Schreiben ans Auto
@@ -269,6 +268,6 @@ plugins/         manufacturers/  importers/  decoders/  coders/  flashers/  anal
 1. **D1 (51, 53):** Schema, Migrationen, Repository; Tests mit Speicher-Datenbank.
 2. **D2 (52):** Labels, `systems.rs`, Profile und Fehlertexte in die Datenbank; GUI und CLI lesen daraus, die alten Dateien bleiben als Import.
 3. **D3 (54, 55):** Importer DBC, JSON, CSV, TOML; Community-Ordner im Repo.
-4. **D4 (56, 59):** REST lesend, Rollen.
+4. **D4 (56):** REST lesend.
 5. **D5 (57, 58):** ODX/PDX-Import, zuerst nur DIDs und Fehler.
 6. **D6 (60):** Plugins; Flasher-Plugins erst, wenn „Plan: Flashing“ erfüllt ist.
