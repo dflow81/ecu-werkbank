@@ -227,11 +227,33 @@ impl App {
             if !werte.is_empty() {
                 ui.add_space(4.0);
                 ui.strong(tr!("Signale aus der DBC"));
+                let botschaft = dbc.botschaften.get(&e.id).map(|b| b.name.clone()).unwrap_or_default();
+                let mut neu = None;
                 for w in werte {
-                    ui.monospace(format!("{} = {}", w.signal, w.anzeige()));
+                    ui.horizontal(|ui| {
+                        let schon = self.scope_series.iter().any(|s| matches!(&s.kind, ChanKind::Can { id, signal } if *id == e.id && *signal == w.signal));
+                        if ui.add_enabled(!schon, egui::Button::new("📈").small()).on_hover_text(tr!("In die Live-Grafik übernehmen")).clicked() {
+                            neu = Some((w.signal.clone(), w.einheit.clone()));
+                        }
+                        ui.monospace(format!("{} = {}", w.signal, w.anzeige()));
+                    });
+                }
+                if let Some((signal, einheit)) = neu {
+                    let name = if botschaft.is_empty() { signal.clone() } else { format!("{botschaft}.{signal}") };
+                    self.scope_series.push(Series::new(&name, &einheit, ChanKind::Can { id: e.id, signal }));
+                    self.status = tr!("„{a}“ ist in der Live-Grafik. Dort „Start“ drücken; der CAN-Monitor muss weiterlaufen.", a = name);
                 }
             }
         }
+    }
+
+    /// Aktueller Stand des CAN-Monitors (None, wenn er nicht läuft).
+    pub(super) fn cm_momentaufnahme(&self) -> Option<Monitor> {
+        self.cm.lauf.as_ref().and_then(|l| l.monitor.lock().ok().map(|m| m.clone()))
+    }
+
+    pub(super) fn cm_dbc(&self) -> Option<&ecu_werkbank::dbc::Dbc> {
+        self.cm.dbc.as_ref().map(|(_, d)| d)
     }
 
     /// Eigene DBC-Datei für Namen und Signale laden.

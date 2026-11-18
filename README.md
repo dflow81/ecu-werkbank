@@ -1028,7 +1028,8 @@ selbst geändert hat (Zähler, Prüfsummen), wird danach ignoriert. Dann am Auto
 etwas betätigen, etwa den Blinker: Hervorgehoben werden nur noch die Bits, die
 sich dadurch ändern, und neue IDs (★). Mit **„Mitschnitt speichern“** landet
 alles als candump-Datei im Fahrzeugordner. Eine eigene DBC-Datei zeigt
-Botschaftsnamen und Signale. Geht mit SocketCAN-Adapter und im Demo-Fahrzeug
+Botschaftsnamen und Signale; mit 📈 kommt ein Signal als Kurve in die Live-Grafik
+(der Monitor muss dafür weiterlaufen). Geht mit SocketCAN-Adapter und im Demo-Fahrzeug
 (dort mit erfundenem Verkehr und einem Blinker zum Ausprobieren).
 
 Hinweis Golf 6: Am OBD-Stecker kommt durch das Gateway meist nur Diagnose-Verkehr an.

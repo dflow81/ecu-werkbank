@@ -810,10 +810,25 @@ impl eframe::App for App {
             "check" => self.start_check(),
             "diagnose" => self.run_mode06(),
             "verbindung" => self.verbindung_pruefen(),
-            "canmonitor" => {
+            t @ ("canmonitor" | "canmonitor-grafik") => {
                 if let Ok(l) = ecu_werkbank::canmonitor::Lauf::starten(ecu_werkbank::canmonitor::Quelle::Demo) {
                     l.demo_aktion.store(true, std::sync::atomic::Ordering::Relaxed);
                     self.cm_demo_start(l);
+                }
+                // Bildschirmfoto: eigene DBC (VAG_DBC) laden, Signale in die Live-Grafik
+                if let Ok(p) = std::env::var("VAG_DBC") {
+                    self.cm_dbc_laden(std::path::Path::new(&p));
+                }
+                if t == "canmonitor-grafik" {
+                    let signale: Vec<(u32, String, String, String)> = self
+                        .cm_dbc()
+                        .map(|d| d.botschaften.values().flat_map(|b| b.signale.iter().map(|s| (b.id, b.name.clone(), s.name.clone(), s.einheit.clone()))).collect())
+                        .unwrap_or_default();
+                    for (id, b, s, e) in signale {
+                        self.scope_series.push(Series::new(&format!("{b}.{s}"), &e, ChanKind::Can { id, signal: s }));
+                    }
+                    self.tab = Tab::Scope;
+                    self.scope_start_stop();
                 }
             }
             "kaufcheck" => {
@@ -1382,6 +1397,8 @@ enum ChanKind {
     Obd(u8),
     Kwp { addr: u8, block: u8, field: usize },
     Did { tx: u16, rx: u16, did: u16 },
+    /// DBC-Signal aus dem laufenden CAN-Monitor (nur zuhören)
+    Can { id: u32, signal: String },
     /// Aus einer CSV-Datei geladen (keine Live-Abfrage)
     File,
 }

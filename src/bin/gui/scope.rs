@@ -173,7 +173,7 @@ impl App {
                 ChanKind::Obd(pid) => self.db.sollwert("obd", None, u16::from(pid), None),
                 ChanKind::Kwp { addr, block, field } => self.db.sollwert("kwp", Some(u16::from(addr)), u16::from(block), Some(field as u8 + 1)),
                 ChanKind::Did { did, .. } => self.db.sollwert("uds", None, did, None),
-                ChanKind::File => None,
+                ChanKind::Can { .. } | ChanKind::File => None,
             };
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
@@ -187,6 +187,7 @@ impl App {
         self.scope_last = std::time::Instant::now();
         let t = self.scope_start.elapsed().as_secs_f64();
         let be = self.backend();
+        self.scope_can_signale(t);
 
         // Was gelesen werden soll — die Bus-Arbeit läuft danach im Hintergrund.
         let mut blocks: Vec<(u8, u8)> = self
@@ -255,6 +256,44 @@ impl App {
         });
     }
 
+    /// DBC-Signale aus dem laufenden CAN-Monitor eintragen (kein Bus-Zugriff:
+    /// der Monitor hört ohnehin mit).
+    fn scope_can_signale(&mut self, t: f64) {
+        if !self.scope_series.iter().any(|s| matches!(s.kind, ChanKind::Can { .. })) {
+            return;
+        }
+        let monitor = self.cm_momentaufnahme();
+        let dbc = self.cm_dbc();
+        // erst alle Werte bestimmen, dann eintragen (getrennte Ausleihe)
+        let werte: Vec<(usize, Result<f64, String>)> = self
+            .scope_series
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| {
+                let ChanKind::Can { id, signal } = &s.kind else { return None };
+                let r = match (&monitor, dbc) {
+                    (None, _) => Err(tr!("CAN-Monitor läuft nicht")),
+                    (_, None) => Err(tr!("keine DBC geladen")),
+                    (Some(m), Some(d)) => match m.eintraege().find(|e| e.id == *id) {
+                        Some(e) if m.zuletzt - e.letzte <= 2.0 => d.entschluesseln(*id, &e.daten).into_iter().find(|w| &w.signal == signal).map(|w| w.wert).ok_or_else(|| tr!("Signal nicht in der DBC")),
+                        _ => Err(tr!("Botschaft {a} kommt nicht", a = format!("{id:03X}"))),
+                    },
+                };
+                Some((i, r))
+            })
+            .collect();
+        for (i, r) in werte {
+            let s = &mut self.scope_series[i];
+            match r {
+                Ok(v) => {
+                    s.push(t, v);
+                    s.error = None;
+                }
+                Err(e) => s.error = Some(e),
+            }
+        }
+    }
+
     /// Ergebnisse eines Scope-Takts in die Kurven eintragen, dann CSV, Warnungen, Handy.
     fn scope_uebernehmen(
         &mut self,
@@ -300,7 +339,7 @@ impl App {
                         eintragen(s, r.clone());
                     }
                 }
-                ChanKind::File => {}
+                ChanKind::Can { .. } | ChanKind::File => {}
             }
         }
 
