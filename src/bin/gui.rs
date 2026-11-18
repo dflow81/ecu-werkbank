@@ -54,6 +54,8 @@ mod kern;
 mod hintergrund;
 #[path = "gui/canmonitor_tab.rs"]
 mod canmonitor_tab;
+#[path = "gui/ablegen.rs"]
+mod ablegen;
 #[path = "gui/reiter.rs"]
 mod reiter;
 #[path = "gui/scope.rs"]
@@ -775,6 +777,7 @@ struct App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.hintergrund_tick(ctx);
+        self.ablegen_tick(ctx);
         self.erkennung_tick(ctx);
         self.datensicherung_tick(ctx);
         match std::mem::take(&mut self.demo_autostart).as_str() {

@@ -107,15 +107,7 @@ impl App {
             platz(ui, 240.0);
             if ui.button(tr!("📂 DBC-Datei laden…")).on_hover_text(tr!("Eigene DBC-Datei: zeigt Botschaftsnamen und entschlüsselte Signale.")).clicked() {
                 if let Some(p) = rfd::FileDialog::new().add_filter("DBC", &["dbc"]).set_title(tr!("DBC-Datei wählen")).pick_file() {
-                    match std::fs::read(&p) {
-                        Ok(b) => {
-                            let d = ecu_werkbank::dbc::Dbc::lesen(&String::from_utf8_lossy(&b));
-                            self.status = tr!("DBC geladen: {a} Botschaften.", a = d.botschaften.len());
-                            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                            self.cm.dbc = Some((name, d));
-                        }
-                        Err(e) => self.status = tr!("DBC: {e}", e = e),
-                    }
+                    self.cm_dbc_laden(&p);
                 }
             }
             if let Some((name, _)) = &self.cm.dbc {
@@ -239,6 +231,19 @@ impl App {
                     ui.monospace(format!("{} = {}", w.signal, w.anzeige()));
                 }
             }
+        }
+    }
+
+    /// Eigene DBC-Datei für Namen und Signale laden.
+    pub(super) fn cm_dbc_laden(&mut self, p: &std::path::Path) {
+        match std::fs::read(p) {
+            Ok(b) => {
+                let d = ecu_werkbank::dbc::Dbc::lesen(&String::from_utf8_lossy(&b));
+                self.status = tr!("DBC geladen: {a} Botschaften.", a = d.botschaften.len());
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                self.cm.dbc = Some((name, d));
+            }
+            Err(e) => self.status = tr!("DBC: {e}", e = e),
         }
     }
 

@@ -1014,6 +1014,11 @@ Botschaftsnamen und Signale. Geht mit SocketCAN-Adapter und im Demo-Fahrzeug
 
 Hinweis Golf 6: Am OBD-Stecker kommt durch das Gateway meist nur Diagnose-Verkehr an.
 
+**Dateien ins Fenster ziehen:** Mitschnitt (`.log`, `.asc`), DBC, Aufzeichnung
+(`.csv`) und Label-Datei (`.toml`) einfach auf das Fenster ziehen. Sie öffnen
+sich auf der passenden Seite. Eine Datensicherung (`.zip`) wird dabei nicht
+zurückgespielt, das geht nur bewusst über „Fahrzeuge & Wartung“.
+
 ## Eigene Label-Dateien (dein Inhalt)
 
 Lege `*.toml`-Dateien in den Ordner `labels/` (eine pro Steuergerät). Format und

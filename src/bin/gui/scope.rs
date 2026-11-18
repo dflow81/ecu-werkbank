@@ -144,6 +144,23 @@ impl App {
         });
     }
 
+    /// Aufzeichnung (CSV) als Kurven laden (nicht während einer Messung).
+    pub(super) fn scope_csv_laden(&mut self, p: &std::path::Path) {
+        if self.scope_running {
+            self.status = tr!("Erst die laufende Messung stoppen.");
+            return;
+        }
+        match read_csv_series(p) {
+            Ok(v) => {
+                self.status = tr!("{a} Kurve(n) aus {b} geladen.", a = v.len(), b = p.display());
+                self.scope_series = v;
+                self.scope_file = Some(p.display().to_string());
+                self.scope_window = 0.0;
+            }
+            Err(e) => self.status = tr!("CSV laden: {e}", e = format!("{:#}", e)),
+        }
+    }
+
     pub(super) fn poll_scope(&mut self, ctx: &egui::Context) {
         self.trip_check(ctx);
         if !self.scope_running {
@@ -477,15 +494,7 @@ impl App {
             }
             if ui.add_enabled(!self.scope_running, egui::Button::new(tr!("📂 CSV laden…"))).clicked() {
                 if let Some(p) = rfd::FileDialog::new().add_filter("CSV", &["csv"]).pick_file() {
-                    match read_csv_series(&p) {
-                        Ok(v) => {
-                            self.status = tr!("{a} Kurve(n) aus {b} geladen.", a = v.len(), b = p.display());
-                            self.scope_series = v;
-                            self.scope_file = Some(p.display().to_string());
-                            self.scope_window = 0.0;
-                        }
-                        Err(e) => self.status = tr!("CSV laden: {e}", e = format!("{:#}", e)),
-                    }
+                    self.scope_csv_laden(&p);
                 }
             }
             let has_data = self.scope_series.iter().any(|s| !s.points.is_empty());

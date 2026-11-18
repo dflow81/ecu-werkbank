@@ -17,6 +17,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Codier-Helfer: **Rückgängig** und **Alles zurück**.
 - **Live-CAN-Monitor** (Werkzeuge → CAN-Monitor): alle IDs mit Daten, Rate und geänderten Bits,
   „Rauschen merken“ zum Finden von Signalen, Mitschnitt speichern, eigene DBC. Nur zuhören.
+- **Dateien ins Fenster ziehen:** Mitschnitt (.log/.asc), DBC, Aufzeichnung (.csv) und Label (.toml)
+  öffnen sich auf der passenden Seite.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.
 
 ### Geändert
