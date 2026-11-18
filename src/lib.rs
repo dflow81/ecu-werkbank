@@ -53,6 +53,7 @@ pub mod pdf;
 pub mod readiness;
 pub mod repair;
 pub mod replay;
+pub mod skript;
 pub mod spannung;
 pub mod report;
 pub mod profil;

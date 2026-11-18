@@ -56,6 +56,8 @@ mod hintergrund;
 mod canmonitor_tab;
 #[path = "gui/ablegen.rs"]
 mod ablegen;
+#[path = "gui/skript_tab.rs"]
+mod skript_tab;
 #[path = "gui/reiter.rs"]
 mod reiter;
 #[path = "gui/scope.rs"]
@@ -310,6 +312,7 @@ enum Tab {
     Sicherheit,
     Mitschnitt,
     CanMonitor,
+    Skripte,
     Historie,
     Sicherung,
     Namen,
@@ -769,6 +772,8 @@ struct App {
     bus: hintergrund::BusArbeiter,
     /// Live-CAN-Monitor (Seite „CAN-Monitor“)
     cm: canmonitor_tab::CanMonitorSeite,
+    /// Seite „Skripte“
+    sk: skript_tab::SkriptSeite,
     /// Firmenkopf für Berichte (beim ersten Anzeigen geladen)
     firmenkopf: Option<ecu_werkbank::firmenkopf::Firmenkopf>,
 
@@ -812,6 +817,7 @@ impl eframe::App for App {
             "check" => self.start_check(),
             "diagnose" => self.run_mode06(),
             "verbindung" => self.verbindung_pruefen(),
+            "skripte" => self.sk_demo_start(),
             t @ ("canmonitor" | "canmonitor-grafik") => {
                 if let Ok(l) = ecu_werkbank::canmonitor::Lauf::starten(ecu_werkbank::canmonitor::Quelle::Demo) {
                     l.demo_aktion.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -1780,6 +1786,7 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
     (trn!("🛠 Werkzeuge"), &[
         (Tab::Testlauf, trn!("Testlauf")),
         (Tab::CanMonitor, trn!("CAN-Monitor")),
+        (Tab::Skripte, trn!("Skripte")),
         (Tab::Mitschnitt, trn!("Mitschnitt & Lernhilfe")),
         (Tab::Namen, trn!("Eigene Namen")),
         (Tab::Editor, trn!("Label-Editor")),

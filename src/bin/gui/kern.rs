@@ -17,6 +17,7 @@ impl App {
             "obd" => (Tab::Obd, false),
             "mitschnitt" => (Tab::Mitschnitt, false),
             "canmonitor" | "canmonitor-grafik" => (Tab::CanMonitor, false),
+            "skripte" => (Tab::Skripte, false),
             "editor" => (Tab::Editor, false),
             "fahrzeuge" => (Tab::Fahrzeuge, false),
             "batterie" => (Tab::Batterie, false),
@@ -430,6 +431,7 @@ impl App {
             demo_autostart: tabsel.clone(),
             bus: Default::default(),
             cm: Default::default(),
+            sk: Default::default(),
             firmenkopf: None,
             status: startup_status,
         }

@@ -56,7 +56,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 37 | Flash-Ablauf (siehe Abschnitt Flashing) | ODIS, E-Sys, Xentry | hoch | hoch | **hoch** | niedrig | Vision | ⏳ |
 | 38 | Spannungsüberwachung während langer Abläufe | ODIS, ISTA+ | hoch | niedrig | niedrig | hoch | 1.0 | 🟡 Prüfung vor jedem Schreiben (`spannung.rs`, ≥ 12,0 V); laufende Überwachung kommt mit dem Flashen |
 | 39 | REST-Schnittstelle (lokal, mit Schlüssel) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `ecu-werkbank api` (Datenbank, nur lesen); Live-Daten vom Auto fehlen noch |
-| 40 | Skripte (Lua oder Rhai, eingebettet) | – | mittel | mittel | mittel | niedrig | 2.0 | ⏳ |
+| 40 | Skripte (Lua oder Rhai, eingebettet) | – | mittel | mittel | mittel | niedrig | 2.0 | ✅ Rhai: `skript`, GUI Werkzeuge → Skripte; nur lesende Funktionen |
 | 41 | Python-Anbindung (pyo3 oder REST) | – | mittel | mittel | niedrig | niedrig | Vision | 🟡 über REST, Beispiel `beispiele/api_abfrage.py` |
 | 42 | Plugin-Schnittstelle für Fahrzeug-Funktionen | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |
 | 43 | Fehler-Erklärung lokal (eigene Wissensbasis + Wahrscheinlichkeit aus eigener Historie) | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 Fehlerbilder, Prüfpläne |

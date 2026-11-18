@@ -998,6 +998,17 @@ GUI: Reiter **„Mitschnitt“**.
 `dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
 Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
 
+### Skripte (Rhai)
+
+```bash
+./target/release/ecu-werkbank -t golf6 skript beispiele/messwerte.rhai
+```
+
+Eigene Abläufe als kleines Programm: `obd(pid)`, `obd_vin()`, `uds_lesen(tx, did)`,
+`uds_text(tx, did)`, `uds_fehler(tx)`, `kwp_block(adresse, block)`, `kwp_fehler(adresse)`,
+`fehlertext(code)`, `hex(liste)`, `warte(ms)`, `zeit()`, `print(…)`. In der GUI:
+Werkzeuge → Skripte (mit Stopp-Knopf). Skripte können **nur lesen**.
+
 ### REST-Schnittstelle (für eigene Skripte)
 
 ```bash

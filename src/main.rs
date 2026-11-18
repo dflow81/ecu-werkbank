@@ -956,6 +956,10 @@ enum Command {
         #[arg(long)]
         aufraeumen: bool,
     },
+    /// Skript (Rhai) ausführen — nur lesende Funktionen am Auto (siehe beispiele/*.rhai)
+    Skript {
+        datei: PathBuf,
+    },
     /// REST-Schnittstelle auf die Fahrzeug-Datenbank: nur lesen, nur dieser Rechner, mit Schlüssel (Strg-C beendet)
     Api {
         #[arg(long, default_value_t = 8787)]
@@ -1384,6 +1388,11 @@ fn main() -> Result<()> {
         Command::Fahrzeuge => fahrzeuge(),
         Command::Software => software(&be, &db, cli.fahrzeug.as_deref()),
         Command::Nachruestung { name, phase, notiz } => nachruestung(&be, &db, &name, &phase, &notiz, cli.fahrzeug.as_deref()),
+        Command::Skript { datei } => {
+            let code = std::fs::read_to_string(&datei).with_context(|| tr!("{a} lesen", a = datei.display()))?;
+            let stopp = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            ecu_werkbank::skript::ausfuehren(be.clone(), std::sync::Arc::new(db), &code, |s| println!("{s}"), stopp)
+        }
         Command::Api { port, datei } => {
             use ecu_werkbank::db;
             let pfad = datei.unwrap_or_else(db::standard_pfad);

@@ -24,6 +24,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
 - Datenpakete (TOML/JSON) und CSV übernehmen, alles Weitergebbare als Paket exportieren
   (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
+- **Skripte** (Rhai): eigene Abläufe mit Lese-Funktionen (OBD, UDS, TP 2.0, Fehler), `skript datei.rhai`
+  oder Werkzeuge → Skripte; Beispiel `beispiele/messwerte.rhai`. Keine Schreibfunktionen.
 - `db odx --datei … --hersteller …`: ODX/PDX-Dateien (rechtmäßig erworben) übernehmen — Steuergeräte,
   Fehlertexte, Lese-Kennungen. Bleiben immer lokal: kein Export, nicht über die Schnittstelle.
 - `ecu-werkbank api`: REST-Schnittstelle auf die Fahrzeug-Datenbank — nur lesen, nur dieser Rechner,

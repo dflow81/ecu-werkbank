@@ -20,6 +20,7 @@ rusqlite = { version = "0.43.0", features = ["bundled"] }
 serde_json = "1.0.154"
 roxmltree = "0.21.2"
 miniz_oxide = "0.8"
+rhai = { version = "1.27.0", features = ["sync"] }
 
 # Direkter CAN-Zugang nur unter Linux (Windows: siehe src/can.rs)
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -36,3 +37,8 @@ path = "src/bin/gui.rs"
 [[bin]]
 name = "mockecu"
 path = "src/bin/mockecu.rs"
+
+# Test-Builds kleiner halten (nur Zeilennummern statt voller Debug-Infos);
+# der Build-Ordner war auf 12 GB gewachsen. Fehlermeldungen zeigen weiter Datei:Zeile.
+[profile.dev]
+debug = "line-tables-only"
