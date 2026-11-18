@@ -2,6 +2,8 @@
 //! Seite zeigt (Browser auf dem Handy öffnen, gleiche WLAN).
 //!
 //! Nur lesend, keine Steuerung. Läuft in einem eigenen Thread, bis `stop`.
+//! Die Adresse enthält einen zufälligen Schlüssel (`/<schlüssel>/`): wer ihn
+//! nicht kennt (andere Geräte im WLAN), bekommt nur „404“.
 
 use crate::tr;
 use anyhow::{Context, Result};
@@ -86,7 +88,7 @@ h1{font-size:16px;font-weight:600;margin:12px 16px;color:#9cf}
 #s{font-size:11px;color:#666;margin:0 16px 16px}
 </style></head><body><h1 id="h">ECUWerkbank</h1><div id="alarm"></div><div id="g"></div><div id="s">verbinde…</div>
 <script>
-async function tick(){try{const r=await fetch('/api',{cache:'no-store'});const d=await r.json();
+async function tick(){try{const r=await fetch('api',{cache:'no-store'});const d=await r.json();
 document.getElementById('h').textContent=d.title||'ecu-werkbank';
 const a=document.getElementById('alarm');a.style.display=d.alarm?'block':'none';a.textContent=d.alarm;
 document.getElementById('g').innerHTML=d.tiles.map(t=>`<div class="t ${t.state}"><div class="n">${t.name}</div><div class="v">${t.value===null?'—':t.value.toLocaleString('de-DE')}<span class="u">${t.unit}</span></div></div>`).join('');
@@ -101,6 +103,8 @@ pub fn serve(port: u16, data: Shared) -> Result<Server> {
     let port = listener.local_addr()?.port();
     let stop = Arc::new(AtomicBool::new(false));
     let s2 = stop.clone();
+    let schluessel = zufall_schluessel();
+    let pfad = format!("/{schluessel}/");
     std::thread::spawn(move || {
         while !s2.load(Ordering::SeqCst) {
             match listener.accept() {
@@ -120,14 +124,14 @@ pub fn serve(port: u16, data: Shared) -> Result<Server> {
                     }
                     let req = String::from_utf8_lossy(&buf);
                     let path = req.split_whitespace().nth(1).unwrap_or("/");
-                    let (ctype, body) = if path.starts_with("/api") {
-                        ("application/json", json(&data.lock().unwrap()))
-                    } else {
-                        ("text/html; charset=utf-8", PAGE.to_string())
+                    let (status, ctype, body) = match path.strip_prefix(pfad.as_str()) {
+                        Some(r) if r.starts_with("api") => ("200 OK", "application/json", json(&data.lock().unwrap_or_else(|e| e.into_inner()))),
+                        Some(_) => ("200 OK", "text/html; charset=utf-8", PAGE.to_string()),
+                        None => ("404 Not Found", "text/plain", "404".to_string()),
                     };
                     let _ = write!(
                         sock,
-                        "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
+                        "HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
                         body.len()
                     );
                 }
@@ -135,7 +139,16 @@ pub fn serve(port: u16, data: Shared) -> Result<Server> {
             }
         }
     });
-    Ok(Server { url: crate::platzhalter!("http://{a}:{port}/", a = local_ip(), port = port), stop })
+    Ok(Server { url: crate::platzhalter!("http://{a}:{port}/{s}/", a = local_ip(), port = port, s = schluessel), stop })
+}
+
+/// Zufälliger Schlüssel (16 Hex-Zeichen) aus dem Zufall des Betriebssystems
+/// (über die zufällig gesetzten Startwerte von `RandomState`).
+fn zufall_schluessel() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    format!("{:016x}", h.finish())
 }
 
 #[cfg(test)]
@@ -150,7 +163,9 @@ mod tests {
             alarm: String::new(),
         }));
         let srv = serve(0, data).unwrap();
-        let port: u16 = srv.url.rsplit(':').next().unwrap().trim_end_matches('/').parse().unwrap();
+        let hinten = srv.url.rsplit(':').next().unwrap();
+        let (port, schluessel) = hinten.trim_end_matches('/').split_once('/').unwrap();
+        let port: u16 = port.parse().unwrap();
         let get = |p: &str| {
             let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
             write!(s, "GET {p} HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
@@ -158,8 +173,10 @@ mod tests {
             s.read_to_string(&mut out).unwrap();
             out
         };
-        assert!(get("/").contains("ECUWerkbank live"));
-        let j = get("/api");
+        assert!(get("/").contains("404"), "ohne Schlüssel nichts");
+        assert!(get("/api").contains("404"));
+        assert!(get(&format!("/{schluessel}/")).contains("ECUWerkbank live"));
+        let j = get(&format!("/{schluessel}/api"));
         assert!(j.contains("\"value\":812.5") && j.contains("\"title\":\"B XY 123\""), "{j}");
         srv.stop();
     }
