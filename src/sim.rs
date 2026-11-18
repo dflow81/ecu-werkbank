@@ -848,6 +848,7 @@ pub fn uds_response(tx: u16, req: &[u8]) -> Option<Vec<u8>> {
         // --- UDS ---
         0x10 => vec![0x50, arg(1), 0x00, 0x32, 0x01, 0xF4],
         0x3E => vec![0x7E, 0x00],
+        0x11 => vec![0x51, arg(1)],
         0x14 => {
             m.dtcs.clear();
             vec![0x54]

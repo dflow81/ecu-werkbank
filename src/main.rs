@@ -187,6 +187,47 @@ enum Command {
         #[arg(long, value_parser = parse_hex)]
         rx: u16,
     },
+    /// CAN-Mitschnitt (candump) umwandeln: .pcap für Wireshark, .asc für Vector-/SavvyCAN-Werkzeuge
+    LogExport {
+        /// Mitschnitt im candump-Format
+        #[arg(long)]
+        log: PathBuf,
+        /// Zieldatei, Endung bestimmt das Format (.pcap oder .asc)
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// CAN-Mitschnitt mit einer eigenen DBC-Datei entschlüsseln (Signale im Klartext)
+    DbcDecode {
+        #[arg(long)]
+        dbc: PathBuf,
+        #[arg(long)]
+        log: PathBuf,
+        /// Nur Signale, deren Name diesen Text enthält
+        #[arg(long)]
+        nur: Option<String>,
+    },
+    /// Anzahl der gespeicherten Fehler (UDS 0x19 0x01, nur lesen)
+    DtcAnzahl {
+        #[arg(long, value_parser = parse_hex)]
+        tx: u16,
+        #[arg(long, value_parser = parse_hex)]
+        rx: u16,
+        /// Statusmaske, Standard 0x08 = bestätigt/gespeichert
+        #[arg(long, value_parser = parse_hex, default_value = "0x08")]
+        maske: u16,
+    },
+    /// Steuergerät neu starten (UDS ECUReset 0x11) — nur am stehenden Auto, Zündung an; ohne --ja nur Hinweis
+    EcuReset {
+        #[arg(long, value_parser = parse_hex)]
+        tx: u16,
+        #[arg(long, value_parser = parse_hex)]
+        rx: u16,
+        /// 1 = hart (wie Strom weg), 2 = Zündung aus/an, 3 = weich (Software)
+        #[arg(long, default_value_t = 1)]
+        art: u8,
+        #[arg(long)]
+        ja: bool,
+    },
     /// TP 2.0 (ältere CAN-Fahrzeuge): Kanal öffnen und KWP2000-Payload senden
     Tp20 {
         /// TP-2.0-Logikadresse, z. B. 0x01 (Motor), 0x03 (ABS); Golf 6: 0x1F Gateway, 0x20 Bordnetz (Auto-Scan zeigt alle)
@@ -1101,6 +1142,34 @@ fn main() -> Result<()> {
         Command::Dtc { tx, rx, mask } => read_dtc(&be, tx, rx, mask as u8, &db),
         Command::Tp20 { address, request } => tp20_send(&be, address as u8, &request),
         Command::Clear { tx, rx } => clear_dtc(&be, tx, rx),
+        Command::LogExport { log, out } => {
+            let format = ecu_werkbank::spurexport::Format::aus_pfad(&out).context(tr!("Zieldatei braucht die Endung .pcap oder .asc"))?;
+            let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
+            let n = ecu_werkbank::spurexport::frames(&text).len();
+            std::fs::write(&out, ecu_werkbank::spurexport::umwandeln(&text, format))?;
+            println!("{}", tr!("{n} Frames geschrieben: {a}", n = n, a = out.display()));
+            Ok(())
+        }
+        Command::DbcDecode { dbc, log, nur } => {
+            let d = ecu_werkbank::dbc::Dbc::lesen(&std::fs::read_to_string(&dbc).with_context(|| tr!("DBC lesen: {a}", a = dbc.display()))?);
+            let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
+            println!("{}", tr!("{n} Botschaften in der DBC", n = d.botschaften.len()));
+            for f in ecu_werkbank::spurexport::frames(&text) {
+                let w: Vec<String> = d.entschluesseln(f.id, &f.data).iter().filter(|w| nur.as_ref().is_none_or(|n| w.signal.contains(n.as_str()))).map(|w| w.anzeige()).collect();
+                if !w.is_empty() {
+                    let name = d.botschaften.get(&f.id).map(|b| b.name.as_str()).unwrap_or("");
+                    println!("{:>14.3}  {:>8X} {name}: {}", f.t.unwrap_or(0.0), f.id, w.join(", "));
+                }
+            }
+            Ok(())
+        }
+        Command::DtcAnzahl { tx, rx, maske } => {
+            let tp = be.open(tx, rx)?;
+            let n = Uds::new(&*tp).dtc_anzahl(maske as u8)?;
+            println!("{}", tr!("{n} Fehler (Statusmaske {a})", n = n, a = format!("{maske:#04x}")));
+            Ok(())
+        }
+        Command::EcuReset { tx, rx, art, ja } => ecu_reset(&be, tx, rx, art, ja),
         Command::KwpIdent { address } => kwp_ident(&be, address as u8),
         Command::KwpDtc { address } => kwp_dtc(&be, address as u8, &db),
         Command::KwpClear { address } => kwp_clear(&be, address as u8),
@@ -2244,6 +2313,23 @@ fn clear_dtc(be: &Backend, tx: u16, rx: u16) -> Result<()> {
     uds.diagnostic_session(0x01)?;
     uds.clear_dtcs()?;
     println!("{}", tr!("Fehlercodes gelöscht."));
+    Ok(())
+}
+
+fn ecu_reset(be: &Backend, tx: u16, rx: u16, art: u8, ja: bool) -> Result<()> {
+    let name = match art {
+        1 => tr!("hart"),
+        2 => tr!("Zündung aus/an"),
+        3 => tr!("weich"),
+        _ => anyhow::bail!(tr!("Reset-Art {a} gibt es nicht — nur 1, 2 oder 3.", a = art)),
+    };
+    if !ja {
+        println!("{}", tr!("Würde Steuergerät {a} neu starten ({b}). Nur am stehenden Auto — dann mit --ja.", a = format!("{tx:#05x}"), b = name));
+        return Ok(());
+    }
+    let tp = be.open(tx, rx)?;
+    Uds::new(&*tp).ecu_reset(art)?;
+    println!("{}", tr!("Steuergerät {a} startet neu ({b}).", a = format!("{tx:#05x}"), b = name));
     Ok(())
 }
 

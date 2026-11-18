@@ -1,8 +1,13 @@
 //! Minimal UDS (ISO 14229) client on top of ISO-TP.
 //!
-//! Covers the services needed to replicate the everyday VCDS workflow:
-//! session control, tester-present keep-alive, reading data identifiers,
-//! reading and clearing diagnostic trouble codes.
+//! Dienste (ISO 14229-1): 0x10 Sitzung, 0x11 ECUReset, 0x14 Fehler löschen,
+//! 0x19 Fehler lesen (01/02/04/06/0A), 0x22/0x2E Kennungen, 0x23 Speicher lesen,
+//! 0x27 SecurityAccess, 0x28 CommunicationControl, 0x2F Stellglied,
+//! 0x31 Routine, 0x34–0x37 Datenübertragung (Download/Upload), 0x3E
+//! TesterPresent, 0x85 ControlDTCSetting.
+//!
+//! Die Übertragungsdienste (0x34–0x37) sind Bausteine — einen Flash-Ablauf
+//! für echte Steuergeräte gibt es bewusst noch nicht (siehe ROADMAP.md).
 
 use crate::tr;
 use anyhow::{bail, Result};
@@ -17,8 +22,23 @@ pub const SID_SECURITY_ACCESS: u8 = 0x27;
 pub const SID_WRITE_DATA_BY_ID: u8 = 0x2E;
 pub const SID_IO_CONTROL: u8 = 0x2F;
 pub const SID_ROUTINE_CONTROL: u8 = 0x31;
-#[allow(dead_code)]
 pub const SID_TESTER_PRESENT: u8 = 0x3E;
+pub const SID_ECU_RESET: u8 = 0x11;
+pub const SID_READ_MEMORY_BY_ADDRESS: u8 = 0x23;
+pub const SID_COMMUNICATION_CONTROL: u8 = 0x28;
+pub const SID_REQUEST_DOWNLOAD: u8 = 0x34;
+pub const SID_REQUEST_UPLOAD: u8 = 0x35;
+pub const SID_TRANSFER_DATA: u8 = 0x36;
+pub const SID_REQUEST_TRANSFER_EXIT: u8 = 0x37;
+pub const SID_CONTROL_DTC_SETTING: u8 = 0x85;
+
+/// ECUReset-Arten (ISO 14229-1, 0x11).
+pub const RESET_HARD: u8 = 0x01;
+pub const RESET_KEY_OFF_ON: u8 = 0x02;
+pub const RESET_SOFT: u8 = 0x03;
+
+/// Höchstens so lange auf „Antwort folgt“ (NRC 0x78) warten.
+const MAX_WARTEN_78: std::time::Duration = std::time::Duration::from_secs(60);
 
 // Häufige Sessions
 pub const SESSION_DEFAULT: u8 = 0x01;
@@ -82,6 +102,7 @@ impl<'a> Uds<'a> {
         // nach kurzer Pause erneut senden (ISO 14229-1). Golf 6: RNS 310 nach dem Einschalten.
         let mut besetzt = 0;
         let mut fremd = 0;
+        let start = std::time::Instant::now();
 
         loop {
             let resp = self.tp.recv()?;
@@ -91,6 +112,9 @@ impl<'a> Uds<'a> {
             if resp[0] == NEGATIVE_RESPONSE {
                 let (req_sid, nrc) = (resp.get(1).copied(), resp.get(2).copied());
                 if nrc == Some(NRC_RESPONSE_PENDING) {
+                    if start.elapsed() > MAX_WARTEN_78 {
+                        bail!(tr!("Steuergerät meldet seit {a} s „Antwort folgt“ — abgebrochen", a = MAX_WARTEN_78.as_secs()));
+                    }
                     continue; // ECU asks us to wait; read the next frame
                 }
                 if nrc == Some(NRC_BUSY_REPEAT) && req_sid == Some(sid) && besetzt < 5 {
@@ -245,6 +269,74 @@ impl<'a> Uds<'a> {
         Ok(r.get(5..).map(<[u8]>::to_vec).unwrap_or_default())
     }
 
+    /// ReadDTCInformation 0x01 (reportNumberOfDTCByStatusMask): Anzahl der
+    /// Fehler mit passendem Status, ohne die Liste zu holen.
+    pub fn dtc_anzahl(&self, status_mask: u8) -> Result<u16> {
+        let r = self.request(SID_READ_DTC, &[0x01, status_mask])?;
+        // [01][Verfügbarkeitsmaske][Format][Anzahl hi lo]
+        match r.get(3..5) {
+            Some(&[hi, lo]) => Ok(u16::from_be_bytes([hi, lo])),
+            _ => bail!(tr!("Antwort auf 0x19 0x01 zu kurz")),
+        }
+    }
+
+    /// ReadDTCInformation 0x06 (reportDTCExtDataRecordByDTCNumber): erweiterte
+    /// Daten eines Fehlers (bei VW u. a. Häufigkeit, Verlernzähler). Rohdaten
+    /// nach [06][DTC 3][Status].
+    pub fn read_ext_data(&self, dtc: u32, record: u8) -> Result<Vec<u8>> {
+        let r = self.request(SID_READ_DTC, &[0x06, (dtc >> 16) as u8, (dtc >> 8) as u8, dtc as u8, record])?;
+        Ok(r.get(5..).map(<[u8]>::to_vec).unwrap_or_default())
+    }
+
+    /// ECUReset (0x11). Startet das Steuergerät neu — nur am stehenden Auto.
+    pub fn ecu_reset(&self, art: u8) -> Result<()> {
+        self.request(SID_ECU_RESET, &[art]).map(|_| ())
+    }
+
+    /// CommunicationControl (0x28): `steuerung` 0x00 = alles an, 0x03 = alles
+    /// aus; `art` 0x01 normale Botschaften, 0x03 normale + Netzwerkmanagement.
+    pub fn communication_control(&self, steuerung: u8, art: u8) -> Result<()> {
+        self.request(SID_COMMUNICATION_CONTROL, &[steuerung, art]).map(|_| ())
+    }
+
+    /// ControlDTCSetting (0x85): 0x01 = Fehler speichern an, 0x02 = aus.
+    pub fn dtc_speichern(&self, an: bool) -> Result<()> {
+        self.request(SID_CONTROL_DTC_SETTING, &[if an { 0x01 } else { 0x02 }]).map(|_| ())
+    }
+
+    /// ReadMemoryByAddress (0x23). Nur lesen.
+    pub fn read_memory(&self, adresse: u32, laenge: u16) -> Result<Vec<u8>> {
+        let mut d = vec![0x24]; // 2 Byte Länge, 4 Byte Adresse
+        d.extend_from_slice(&adresse.to_be_bytes());
+        d.extend_from_slice(&laenge.to_be_bytes());
+        self.request(SID_READ_MEMORY_BY_ADDRESS, &d)
+    }
+
+    /// RequestDownload (0x34, zum Steuergerät) bzw. RequestUpload (0x35, vom
+    /// Steuergerät). Gibt die höchste Blocklänge für TransferData zurück
+    /// (inklusive SID und Blockzähler, wie in ISO 14229-1).
+    pub fn request_transfer(&self, download: bool, adresse: u32, laenge: u32, format: u8) -> Result<usize> {
+        let mut d = vec![format, 0x44]; // 4 Byte Länge, 4 Byte Adresse
+        d.extend_from_slice(&adresse.to_be_bytes());
+        d.extend_from_slice(&laenge.to_be_bytes());
+        let r = self.request(if download { SID_REQUEST_DOWNLOAD } else { SID_REQUEST_UPLOAD }, &d)?;
+        max_block_laenge(&r)
+    }
+
+    /// TransferData (0x36): ein Block mit Zähler (1, 2 … 255, 0, 1 …).
+    pub fn transfer_data(&self, zaehler: u8, daten: &[u8]) -> Result<Vec<u8>> {
+        let r = self.request(SID_TRANSFER_DATA, &[&[zaehler][..], daten].concat())?;
+        if r.first() != Some(&zaehler) {
+            bail!(tr!("TransferData: falscher Blockzähler in der Antwort"));
+        }
+        Ok(r[1..].to_vec())
+    }
+
+    /// RequestTransferExit (0x37).
+    pub fn transfer_exit(&self) -> Result<Vec<u8>> {
+        self.request(SID_REQUEST_TRANSFER_EXIT, &[])
+    }
+
     /// ClearDiagnosticInformation for all groups (0xFFFFFF).
     pub fn clear_dtcs(&self) -> Result<()> {
         self.request(SID_CLEAR_DTC, &[0xFF, 0xFF, 0xFF]).map(|_| ())
@@ -304,19 +396,57 @@ impl Dtc {
     }
 }
 
-fn nrc_name(nrc: u8) -> &'static str {
+/// Antwort auf RequestDownload/-Upload (ohne SID): [lengthFormat][maxNumberOfBlockLength].
+pub fn max_block_laenge(r: &[u8]) -> Result<usize> {
+    let n = usize::from(r.first().copied().unwrap_or(0) >> 4);
+    match r.get(1..1 + n) {
+        Some(b) if (1..=4).contains(&n) => Ok(b.iter().fold(0usize, |a, x| a << 8 | usize::from(*x))),
+        _ => bail!(tr!("Antwort auf RequestDownload/-Upload unvollständig")),
+    }
+}
+
+pub fn nrc_name(nrc: u8) -> &'static str {
     match nrc {
         0x10 => "generalReject",
         0x11 => "serviceNotSupported",
         0x12 => "subFunctionNotSupported",
         0x13 => "incorrectMessageLengthOrInvalidFormat",
+        0x14 => "responseTooLong",
         0x21 => "busyRepeatRequest (Steuergerät besetzt)",
         0x22 => "conditionsNotCorrect",
+        0x24 => "requestSequenceError",
+        0x25 => "noResponseFromSubnetComponent",
+        0x26 => "failurePreventsExecutionOfRequestedAction",
         0x31 => "requestOutOfRange",
         0x33 => "securityAccessDenied",
         0x35 => "invalidKey",
+        0x36 => "exceedNumberOfAttempts",
+        0x37 => "requiredTimeDelayNotExpired",
+        0x70 => "uploadDownloadNotAccepted",
+        0x71 => "transferDataSuspended",
+        0x72 => "generalProgrammingFailure",
+        0x73 => "wrongBlockSequenceCounter",
         0x78 => "requestCorrectlyReceived-ResponsePending",
+        0x7E => "subFunctionNotSupportedInActiveSession",
         0x7F => "serviceNotSupportedInActiveSession",
+        0x81 => "rpmTooHigh",
+        0x82 => "rpmTooLow",
+        0x83 => "engineIsRunning",
+        0x84 => "engineIsNotRunning",
+        0x85 => "engineRunTimeTooLow",
+        0x86 => "temperatureTooHigh",
+        0x87 => "temperatureTooLow",
+        0x88 => "vehicleSpeedTooHigh",
+        0x89 => "vehicleSpeedTooLow",
+        0x8A => "throttle/PedalTooHigh",
+        0x8B => "throttle/PedalTooLow",
+        0x8C => "transmissionRangeNotInNeutral",
+        0x8D => "transmissionRangeNotInGear",
+        0x8F => "brakeSwitch(es)NotClosed",
+        0x90 => "shifterLeverNotInPark",
+        0x91 => "torqueConverterClutchLocked",
+        0x92 => "voltageTooHigh",
+        0x93 => "voltageTooLow",
         _ => "siehe ISO 14229-1 Tabelle",
     }
 }
@@ -446,5 +576,69 @@ mod tests_routine {
         assert!(routine_sub_pruefen(0).is_err());
         assert!(routine_sub_pruefen(4).is_err());
         assert!(routine_sub_pruefen(0x102).is_err());
+    }
+}
+
+#[cfg(test)]
+mod dienst_tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+
+    /// Prüf-Transport: merkt sich die Anfragen, liefert vorgegebene Antworten.
+    struct Skript {
+        gesendet: RefCell<Vec<Vec<u8>>>,
+        antworten: RefCell<VecDeque<Vec<u8>>>,
+    }
+
+    impl Skript {
+        fn neu(antworten: &[&[u8]]) -> Self {
+            Skript { gesendet: RefCell::new(Vec::new()), antworten: RefCell::new(antworten.iter().map(|a| a.to_vec()).collect()) }
+        }
+    }
+
+    impl Transport for Skript {
+        fn send(&self, data: &[u8]) -> Result<()> {
+            self.gesendet.borrow_mut().push(data.to_vec());
+            Ok(())
+        }
+        fn recv(&self) -> Result<Vec<u8>> {
+            self.antworten.borrow_mut().pop_front().ok_or_else(|| anyhow::anyhow!("Timeout"))
+        }
+    }
+
+    #[test]
+    fn reset_kommunikation_dtc_setting() {
+        let t = Skript::neu(&[&[0x51, 0x01], &[0x68, 0x03], &[0xC5, 0x02]]);
+        let u = Uds::new(&t);
+        u.ecu_reset(RESET_HARD).unwrap();
+        u.communication_control(0x03, 0x01).unwrap();
+        u.dtc_speichern(false).unwrap();
+        assert_eq!(*t.gesendet.borrow(), vec![vec![0x11, 0x01], vec![0x28, 0x03, 0x01], vec![0x85, 0x02]]);
+    }
+
+    #[test]
+    fn download_ablauf() {
+        // 0x78 zwischendurch, maxNumberOfBlockLength 0x0402 (2 Byte)
+        let t = Skript::neu(&[&[0x7F, 0x34, 0x78], &[0x74, 0x20, 0x04, 0x02], &[0x76, 0x01], &[0x76, 0x02], &[0x77]]);
+        let u = Uds::new(&t);
+        assert_eq!(u.request_transfer(true, 0x0001_0000, 0x200, 0x00).unwrap(), 0x402);
+        u.transfer_data(1, &[0xAA, 0xBB]).unwrap();
+        assert!(u.transfer_data(1, &[0xCC]).is_err(), "Zähler 2 statt 1 in der Antwort");
+        u.transfer_exit().unwrap();
+        let g = t.gesendet.borrow();
+        assert_eq!(g[0], vec![0x34, 0x00, 0x44, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00]);
+        assert_eq!(g[1], vec![0x36, 0x01, 0xAA, 0xBB]);
+    }
+
+    #[test]
+    fn dtc_anzahl_und_speicher() {
+        let t = Skript::neu(&[&[0x59, 0x01, 0xFF, 0x01, 0x00, 0x03], &[0x63, 0xDE, 0xAD], &[0x7F, 0x23, 0x31]]);
+        let u = Uds::new(&t);
+        assert_eq!(u.dtc_anzahl(0x08).unwrap(), 3);
+        assert_eq!(u.read_memory(0x1000, 2).unwrap(), vec![0xDE, 0xAD]);
+        let e = u.read_memory(0x1000, 2).unwrap_err().to_string();
+        assert!(e.contains("requestOutOfRange"), "{e}");
+        assert_eq!(nrc_name(0x93), "voltageTooLow");
     }
 }
