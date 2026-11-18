@@ -1258,6 +1258,16 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
     }
 }
 
+/// Simulation mit 29-Bit-IDs: das Motorsteuergerät antwortet auch auf
+/// 0x18DA10F1 (ISO 15765-4, physisch, Ziel 0x10) wie auf 0x7E0; andere
+/// 29-Bit-IDs antworten nicht.
+pub fn demo_tx(tx: u32) -> u16 {
+    match tx {
+        0x18DA_10F1 => 0x7E0,
+        t => u16::try_from(t).ok().filter(|t| *t <= 0x7FF).unwrap_or(0),
+    }
+}
+
 /// UDS-Transport zum Demo-Fahrzeug (auf Nachrichtenebene, ohne CAN-Frames).
 pub struct DemoUds {
     tx: u16,

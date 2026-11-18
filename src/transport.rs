@@ -43,8 +43,17 @@ pub enum Backend {
 }
 
 impl Backend {
-    /// Öffnet eine Verbindung zu einem Steuergerät mit den gegebenen CAN-IDs.
+    /// Öffnet eine Verbindung zu einem Steuergerät mit den gegebenen 11-Bit-CAN-IDs.
     pub fn open(&self, tx: u16, rx: u16) -> Result<Box<dyn Transport>> {
+        self.open_id(u32::from(tx), u32::from(rx))
+    }
+
+    /// Wie [`Backend::open`], auch mit 29-Bit-IDs: IDs über 0x7FF werden als
+    /// erweiterte Frames gesendet (ISO 15765-4, z. B. 0x18DA10F1 / 0x18DAF110).
+    pub fn open_id(&self, tx: u32, rx: u32) -> Result<Box<dyn Transport>> {
+        if tx > 0x1FFF_FFFF || rx > 0x1FFF_FFFF {
+            anyhow::bail!(crate::tr!("CAN-ID zu groß (höchstens 29 Bit)"));
+        }
         match self {
             Backend::SocketCan { iface } => {
                 Ok(Box::new(crate::isotp::IsoTp::open(iface, tx, rx)?))
@@ -55,7 +64,7 @@ impl Backend {
             Backend::Elm327Tcp { addr } => {
                 Ok(Box::new(crate::elm327::Elm327::open_tcp(addr, tx, rx)?))
             }
-            Backend::Demo => Ok(Box::new(crate::sim::DemoUds::new(tx))),
+            Backend::Demo => Ok(Box::new(crate::sim::DemoUds::new(crate::sim::demo_tx(tx)))),
         }
     }
 

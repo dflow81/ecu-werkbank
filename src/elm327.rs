@@ -29,7 +29,7 @@ pub struct Elm327 {
 }
 
 impl Elm327 {
-    pub fn open_serial(port: &str, baud: u32, tx: u16, rx: u16) -> Result<Self> {
+    pub fn open_serial(port: &str, baud: u32, tx: u32, rx: u32) -> Result<Self> {
         let mut sp = serial2::SerialPort::open(port, baud)
             .with_context(|| crate::tr!("Seriellen Port '{port}' öffnen", port = port))?;
         let _ = sp.set_read_timeout(Duration::from_secs(5));
@@ -38,7 +38,7 @@ impl Elm327 {
         Ok(me)
     }
 
-    pub fn open_tcp(addr: &str, tx: u16, rx: u16) -> Result<Self> {
+    pub fn open_tcp(addr: &str, tx: u32, rx: u32) -> Result<Self> {
         let stream = std::net::TcpStream::connect(addr)
             .with_context(|| format!("TCP-Verbindung zu '{addr}'"))?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -82,21 +82,20 @@ impl Elm327 {
         Ok(out)
     }
 
-    fn init(&self, tx: u16, rx: u16) -> Result<()> {
+    fn init(&self, tx: u32, rx: u32) -> Result<()> {
         let _ = self.cmd("ATZ"); // Reset (Antwort variiert, ignorieren)
         self.cmd("ATE0")?; // Echo aus
         self.cmd("ATL0")?; // Linefeeds aus
         self.cmd("ATS0")?; // Leerzeichen aus
         self.cmd("ATH0")?; // Header aus (nur Nutzdaten)
-        self.cmd("ATSP6")?; // ISO 15765-4 CAN, 11 bit, 500 kbit/s
-        self.cmd("ATCAF1")?; // ISO-TP-Autoformatierung (Chip macht Segmentierung)
-        self.cmd(&format!("ATSH{tx:03X}"))?; // Request-Header (tx-ID)
-        self.cmd(&format!("ATCRA{rx:03X}"))?; // Empfangsfilter (rx-ID)
+        for c in kopf_befehle(tx, rx) {
+            self.cmd(&c)?;
+        }
         // Flusskontrolle für mehrteilige Antworten selbst setzen: von sich aus
         // schickt der ELM327 das „weiter senden“ nur bei OBD-IDs (0x7E8…) an die
         // richtige Adresse — bei Herstelleradressen (Golf 6: Kombi 0x714 → 0x77E)
         // kam sonst nur der erste Teil an (am Auto geprüft, 14.11.2026).
-        self.cmd(&format!("ATFCSH{tx:03X}"))?; // FC an die Anfrage-ID
+        self.cmd(&if tx > 0x7FF { format!("ATFCSH{tx:08X}") } else { format!("ATFCSH{tx:03X}") })?; // FC an die Anfrage-ID
         self.cmd("ATFCSD300000")?; // FC: weiter senden, keine Blockgrenze, kein Abstand
         self.cmd("ATFCSM1")?; // FC-Kopf und -Daten wie oben
         // ~1 s auf Antworten warten: Airbag und Radio melden erst „bitte warten“
@@ -121,6 +120,23 @@ impl Transport for Elm327 {
             .borrow_mut()
             .pop_front()
             .ok_or_else(|| anyhow::anyhow!(crate::trs!("keine ELM327-Antwort (NO DATA / Timeout?)")))
+    }
+}
+
+/// Protokoll, Kopf und Empfangsfilter für 11- oder 29-Bit-IDs.
+/// 29 Bit: ATSP7 (ISO 15765-4, 29 Bit, 500 kbit/s), die oberen 5 Bit mit ATCP,
+/// die unteren 24 mit ATSH (z. B. 18DA10F1 → ATCP18 + ATSHDA10F1).
+fn kopf_befehle(tx: u32, rx: u32) -> Vec<String> {
+    if tx > 0x7FF || rx > 0x7FF {
+        vec![
+            "ATSP7".into(),
+            "ATCAF1".into(),
+            format!("ATCP{:02X}", (tx >> 24) & 0x1F),
+            format!("ATSH{:06X}", tx & 0xFF_FFFF),
+            format!("ATCRA{rx:08X}"),
+        ]
+    } else {
+        vec!["ATSP6".into(), "ATCAF1".into(), format!("ATSH{tx:03X}"), format!("ATCRA{rx:03X}")]
     }
 }
 
@@ -213,6 +229,12 @@ fn parse_hex_line(s: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kopf_11_und_29_bit() {
+        assert_eq!(kopf_befehle(0x7E0, 0x7E8), ["ATSP6", "ATCAF1", "ATSH7E0", "ATCRA7E8"]);
+        assert_eq!(kopf_befehle(0x18DA_10F1, 0x18DA_F110), ["ATSP7", "ATCAF1", "ATCP18", "ATSHDA10F1", "ATCRA18DAF110"]);
+    }
 
     const VIN: &[u8] = b"WVWZZZ1KZAW000001";
 

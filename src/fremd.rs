@@ -2,7 +2,7 @@
 //! Kennung und Fehlerspeicher mit den genormten Diensten lesen.
 //!
 //! Was geht: UDS (ISO 14229) und KWP2000 auf CAN (ISO 14230 über ISO-TP),
-//! 11-Bit-IDs, 500 kbit/s. Fehlercodes werden genormt angezeigt (P/C/B/U);
+//! 11-Bit-IDs und 29-Bit-IDs nach ISO 15765-4 (0x18DAxxF1), 500 kbit/s. Fehlercodes werden genormt angezeigt (P/C/B/U);
 //! Klartext gibt es nur für die genormten Codes (P0xxx …). Herstellereigene
 //! Texte, Codierung und Anpassungen gibt es hier nicht.
 //!
@@ -27,21 +27,45 @@ const VIEL_VERKEHR: usize = 20;
 /// Ergebnis der Steuergeräte-Suche.
 #[derive(Debug, Clone, Default)]
 pub struct Suche {
-    /// (Anfrage-ID, Antwort-ID)
-    pub geraete: Vec<(u16, u16)>,
+    /// (Anfrage-ID, Antwort-ID); über 0x7FF = 29 Bit
+    pub geraete: Vec<(u32, u32)>,
     /// So viele IDs hatten schon Verkehr (nicht benutzt)
     pub verkehr: usize,
     /// Nur OBD-Adressen gefragt (wegen viel Verkehr oder ohne SocketCAN)
     pub nur_obd: bool,
 }
 
-fn obd_paare() -> Vec<(u16, u16)> {
-    (0x7E0u16..=0x7E7).map(|t| (t, t + 8)).collect()
+fn obd_paare() -> Vec<(u32, u32)> {
+    (0x7E0u32..=0x7E7).map(|t| (t, t + 8)).collect()
+}
+
+/// 29-Bit-Paar nach ISO 15765-4: Tester 0xF1 → Ziel `ziel`.
+pub fn paar_29(ziel: u8) -> (u32, u32) {
+    (0x18DA_00F1 | (u32::from(ziel) << 8), 0x18DA_F100 | u32::from(ziel))
+}
+
+/// Übliche OBD-Ziele bei 29 Bit (Motor 0x10, Getriebe 0x18, weitere).
+const ZIELE_29: [u8; 4] = [0x10, 0x18, 0x17, 0x28];
+
+/// CAN-ID als Text: 11 Bit „0x7e0“, 29 Bit „0x18da10f1“.
+pub fn id_text(id: u32) -> String {
+    if id > 0x7FF {
+        format!("{id:#010x}")
+    } else {
+        format!("{id:#05x}")
+    }
+}
+
+/// „0x7e0/0x7e8“ oder „0x18da10f1/0x18daf110“ zurück in IDs.
+pub fn ids_aus_text(s: &str) -> Option<(u32, u32)> {
+    let (a, b) = s.split_once('/')?;
+    let h = |x: &str| u32::from_str_radix(x.trim().trim_start_matches("0x"), 16).ok().filter(|v| *v <= 0x1FFF_FFFF);
+    Some((h(a)?, h(b)?))
 }
 
 /// Antwortet hier ein Steuergerät? (Tester Present, UDS und KWP gleich)
-fn antwortet(be: &Backend, tx: u16, rx: u16) -> bool {
-    let Ok(tp) = be.open(tx, rx) else { return false };
+fn antwortet(be: &Backend, tx: u32, rx: u32) -> bool {
+    let Ok(tp) = be.open_id(tx, rx) else { return false };
     let r = Uds::new(&*tp).tester_present();
     r.is_ok() || r.is_err_and(|e| format!("{e:#}").contains("NRC"))
 }
@@ -51,10 +75,15 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
     let Backend::SocketCan { iface } = be else {
         // ELM327 / Demo: nur die OBD-Adressen, über die normale Verbindung
         fortschritt(&tr!("Frage die OBD-Adressen ab…"));
-        let geraete = obd_paare().into_iter().filter(|&(t, r)| antwortet(be, t, r)).collect();
+        let mut geraete: Vec<(u32, u32)> = obd_paare().into_iter().filter(|&(t, r)| antwortet(be, t, r)).collect();
+        if geraete.is_empty() {
+            // kein 11-Bit-OBD: vielleicht ein Fahrzeug mit 29-Bit-Adressen
+            fortschritt(&tr!("Keine Antwort mit 11 Bit — versuche 29-Bit-Adressen…"));
+            geraete = ZIELE_29.iter().map(|&z| paar_29(z)).filter(|&(t, r)| antwortet(be, t, r)).collect();
+        }
         return Ok(Suche { geraete, verkehr: 0, nur_obd: true });
     };
-    use crate::can::{CanFrame, CanSocket, EmbeddedFrame, Id, Socket, StandardId};
+    use crate::can::{CanFrame, CanSocket, EmbeddedFrame, ExtendedId, Id, Socket, StandardId};
     let sock = CanSocket::open(iface)?;
     let _belegt = crate::bus::Belegt::neu();
     crate::connect::fix_hw_loopback(iface, &sock);
@@ -63,11 +92,17 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
     // 1. zuhören
     fortschritt(&tr!("Höre 1,5 s zu, welche CAN-IDs schon benutzt werden…"));
     let mut belegt: BTreeSet<u16> = BTreeSet::new();
+    let mut belegt29: BTreeSet<u32> = BTreeSet::new();
     let ende = Instant::now() + Duration::from_millis(1500);
     while Instant::now() < ende {
         while let Ok(f) = sock.read_frame() {
-            if let Id::Standard(id) = f.id() {
-                belegt.insert(id.as_raw());
+            match f.id() {
+                Id::Standard(id) => {
+                    belegt.insert(id.as_raw());
+                }
+                Id::Extended(id) => {
+                    belegt29.insert(id.as_raw());
+                }
             }
         }
         std::thread::sleep(Duration::from_millis(5));
@@ -115,17 +150,47 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
         lesen(*kandidaten.last().unwrap_or(&0), &mut roh);
         std::thread::sleep(Duration::from_millis(5));
     }
+
+    // 2b. 29 Bit (ISO 15765-4): einmal „Tester Present“ an alle (0x18DB33F1),
+    // Antworten kommen von 0x18DAF1xx. Nur wenn diese IDs nicht schon Verkehr haben.
+    let mut roh29: Vec<u8> = Vec::new();
+    let frei29 = !belegt29.iter().any(|id| *id == 0x18DB_33F1 || id & 0xFFFF_FF00 == 0x18DA_F100);
+    if frei29 {
+        fortschritt(&tr!("Frage Steuergeräte mit 29-Bit-Adressen…"));
+        if let Some(f) = ExtendedId::new(0x18DB_33F1).and_then(|id| CanFrame::new(id, &[0x02, 0x3E, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA])) {
+            let _ = sock.write_frame(&f);
+        }
+        let bis = Instant::now() + Duration::from_millis(300);
+        while Instant::now() < bis {
+            while let Ok(f) = sock.read_frame() {
+                let Id::Extended(id) = f.id() else { continue };
+                let id = id.as_raw();
+                let d = f.data();
+                let ok = matches!(d, [l, 0x7E, ..] if *l & 0xF0 == 0) || matches!(d, [l, 0x7F, 0x3E, ..] if *l & 0xF0 == 0);
+                if ok && id & 0xFFFF_FF00 == 0x18DA_F100 && !roh29.contains(&((id & 0xFF) as u8)) {
+                    roh29.push((id & 0xFF) as u8);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
     drop(sock);
 
     // 3. nachprüfen (späte Antworten können der nächsten ID zugeordnet sein)
     fortschritt(&tr!("Prüfe {a} gefundene Steuergeräte nach…", a = roh.len()));
-    let mut geraete: Vec<(u16, u16)> = Vec::new();
+    let mut geraete: Vec<(u32, u32)> = Vec::new();
     for (tx, rx) in roh {
-        let treffer = (0..4u16).filter_map(|d| tx.checked_sub(d)).find(|&t| !belegt.contains(&t) && antwortet(be, t, rx));
+        let treffer = (0..4u16).filter_map(|d| tx.checked_sub(d)).find(|&t| !belegt.contains(&t) && antwortet(be, u32::from(t), u32::from(rx)));
         if let Some(t) = treffer {
-            if !geraete.iter().any(|(_, r)| *r == rx) {
-                geraete.push((t, rx));
+            if !geraete.iter().any(|(_, r)| *r == u32::from(rx)) {
+                geraete.push((u32::from(t), u32::from(rx)));
             }
+        }
+    }
+    for z in roh29 {
+        let (t, r) = paar_29(z);
+        if antwortet(be, t, r) {
+            geraete.push((t, r));
         }
     }
     geraete.sort_unstable();
@@ -161,8 +226,8 @@ fn nicht_unterstuetzt<T>(r: &Result<T>) -> bool {
 }
 
 /// Ein Steuergerät auslesen: Kennung, Fahrgestellnummer, Fehler.
-pub fn lesen(be: &Backend, db: &LabelDb, tx: u16, rx: u16) -> Result<ModuleReport> {
-    let tp = be.open(tx, rx)?;
+pub fn lesen(be: &Backend, db: &LabelDb, tx: u32, rx: u32) -> Result<ModuleReport> {
+    let tp = be.open_id(tx, rx)?;
     let u = Uds::new(&*tp);
     let mut ident = Vec::new();
     let mut vin = None;
@@ -230,11 +295,11 @@ pub fn lesen(be: &Backend, db: &LabelDb, tx: u16, rx: u16) -> Result<ModuleRepor
     };
     let system = ident.iter().find_map(|i| i.split_once(": ").filter(|(n, _)| *n == crate::i18n::t("System")).map(|(_, v)| v.to_string()));
     let name = match tx {
-        0x7E0 => tr!("Motor (OBD)"),
-        0x7E1 => tr!("Getriebe (OBD)"),
+        0x7E0 | 0x18DA_10F1 => tr!("Motor (OBD)"),
+        0x7E1 | 0x18DA_18F1 => tr!("Getriebe (OBD)"),
         _ => system.unwrap_or_default(),
     };
-    Ok(ModuleReport { protocol: protokoll.into(), address: None, name, can: format!("{tx:#05x}/{rx:#05x}"), ident, vin, dtcs })
+    Ok(ModuleReport { protocol: protokoll.into(), address: None, name, can: format!("{}/{}", id_text(tx), id_text(rx)), ident, vin, dtcs })
 }
 
 /// Suche + alle Steuergeräte auslesen → Scan (für PDF und Historie).
@@ -242,7 +307,7 @@ pub fn scan(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> Re
     let s = suchen(be, &mut fortschritt)?;
     let mut modules = Vec::new();
     for &(tx, rx) in &s.geraete {
-        fortschritt(&tr!("Lese Steuergerät {a}…", a = format!("{tx:#05x}")));
+        fortschritt(&tr!("Lese Steuergerät {a}…", a = id_text(tx)));
         if let Ok(m) = lesen(be, db, tx, rx) {
             modules.push(m);
         }
@@ -275,8 +340,8 @@ pub fn scan(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> Re
 
 /// Fehlerspeicher eines Steuergeräts löschen (UDS 0x14, sonst KWP 0x14 FF 00).
 /// Schreibt ins Steuergerät — nur nach Bestätigung aufrufen.
-pub fn loeschen(be: &Backend, tx: u16, rx: u16, protokoll: &str) -> Result<()> {
-    let tp = be.open(tx, rx)?;
+pub fn loeschen(be: &Backend, tx: u32, rx: u32, protokoll: &str) -> Result<()> {
+    let tp = be.open_id(tx, rx)?;
     let u = Uds::new(&*tp);
     if protokoll == "KWP2000" {
         u.request(0x14, &[0xFF, 0x00]).map(|_| ())
@@ -302,5 +367,22 @@ mod tests {
         let (r, s) = scan(&Backend::Demo, &LabelDb::default(), |_| {}).unwrap();
         assert!(s.nur_obd);
         assert!(r.modules.iter().any(|m| m.can.starts_with("0x7e0")));
+        assert!(!r.modules.iter().any(|m| m.can.starts_with("0x18da")), "29 Bit nur, wenn 11 Bit nichts findet");
+    }
+
+    #[test]
+    fn neunundzwanzig_bit_in_der_simulation() {
+        let _g = crate::sim::TEST_LOCK.lock().unwrap();
+        crate::sim::reset();
+        let (t, r) = paar_29(0x10);
+        assert_eq!((t, r), (0x18DA_10F1, 0x18DA_F110));
+        assert!(antwortet(&Backend::Demo, t, r));
+        assert!(!antwortet(&Backend::Demo, paar_29(0x77).0, paar_29(0x77).1));
+        let m = lesen(&Backend::Demo, &LabelDb::default(), t, r).unwrap();
+        assert_eq!(m.can, "0x18da10f1/0x18daf110");
+        assert_eq!(m.name, "Motor (OBD)");
+        assert_eq!(ids_aus_text(&m.can), Some((t, r)));
+        assert_eq!(ids_aus_text("0x7e0/0x7e8"), Some((0x7E0, 0x7E8)));
+        assert_eq!(ids_aus_text("0x7e0"), None);
     }
 }

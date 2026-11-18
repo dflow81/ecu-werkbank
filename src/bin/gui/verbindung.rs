@@ -196,9 +196,7 @@ impl App {
                                 ui.label(egui::RichText::new(t).monospace());
                                 ui.weak(format!("    {}", d.status));
                             }
-                            let (tx, rx) = m.can.split_once('/').map(|(a, b)| (a.to_string(), b.to_string())).unwrap_or_default();
-                            let hex = |x: &str| u16::from_str_radix(x.trim_start_matches("0x"), 16).ok();
-                            if let (Some(tx), Some(rx)) = (hex(&tx), hex(&rx)) {
+                            if let Some((tx, rx)) = ecu_werkbank::fremd::ids_aus_text(&m.can) {
                                 if self.fm_confirm == Some(i) {
                                     ui.horizontal(|ui| {
                                         ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Fehler in diesem Steuergerät wirklich löschen?"));

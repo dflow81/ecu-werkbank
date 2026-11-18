@@ -2,10 +2,11 @@
 //!
 //! Implemented in user space on top of SocketCAN so it does not depend on the
 //! `can-isotp` kernel module being present. Supports classic 8-byte CAN frames
-//! with 11-bit identifiers, which is what VAG control units use.
+//! with 11-bit identifiers (VAG) and 29-bit identifiers (ISO 15765-4, e.g.
+//! 0x18DA10F1) — an ID above 0x7FF is sent as an extended frame.
 
 use anyhow::{anyhow, bail, Context, Result};
-use crate::can::{CanFrame, CanSocket, EmbeddedFrame, Id, Socket, StandardId};
+use crate::can::{CanFrame, CanSocket, EmbeddedFrame, ExtendedId, Id, Socket, StandardId};
 use std::time::Duration;
 
 /// Padding byte for frames shorter than 8 data bytes. VAG expects full 8-byte
@@ -15,13 +16,13 @@ const PAD: u8 = 0xAA;
 
 pub struct IsoTp {
     sock: CanSocket,
-    tx_id: u16,
-    rx_id: u16,
+    tx_id: u32,
+    rx_id: u32,
     _belegt: crate::bus::Belegt,
 }
 
 impl IsoTp {
-    pub fn open(iface: &str, tx_id: u16, rx_id: u16) -> Result<Self> {
+    pub fn open(iface: &str, tx_id: u32, rx_id: u32) -> Result<Self> {
         let sock = CanSocket::open(iface)
             .with_context(|| crate::tr!("CAN-Interface '{iface}' konnte nicht geöffnet werden", iface = iface))?;
         crate::connect::fix_hw_loopback(iface, &sock);
@@ -30,18 +31,24 @@ impl IsoTp {
         Ok(Self { sock, tx_id, rx_id, _belegt: crate::bus::Belegt::neu() })
     }
 
-    fn raw_id(frame: &CanFrame) -> Option<u16> {
+    /// (ID, 29 Bit?) eines empfangenen Frames.
+    fn raw_id(frame: &CanFrame) -> (u32, bool) {
         match frame.id() {
-            Id::Standard(s) => Some(s.as_raw()),
-            Id::Extended(_) => None,
+            Id::Standard(s) => (u32::from(s.as_raw()), false),
+            Id::Extended(e) => (e.as_raw(), true),
         }
     }
 
-    fn write(&self, id: u16, payload: &[u8]) -> Result<()> {
+    fn write(&self, id: u32, payload: &[u8]) -> Result<()> {
         let mut data = [PAD; 8];
         data[..payload.len()].copy_from_slice(payload);
-        let sid = StandardId::new(id).ok_or_else(|| anyhow!(crate::tr!("ungültige CAN-ID {id}", id = format!("{id:#x}"))))?;
-        let frame = CanFrame::new(sid, &data).ok_or_else(|| anyhow!(crate::trs!("Frame-Bau fehlgeschlagen")))?;
+        let ungueltig = || anyhow!(crate::tr!("ungültige CAN-ID {id}", id = format!("{id:#x}")));
+        let frame = if id > 0x7FF {
+            CanFrame::new(ExtendedId::new(id).ok_or_else(ungueltig)?, &data)
+        } else {
+            CanFrame::new(StandardId::new(id as u16).ok_or_else(ungueltig)?, &data)
+        };
+        let frame = frame.ok_or_else(|| anyhow!(crate::trs!("Frame-Bau fehlgeschlagen")))?;
         self.sock.write_frame(&frame).context(crate::trs!("CAN-Senden fehlgeschlagen"))?;
         Ok(())
     }
@@ -53,7 +60,7 @@ impl IsoTp {
                 .sock
                 .read_frame()
                 .context(crate::trs!("Keine Antwort (Timeout) vom Steuergerät"))?;
-            if Self::raw_id(&frame) == Some(self.rx_id) {
+            if Self::raw_id(&frame) == (self.rx_id, self.rx_id > 0x7FF) {
                 let mut buf = [0u8; 8];
                 let d = frame.data();
                 buf[..d.len()].copy_from_slice(d);

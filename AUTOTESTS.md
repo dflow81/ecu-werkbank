@@ -25,6 +25,7 @@ Status: ⏳ offen · ✅ erledigt · ❌ Problem
 | A6 | CAN-Monitor am OBD-Stecker (Roadmap 22) | Werkzeuge → CAN-Monitor, dann Fehler lesen | Diagnose-IDs (0x200, 0x7E0 …) erscheinen; Rate plausibel | ⏳ |
 | A7 | Mitschnitt-Auffälligkeiten (Roadmap 44) | GUI Mitschnitt: einen neuen Mitschnitt öffnen | keine falschen ⚠ | ⏳ |
 | A8 | Polo 6R: kompletter Scan | `autoscan`, `report`, `verbauliste` | alle Steuergeräte gefunden, Namen passen | ⏳ |
+| A10 | Fremdes Auto mit 29-Bit-Adressen (falls eines greifbar ist, z. B. bei Bekannten) | `fremd` bzw. GUI „Andere Marken“ mit SocketCAN, danach mit ELM327 | Steuergeräte `0x18da…` gefunden, Kennung/Fehler lesbar | ⏳ |
 | A9 | Polo 6R: Fahrzeugtyp / Gateway-Verbauliste (Roadmap 16) | GUI „Fahrzeugtyp erkennen“, Verbauliste aus dem Gateway | UDS oder TP 2.0 richtig erkannt | ⏳ |
 
 ## B. Mitschnitte mit dem Werkstattgerät (Y-Kabel, Werkstattgerät liest/schreibt)

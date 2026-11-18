@@ -44,7 +44,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn serve_uds(iface: &str, tx: u16, rx: u16) {
-    let tp = match IsoTp::open(iface, rx, tx) {
+    let tp = match IsoTp::open(iface, u32::from(rx), u32::from(tx)) {
         Ok(tp) => tp,
         Err(e) => {
             eprintln!("[{tx:#05x}] Fehler: {e}");
