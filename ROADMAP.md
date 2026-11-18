@@ -74,10 +74,10 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 
 | # | Funktion | Vorbild | Nutzen | Aufwand | Risiko | Priorität | Stufe | Status |
 |---|---|---|---|---|---|---|---|---|
-| 51 | Datenbank-Kern: SQLite-Schema, Migrationen, Repository-Schicht | ODIS, ISTA+ | hoch | mittel | niedrig | hoch | 1.0 | ⏳ |
-| 52 | Vorhandenes Wissen übernehmen (Labels, `systems.rs`, Profile, Fehlertexte) | – | hoch | mittel | niedrig | hoch | 1.0 | ⏳ |
-| 53 | Quellen- und Lizenzverwaltung je Datensatz (`data_source`) | – | hoch | niedrig | niedrig | hoch | 1.0 | ⏳ |
-| 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | 🟡 DBC-Leser vorhanden |
+| 51 | Datenbank-Kern: SQLite-Schema, Migrationen, Repository-Schicht | ODIS, ISTA+ | hoch | mittel | niedrig | hoch | 1.0 | ✅ `src/db/`, CLI `db` |
+| 52 | Vorhandenes Wissen übernehmen (Labels, `systems.rs`, Profile, Fehlertexte) | – | hoch | mittel | niedrig | hoch | 1.0 | 🟡 Adressliste + Labels; GUI/CLI lesen noch aus den alten Quellen |
+| 53 | Quellen- und Lizenzverwaltung je Datensatz (`data_source`) | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `db quellen`, `db entfernen`, `darf_weitergeben` |
+| 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | 🟡 DBC und Label-TOML; JSON/CSV fehlen |
 | 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ⏳ |
 | 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ⏳ zusammen mit 39 |
 | 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
@@ -208,6 +208,7 @@ Tabellen wie im Vorschlag: `manufacturer`, `vehicle_model`, `vehicle_variant`, `
 Ausgelegt für 100 Hersteller, 10 000 Modelle, 100 000 DIDs und 1 000 000 CAN-Signale:
 
 - 1 Mio. Signale × ca. 120 Byte sind etwa 120 MB in SQLite. Mit Index auf `can_message_id` und `(manufacturer_id, can_id)` dauert eine Abfrage weniger als 1 ms.
+- **Gemessen am 18.11.2026** (Test `db::tests::grosse_datenmenge`, Release-Build): Import von 1 Mio. Signalen in 6,1 s, Abfrage aller Signale einer Botschaft 0,07 ms, Datei 133 MB.
 - Volltextsuche (Fehlertexte, Namen) über SQLite **FTS5**.
 - Import großer Dateien in **einer** Transaktion mit vorbereiteten Anweisungen: über 100 000 Zeilen pro Sekunde.
 - `WAL`-Modus: Die GUI kann lesen, während ein Import schreibt.

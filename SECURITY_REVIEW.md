@@ -30,6 +30,7 @@ schreiben) und **der Rechner/die Daten** (keine Angriffsfläche, keine Datenleck
 | Externe Programme | `ip` (CAN-Status), `xdg-open`/`open`, `notify-send`, `paplay` — feste Argumente, keine Shell | ✅ |
 | ZIP entpacken (`zip.rs`) | Notfall-Sicherung zurückspielen: Pfade prüfen (kein `..`, keine absoluten Pfade) | ✅ (Test vorhanden) — bei Änderungen erneut prüfen |
 | TOML-Dateien | Labels, Sprachen, Fahrzeugdaten mit `serde` gelesen; Fehler werden gemeldet, nicht ausgeführt | ✅ |
+| Fahrzeug-Datenbank (SQLite) | nur Platzhalter-Parameter in SQL, keine zusammengesetzten Abfragen aus Eingaben; ODX/PDX technisch nicht weitergebbar (`db::darf_weitergeben`); Security-Access nur als Beschreibung, keine Schlüssel | ✅ |
 | DBC/candump lesen | reiner Text, Grenzen geprüft (Signal ≤ 64 Bit, Frame ≤ 64 Byte) | ✅ |
 | Personenbezogene Daten | VIN, Kennzeichen, Kilometerstand liegen nur lokal; Simulation und Handbuch nutzen erfundene VINs | ✅ |
 | Veröffentlichung | `.gitignore` schließt `label/`, `labels/` (außer Beispielen), `logs/` aus; vor jedem Push Prüfung auf VINs/Mitschnitte | ✅ (Ablauf) |

@@ -109,8 +109,8 @@ Hintergrund nicht dazwischenfunkt).
 | Diagnose | `report`, `check`, `autotest`, `swinfo`, `verbauliste`, `systems`, `profil`, `fremd`, `readiness`, `guide`, `dtc_db`, `fehlergeruest` |
 | Codierung/Anpassung | `backup`, `anpassung`, `codiertexte`, `kennungstexte`, `service`, `km`, `retrofit`, `kwp_grund`, `grundeinstellung` |
 | Messen | `motorcheck`, `rekorder`, `mixture`, `dpf`, `battery`, `control`, `csvlog`, `chart`, `limits`, `trend`, `favoriten`, `messwerttexte`, `mwvorschlag` |
-| CAN-Analyse | `canlog`, `learn`, `spurexport`, `dbc` |
-| Daten/Ablage | `labels`, `vehicle`, `history`, `datensicherung`, `notfall`, `zip`, `kalender`, `kosten`, `akte`, `wissen`, `fehlertexte`, `vcds` (Import von Auto-Scan-Texten) |
+| CAN-Analyse | `canlog`, `learn`, `spurexport`, `dbc`, `canmonitor` |
+| Daten/Ablage | `db` (Fahrzeug-Datenbank, SQLite), `labels`, `vehicle`, `history`, `datensicherung`, `notfall`, `zip`, `kalender`, `kosten`, `akte`, `wissen`, `fehlertexte`, `vcds` (Import von Auto-Scan-Texten) |
 | Ausgabe | `pdf`, `web`, `i18n` |
 | Test | `sim`, `bin/mockecu` |
 
@@ -120,6 +120,7 @@ Hintergrund nicht dazwischenfunkt).
   ein Ordner je Fahrzeug (VIN) mit Scans, Berichten, Codier- und Anpassungs-Sicherungen,
   Trends, Profil. Der Umzug vom alten Namen `vag-diag` passiert einmal automatisch.
 - **Labels** (`~/.config/…/labels`): eigene TOML-Dateien je Steuergerät. Nie fremde Label-Dateien.
+- **Fahrzeug-Datenbank** (`<Datenordner>/fahrzeugdaten.sqlite`): Schema in `src/db/schema_NNN.sql`, Migration beim Öffnen mit Kopie vorher; jede Zeile mit Quelle und Lizenz. Siehe ROADMAP „Plan: Fahrzeug-Datenbank“.
 - **Sprachen**: `lang/<code>.toml` eingebaut, eigene im Datenordner unter `sprachen/`.
 
 ## Sicherheitsprinzipien im Code

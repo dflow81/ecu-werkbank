@@ -76,6 +76,46 @@ impl Cli {
 }
 
 #[derive(Subcommand)]
+enum DbAktion {
+    /// Übersicht: Speicherort, Schema-Version, Anzahl Einträge (Standard)
+    Status,
+    /// Alle Quellen mit Art, Lizenz und Anzahl Einträge
+    Quellen,
+    /// Normdaten und das eingebaute VW-Wissen (Adressliste) übernehmen
+    Eingebaut,
+    /// Eigene Label-Dateien (TOML) übernehmen
+    Labels {
+        /// Ordner (Standard: der Label-Ordner)
+        #[arg(long)]
+        ordner: Option<PathBuf>,
+    },
+    /// DBC-Datei übernehmen (CAN-Botschaften und Signale)
+    Dbc {
+        #[arg(long)]
+        datei: PathBuf,
+        /// Lizenz der Datei (z. B. MIT); ohne Angabe wird sie nie weitergegeben
+        #[arg(long, default_value = "")]
+        lizenz: String,
+        /// Hersteller, dem die Botschaften gehören (z. B. Volkswagen)
+        #[arg(long)]
+        hersteller: Option<String>,
+    },
+    /// Eine Quelle samt allen ihren Einträgen entfernen
+    Entfernen {
+        #[arg(long)]
+        id: i64,
+        /// wirklich entfernen (ohne: nur anzeigen, was entfernt würde)
+        #[arg(long)]
+        ja: bool,
+    },
+    /// Stimmige Kopie der Datenbank schreiben
+    Sichern {
+        #[arg(long)]
+        ziel: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum ServiceAktion {
     /// Service-Werte aus dem Kombi lesen (Standard)
     Lesen,
@@ -869,6 +909,14 @@ enum Command {
         #[arg(long)]
         aufraeumen: bool,
     },
+    /// Fahrzeug-Datenbank (Hersteller, Steuergeräte, Fehler, CAN-Signale) — nur lokal
+    Db {
+        #[command(subcommand)]
+        aktion: Option<DbAktion>,
+        /// andere Datenbank-Datei (Standard: im Datenordner)
+        #[arg(long)]
+        datei: Option<PathBuf>,
+    },
     /// Service-Anzeige (Inspektion/Ölwechsel): lesen, Kennungen lernen, zurückstellen
     Service {
         #[command(subcommand)]
@@ -1238,6 +1286,7 @@ fn main() -> Result<()> {
         Command::Fahrzeuge => fahrzeuge(),
         Command::Software => software(&be, &db, cli.fahrzeug.as_deref()),
         Command::Nachruestung { name, phase, notiz } => nachruestung(&be, &db, &name, &phase, &notiz, cli.fahrzeug.as_deref()),
+        Command::Db { aktion, datei } => db_cmd(aktion.unwrap_or(DbAktion::Status), datei, &labels_dir),
         Command::Sprache { setzen, vorlage, datei, verwaist, aufraeumen } => sprache_cmd(setzen, vorlage, datei, verwaist, aufraeumen),
         Command::Service { aktion } => service_cmd(&be, aktion.unwrap_or(ServiceAktion::Lesen), cli.fahrzeug.as_deref()),
         Command::Dpf => {
@@ -4271,3 +4320,79 @@ fn kwp_anpassung_schreiben(be: &Backend, address: u8, kanal: u8, wert: u16, ja: 
     Ok(())
 }
 
+
+// ---------------------------------------------------------------------------
+// Fahrzeug-Datenbank
+// ---------------------------------------------------------------------------
+
+fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std::path::Path) -> Result<()> {
+    use ecu_werkbank::db::{darf_weitergeben, standard_pfad, Db};
+    let pfad = datei.unwrap_or_else(standard_pfad);
+    let db = Db::oeffnen(&pfad)?;
+    match aktion {
+        DbAktion::Status => {
+            println!("{}", tr!("Datenbank: {a}", a = pfad.display()));
+            println!("{}", tr!("Schema-Version: {a}", a = db.schema_version()?));
+            for (t, n) in db.statistik()? {
+                println!("  {t:<20} {n:>9}");
+            }
+            if db.quellen()?.is_empty() {
+                println!("{}", tr!("\nNoch leer. Start:  ecu-werkbank db eingebaut   (dann z. B. db labels, db dbc --datei …)"));
+            }
+        }
+        DbAktion::Quellen => {
+            let q = db.quellen()?;
+            if q.is_empty() {
+                println!("{}", tr!("Keine Quellen."));
+            }
+            for q in q {
+                let teilen = if darf_weitergeben(q.art, &q.lizenz) { "" } else { " [bleibt lokal]" };
+                println!("{:>3}  {:<9} {}  {}  Lizenz: {}  {} Einträge  ({}){teilen}", q.id, q.art.text(), q.name, q.version, if q.lizenz.is_empty() { "–" } else { &q.lizenz }, q.zeilen, q.importiert);
+                if !q.herkunft.is_empty() {
+                    println!("       {}", q.herkunft);
+                }
+            }
+        }
+        DbAktion::Eingebaut => {
+            db.normdaten_eintragen()?;
+            let e = db.eingebautes_wissen_uebernehmen()?;
+            println!("{}", tr!("Übernommen: Normdaten (UDS-Dienste, Sitzungen) und {a}.", a = e.text()));
+        }
+        DbAktion::Labels { ordner } => {
+            let ordner = ordner.unwrap_or_else(|| labels_dir.to_path_buf());
+            let vw = db.hersteller("Volkswagen", &["WVW", "WV1", "WV2", "WV3"], None)?;
+            let e = db.labels_importieren(&ordner, vw)?;
+            println!("{}", tr!("Aus {a} übernommen: {b} (Quelle {c}).", a = ordner.display(), b = e.text(), c = e.quelle_id));
+        }
+        DbAktion::Dbc { datei, lizenz, hersteller } => {
+            let text = std::fs::read(&datei).with_context(|| tr!("DBC lesen: {a}", a = datei.display()))?;
+            let dbc = ecu_werkbank::dbc::Dbc::lesen(&String::from_utf8_lossy(&text));
+            if dbc.botschaften.is_empty() {
+                anyhow::bail!(tr!("Keine Botschaften in {a} gefunden.", a = datei.display()));
+            }
+            let h = hersteller.map(|h| db.hersteller(&h, &[], None)).transpose()?;
+            let name = datei.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let e = db.dbc_importieren(&dbc, &name, &lizenz, &datei.display().to_string(), h)?;
+            println!("{}", tr!("Übernommen: {a} (Quelle {b}).", a = e.text(), b = e.quelle_id));
+            if lizenz.is_empty() {
+                println!("{}", tr!("Ohne Lizenzangabe bleiben die Daten nur in deiner Datenbank."));
+            }
+        }
+        DbAktion::Entfernen { id, ja } => {
+            let Some(q) = db.quellen()?.into_iter().find(|q| q.id == id) else {
+                anyhow::bail!(tr!("Keine Quelle mit der Nummer {a}.", a = id));
+            };
+            if !ja {
+                println!("{}", tr!("Würde entfernen: {a} „{b}“ mit {c} Einträgen. Wirklich: --ja", a = q.art.text(), b = q.name, c = q.zeilen));
+                return Ok(());
+            }
+            db.quelle_entfernen(id)?;
+            println!("{}", tr!("Entfernt: {a} „{b}“.", a = q.art.text(), b = q.name));
+        }
+        DbAktion::Sichern { ziel } => {
+            db.sichern(&ziel)?;
+            println!("{}", tr!("Kopie gespeichert: {a}", a = ziel.display()));
+        }
+    }
+    Ok(())
+}

@@ -998,6 +998,25 @@ GUI: Reiter **„Mitschnitt“**.
 `dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
 Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
 
+### Fahrzeug-Datenbank (nur lokal)
+
+Fahrzeugwissen kann in einer eigenen Datenbank gesammelt werden (SQLite-Datei
+im Datenordner, keine Installation nötig). Jede Quelle wird mit Art, Lizenz und
+Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
+
+```bash
+./target/release/ecu-werkbank db                       # Übersicht
+./target/release/ecu-werkbank db eingebaut             # Normdaten + eingebaute VW-Adressliste
+./target/release/ecu-werkbank db labels                # eigene Label-Dateien übernehmen
+./target/release/ecu-werkbank db dbc --datei vw_pq.dbc --lizenz MIT --hersteller Volkswagen
+./target/release/ecu-werkbank db quellen               # was ist drin, woher, welche Lizenz
+./target/release/ecu-werkbank db entfernen --id 3      # Vorschau; mit --ja wirklich
+./target/release/ecu-werkbank db sichern --ziel kopie.sqlite
+```
+
+Daten ohne Lizenzangabe und selbst gekaufte Herstellerdaten bleiben immer nur
+bei dir. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
+
 ### Live-CAN-Monitor (GUI)
 
 **Werkzeuge → CAN-Monitor** zeigt live jede CAN-ID mit Daten, Anzahl und Rate.

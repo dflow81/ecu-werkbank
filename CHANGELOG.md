@@ -17,6 +17,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Codier-Helfer: **Rückgängig** und **Alles zurück**.
 - **Live-CAN-Monitor** (Werkzeuge → CAN-Monitor): alle IDs mit Daten, Rate und geänderten Bits,
   „Rauschen merken“ zum Finden von Signalen, Mitschnitt speichern, eigene DBC. Nur zuhören.
+- **Fahrzeug-Datenbank** (SQLite, nur lokal): `ecu-werkbank db` mit `eingebaut`, `labels`, `dbc`,
+  `quellen`, `entfernen`, `sichern`. Jede Quelle mit Lizenz; selbst gekaufte Herstellerdaten
+  (ODX/PDX, später) bleiben technisch gesperrt für die Weitergabe.
 - **Dateien ins Fenster ziehen:** Mitschnitt (.log/.asc), DBC, Aufzeichnung (.csv) und Label (.toml)
   öffnen sich auf der passenden Seite.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.
@@ -30,6 +33,7 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Warten auf „Antwort folgt“ (UDS) höchstens 60 s.
 
 ### Für Entwickler
+- `tokio` auf 1.54.1 (Sicherheitsmeldung RUSTSEC-2026-0384; kommt über den Datei-Dialog).
 - Automatische Prüfung bei jedem Push: Tests, clippy ohne Warnungen, `cargo audit`.
 
 ### Behoben
