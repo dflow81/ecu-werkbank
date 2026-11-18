@@ -14,6 +14,7 @@ use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
+pub mod api;
 pub mod paket;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.

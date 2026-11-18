@@ -948,6 +948,14 @@ enum Command {
         #[arg(long)]
         aufraeumen: bool,
     },
+    /// REST-Schnittstelle auf die Fahrzeug-Datenbank: nur lesen, nur dieser Rechner, mit Schlüssel (Strg-C beendet)
+    Api {
+        #[arg(long, default_value_t = 8787)]
+        port: u16,
+        /// andere Datenbank-Datei (Standard: im Datenordner)
+        #[arg(long)]
+        datei: Option<PathBuf>,
+    },
     /// Ganze Konfiguration vergleichen (Codierung, Anpassungen, Software): vorher/nachher oder zwei Fahrzeuge
     KonfigVergleich {
         /// Fahrzeug (Kennzeichen, VIN oder Ordner); Standard: aktives Fahrzeug
@@ -1368,6 +1376,19 @@ fn main() -> Result<()> {
         Command::Fahrzeuge => fahrzeuge(),
         Command::Software => software(&be, &db, cli.fahrzeug.as_deref()),
         Command::Nachruestung { name, phase, notiz } => nachruestung(&be, &db, &name, &phase, &notiz, cli.fahrzeug.as_deref()),
+        Command::Api { port, datei } => {
+            use ecu_werkbank::db;
+            let pfad = datei.unwrap_or_else(db::standard_pfad);
+            if !pfad.exists() {
+                anyhow::bail!(tr!("Noch keine Datenbank ({a}). Erst: ecu-werkbank db eingebaut", a = pfad.display()));
+            }
+            let schluessel = db::api::schluessel();
+            db::api::dienen(&pfad, port, &schluessel, |url| {
+                println!("{}", tr!("Schnittstelle läuft (nur lesen, nur dieser Rechner):"));
+                println!("  {url}status");
+                println!("{}", tr!("Die Adresse enthält den Schlüssel — nicht weitergeben. Strg-C beendet."));
+            })
+        }
         Command::KonfigVergleich { a, b } => {
             use ecu_werkbank::konfigvergleich;
             let a = match active_vehicle(a.as_deref().or(cli.fahrzeug.as_deref()))? {

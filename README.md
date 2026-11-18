@@ -998,6 +998,19 @@ GUI: Reiter **„Mitschnitt“**.
 `dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
 Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
 
+### REST-Schnittstelle (für eigene Skripte)
+
+```bash
+./target/release/ecu-werkbank api            # zeigt die Adresse mit Schlüssel
+python3 beispiele/api_abfrage.py http://127.0.0.1:8787/<schluessel>/api/v1/
+```
+
+Liest die Fahrzeug-Datenbank: `status`, `quellen`, `hersteller`,
+`hersteller/{id}/steuergeraete`, `steuergeraete/{id}`, `fehler/{code}`,
+`can/{id}/signale`, `fahrzeug?vin=…`. Antworten sind JSON. Die Schnittstelle
+lauscht nur auf diesem Rechner, nimmt nur Lese-Anfragen an und sendet nie etwas
+ans Auto.
+
 ### Ganze Konfiguration vergleichen
 
 ```bash
