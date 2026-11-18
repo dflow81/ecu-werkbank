@@ -101,7 +101,21 @@ impl Doc {
 
     /// Fertiges PDF als Bytes.
     pub fn to_bytes(&self, title: &str) -> Vec<u8> {
-        let pages: Vec<&String> = if self.pages.is_empty() { vec![] } else { self.pages.iter().collect() };
+        self.to_bytes_mit(title, crate::firmenkopf::fusszeile().as_deref())
+    }
+
+    /// Wie [`Doc::to_bytes`]; `fuss`: Zeile unten links auf jeder Seite (Firmenkopf).
+    pub fn to_bytes_mit(&self, title: &str, fuss: Option<&str>) -> Vec<u8> {
+        let fuss_op = fuss.filter(|f| !f.trim().is_empty()).map(|f| {
+            // links unten, neben der Seitenzahl; zu lang → gekürzt
+            let mut t = f.to_string();
+            while text_width(&t, 7.5, Font::Regular) > 400.0 && t.chars().count() > 1 {
+                t.pop();
+            }
+            format!("BT 0.40 0.40 0.40 rg /F1 7.5 Tf 50.0 28.0 Td ({}) Tj ET\n", escape(&t))
+        });
+        let mit_fuss: Vec<String> = self.pages.iter().map(|p| match &fuss_op { Some(op) => format!("{p}{op}"), None => p.clone() }).collect();
+        let pages: Vec<&String> = mit_fuss.iter().collect();
         let n = pages.len().max(1);
         // Objekte: 1 Katalog, 2 Seitenbaum, 3/4 Schriften, 5 Info, dann je Seite: Seite + Inhalt
         let mut objs: Vec<Vec<u8>> = Vec::new();

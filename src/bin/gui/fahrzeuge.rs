@@ -286,11 +286,41 @@ impl App {
         });
     }
 
+    /// Firmenkopf (Werkstatt) für die Fußzeile aller PDF-Berichte.
+    fn ui_firmenkopf(&mut self, ui: &mut egui::Ui) {
+        let f = self.firmenkopf.get_or_insert_with(ecu_werkbank::firmenkopf::laden);
+        let titel = if f.ist_leer() { tr!("🏢 Firmenkopf für Berichte (Werkstatt)") } else { tr!("🏢 Firmenkopf: {a}", a = f.name) };
+        let mut speichern = false;
+        egui::CollapsingHeader::new(titel).id_source("firmenkopf").show(ui, |ui| {
+            ui.weak(tr!("Steht in der Fußzeile jeder Seite aller PDF-Berichte. Leer lassen = keine Fußzeile."));
+            egui::Grid::new("firmenkopf_grid").num_columns(2).show(ui, |ui| {
+                for (name, feld) in [(trn!("Name"), &mut f.name), (trn!("Anschrift"), &mut f.adresse), (trn!("Telefon"), &mut f.telefon), (trn!("E-Mail"), &mut f.email), (trn!("Zusatz"), &mut f.zusatz)] {
+                    ui.label(ecu_werkbank::i18n::t(name));
+                    ui.add(egui::TextEdit::singleline(feld).desired_width(320.0));
+                    ui.end_row();
+                }
+            });
+            if !f.ist_leer() {
+                ui.weak(tr!("Vorschau: {a}", a = f.zeile()));
+            }
+            speichern = ui.button(tr!("💾 Speichern")).clicked();
+        });
+        if speichern {
+            let f = self.firmenkopf.clone().unwrap_or_default();
+            self.status = match ecu_werkbank::firmenkopf::speichern(&f) {
+                Ok(()) if f.ist_leer() => tr!("Firmenkopf entfernt."),
+                Ok(()) => tr!("Firmenkopf gespeichert — erscheint in allen neuen Berichten."),
+                Err(e) => tr!("Firmenkopf: {e}", e = format!("{e:#}")),
+            };
+        }
+    }
+
     pub(super) fn ui_fahrzeuge(&mut self, ui: &mut egui::Ui) {
         use ecu_werkbank::vehicle;
         ui.heading(tr!("Fahrzeuge"));
         ui.label(tr!("Je Fahrzeug ein Ordner (nach Fahrgestellnummer) mit allen Berichten, Scans, Sicherungen und Aufzeichnungen. Das Kennzeichen dient zum leichteren Finden."));
         self.ui_datensicherung(ui);
+        self.ui_firmenkopf(ui);
         ui.horizontal_wrapped(|ui| {
             ui.add_sized([120.0, 20.0], egui::TextEdit::singleline(&mut self.veh_new_plate).hint_text(tr!("Kennzeichen")));
             ui.add_sized([170.0, 20.0], egui::TextEdit::singleline(&mut self.veh_new_vin).hint_text(tr!("Fahrgestellnr. (optional)")));

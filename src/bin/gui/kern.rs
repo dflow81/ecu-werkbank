@@ -430,6 +430,7 @@ impl App {
             demo_autostart: tabsel.clone(),
             bus: Default::default(),
             cm: Default::default(),
+            firmenkopf: None,
             status: startup_status,
         }
     }

@@ -65,7 +65,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 46 | Dashboard / frei belegbare Instrumente | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 Armaturen/Scope |
 | 47 | Drag-and-Drop (Mitschnitte, Sicherungen, DBC ins Fenster ziehen) | – | niedrig | niedrig | niedrig | mittel | 1.0 | ✅ `gui/ablegen.rs` (Sicherungen nur mit Hinweis) |
 | 48 | Responsive Layout (kleine Bildschirme, Tablet) | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 |
-| 49 | Berichte mit Firmenkopf / Kunde (Werkstattbetrieb) | Autel, ODIS | mittel | niedrig | niedrig | mittel | 1.0 | 🟡 PDF vorhanden |
+| 49 | Berichte mit Firmenkopf / Kunde (Werkstattbetrieb) | Autel, ODIS | mittel | niedrig | niedrig | mittel | 1.0 | ✅ Firmenkopf in jeder PDF-Fußzeile (`firmenkopf`, GUI Fahrzeuge); Kunde über Kennzeichen/Notiz |
 | 50 | Online-Funktionen der Hersteller (SFD, FEC, Online-Login) | ODIS, E-Sys | – | – | – | **nicht geplant** | – | ❌ nur mit Herstellerzugang, nicht offen nachbaubar |
 
 ## Erweiterung: Fahrzeug-Datenbank (Punkte 51–60)

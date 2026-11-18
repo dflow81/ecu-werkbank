@@ -769,6 +769,8 @@ struct App {
     bus: hintergrund::BusArbeiter,
     /// Live-CAN-Monitor (Seite „CAN-Monitor“)
     cm: canmonitor_tab::CanMonitorSeite,
+    /// Firmenkopf für Berichte (beim ersten Anzeigen geladen)
+    firmenkopf: Option<ecu_werkbank::firmenkopf::Firmenkopf>,
 
     status: String,
 }

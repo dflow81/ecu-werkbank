@@ -998,6 +998,16 @@ GUI: Reiter **„Mitschnitt“**.
 `dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
 Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
 
+### Firmenkopf für Berichte
+
+```bash
+./target/release/ecu-werkbank firmenkopf --name "Kfz Muster" --adresse "Musterweg 1, 12345 Musterstadt" --telefon "0123 456"
+./target/release/ecu-werkbank firmenkopf --loeschen
+```
+
+Der Firmenkopf steht dann in der Fußzeile jeder Seite aller PDF-Berichte. In der GUI:
+Fahrzeug → Fahrzeuge & Wartung → „Firmenkopf für Berichte“.
+
 ### Fahrzeug-Datenbank (nur lokal)
 
 Fahrzeugwissen kann in einer eigenen Datenbank gesammelt werden (SQLite-Datei

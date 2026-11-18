@@ -934,6 +934,23 @@ enum Command {
         #[arg(long)]
         aufraeumen: bool,
     },
+    /// Firmenkopf für Berichte (Fußzeile jeder PDF-Seite): anzeigen, setzen oder löschen
+    Firmenkopf {
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        adresse: Option<String>,
+        #[arg(long)]
+        telefon: Option<String>,
+        #[arg(long)]
+        email: Option<String>,
+        /// freie Zusatzzeile (z. B. Meisterbetrieb)
+        #[arg(long)]
+        zusatz: Option<String>,
+        /// Firmenkopf entfernen
+        #[arg(long)]
+        loeschen: bool,
+    },
     /// Fahrzeug-Datenbank (Hersteller, Steuergeräte, Fehler, CAN-Signale) — nur lokal
     Db {
         #[command(subcommand)]
@@ -1311,6 +1328,25 @@ fn main() -> Result<()> {
         Command::Fahrzeuge => fahrzeuge(),
         Command::Software => software(&be, &db, cli.fahrzeug.as_deref()),
         Command::Nachruestung { name, phase, notiz } => nachruestung(&be, &db, &name, &phase, &notiz, cli.fahrzeug.as_deref()),
+        Command::Firmenkopf { name, adresse, telefon, email, zusatz, loeschen } => {
+            use ecu_werkbank::firmenkopf;
+            let mut f = if loeschen { firmenkopf::Firmenkopf::default() } else { firmenkopf::laden() };
+            let geaendert = loeschen || name.is_some() || adresse.is_some() || telefon.is_some() || email.is_some() || zusatz.is_some();
+            for (feld, neu) in [(&mut f.name, name), (&mut f.adresse, adresse), (&mut f.telefon, telefon), (&mut f.email, email), (&mut f.zusatz, zusatz)] {
+                if let Some(n) = neu {
+                    *feld = n;
+                }
+            }
+            if geaendert {
+                firmenkopf::speichern(&f)?;
+            }
+            if f.ist_leer() {
+                println!("{}", tr!("Kein Firmenkopf. Setzen z. B.: ecu-werkbank firmenkopf --name \"Kfz Muster\" --telefon \"0123 456\""));
+            } else {
+                println!("{}", tr!("Fußzeile in Berichten: {a}", a = f.zeile()));
+            }
+            Ok(())
+        }
         Command::Db { aktion, datei } => db_cmd(aktion.unwrap_or(DbAktion::Status), datei, &labels_dir),
         Command::Sprache { setzen, vorlage, datei, verwaist, aufraeumen } => sprache_cmd(setzen, vorlage, datei, verwaist, aufraeumen),
         Command::Service { aktion } => service_cmd(&be, aktion.unwrap_or(ServiceAktion::Lesen), cli.fahrzeug.as_deref()),

@@ -21,6 +21,7 @@ pub mod datensicherung;
 pub mod canmonitor;
 pub mod db;
 pub mod dbc;
+pub mod firmenkopf;
 pub mod dpf;
 pub mod dtc_db;
 pub mod elm327;
