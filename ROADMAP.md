@@ -68,6 +68,23 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 49 | Berichte mit Firmenkopf / Kunde (Werkstattbetrieb) | Autel, ODIS | mittel | niedrig | niedrig | mittel | 1.0 | 🟡 PDF vorhanden |
 | 50 | Online-Funktionen der Hersteller (SFD, FEC, Online-Login) | ODIS, E-Sys | – | – | – | **nicht geplant** | – | ❌ nur mit Herstellerzugang, nicht offen nachbaubar |
 
+## Erweiterung: Fahrzeug-Datenbank (Punkte 51–60)
+
+Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerdaten) auf und ersetzt ihn langfristig.
+
+| # | Funktion | Vorbild | Nutzen | Aufwand | Risiko | Priorität | Stufe | Status |
+|---|---|---|---|---|---|---|---|---|
+| 51 | Datenbank-Kern: SQLite-Schema, Migrationen, Repository-Schicht | ODIS, ISTA+ | hoch | mittel | niedrig | hoch | 1.0 | ⏳ |
+| 52 | Vorhandenes Wissen übernehmen (Labels, `systems.rs`, Profile, Fehlertexte) | – | hoch | mittel | niedrig | hoch | 1.0 | ⏳ |
+| 53 | Quellen- und Lizenzverwaltung je Datensatz (`data_source`) | – | hoch | niedrig | niedrig | hoch | 1.0 | ⏳ |
+| 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | 🟡 DBC-Leser vorhanden |
+| 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ⏳ |
+| 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ⏳ zusammen mit 39 |
+| 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
+| 58 | PDX-Import (ODX-Paket als ZIP) | ODIS | mittel | mittel | mittel | niedrig | 2.0 | ⏳ nach 57 |
+| 59 | Rollen und Rechte (lesen, codieren, flashen, verwalten) | ODIS | mittel | niedrig | niedrig | mittel | 2.0 | ⏳ wichtig erst mit REST |
+| 60 | Plugin-Ordner `plugins/` (Hersteller, Importer, Decoder, Codierer, Flasher, Analyse) | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |
+
 ## Stufen
 
 **Quick Wins (erledigt am 18.11.2026):** Punkte 1–10.
@@ -79,7 +96,9 @@ Prüfstein: Polo 6R und Golf 6 komplett ohne Werkstattgerät diagnostizierbar.
 **Version 2.0 — „neuere Autos und andere Marken“:**
 29, 31–36, 39, 40, 43, 46, 48.
 
-**Langfristige Vision:** 37 (Flashen), 41, 42, 45.
+**Langfristige Vision:** 37 (Flashen), 41, 42, 45, 60.
+
+**Fahrzeug-Datenbank:** 51–54 zu 1.0, 55–59 zu 2.0, 60 Vision.
 
 ## Plan: Herstellerdaten (Punkt 20)
 
@@ -96,6 +115,7 @@ manufacturers/
 - Inhalt nur aus eigenen Mitschnitten, offenen Normen und öffentlich freien Quellen — Herkunft je Eintrag (`quelle = "Mitschnitt Golf 6, 17.11.2026"`).
 - Lesen über ein neues Modul `hersteller.rs`; die bisherigen Tabellen werden zu Standardwerten im Code und nach und nach in Dateien verschoben.
 - Einzelheiten zum Dateiformat: [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md).
+- Langfristig werden diese Dateien zu Community-Daten der Fahrzeug-Datenbank (siehe unten, Punkte 51–60). Das Dateiformat bleibt dabei als Import erhalten.
 
 ## Plan: Flashing (Punkt 37)
 
@@ -116,3 +136,136 @@ Bewusst zuletzt — ein Fehler macht ein Steuergerät unbrauchbar. Voraussetzung
    lesen frei, schreiben nur mit Bestätigung im Programm.
 2. **Skripte**: eingebettete Sprache (Rhai oder Lua über `mlua`) mit denselben Funktionen wie die CLI.
 3. **Python**: über die REST-Schnittstelle (kein eigener Build nötig).
+
+## Plan: Fahrzeug-Datenbank (Punkte 51–60)
+
+**Ziel:** Fahrzeugwissen (Hersteller, Modelle, Steuergeräte, Kennungen, Fehler,
+Codierung, Messwerte, CAN-Signale) liegt nicht mehr im Programmcode, sondern in einer
+Datenbank. Der Programmkern kennt keinen Hersteller. Daten kommen aus offenen
+Community-Dateien, eigenen Mitschnitten und — nur beim Nutzer — aus selbst gekauften
+OEM-Daten (ODX/PDX).
+
+### Grundsätze
+
+- **Herstellerunabhängig, keine fest eingebauten OEM-Daten.** Das Projekt liefert nur offene Daten.
+- **Offline:** alles lokal, kein Server nötig.
+- **Jeder Datensatz kennt seine Quelle** (`source_id` → `data_source` mit Art, Version, Lizenz). Daraus folgt, was angezeigt, exportiert oder veröffentlicht werden darf.
+- **Versionierbar:** Schema-Version mit Migrationen; Community-Daten in Git; jede Quelle mit Versionsnummer.
+- **Mehrsprachig:** Texte in einer eigenen Tabelle je Sprache statt Spalten `title_de`, `title_en`.
+- **Sicherheit vor Vollständigkeit:** Security Access nur als Beschreibung (Level, Länge von Seed/Key), **keine Schlüssel-Verfahren** von Herstellern. Flash-Container nur als Metadaten und Prüfsumme, die Dateien selbst liefert das Projekt nie (siehe „Plan: Flashing“).
+
+### Datenmodell
+
+```mermaid
+erDiagram
+    manufacturer ||--o{ vehicle_model : baut
+    vehicle_model ||--o{ vehicle_variant : hat
+    vehicle_variant }o--o{ ecu : "verbaut (vehicle_ecu)"
+    manufacturer ||--o{ ecu : liefert
+    ecu ||--o{ did : kennt
+    ecu ||--o{ dtc : meldet
+    ecu ||--o{ routine : bietet
+    ecu ||--o{ coding_item : codiert
+    ecu ||--o{ measurement : misst
+    ecu ||--o{ security_access : schützt
+    ecu ||--o{ flash_container : "Software-Stände"
+    manufacturer ||--o{ can_message : sendet
+    can_message ||--o{ can_signal : enthält
+    data_source ||--o{ did : Quelle
+    data_source ||--o{ dtc : Quelle
+    data_source ||--o{ can_signal : Quelle
+    text ||--o{ dtc : übersetzt
+```
+
+Tabellen wie im Vorschlag: `manufacturer`, `vehicle_model`, `vehicle_variant`, `ecu`,
+`did`, `dtc`, `uds_service`, `diagnostic_session`, `security_access`, `routine`,
+`coding_item`, `measurement`, `flash_container`, `can_message`, `can_signal`,
+`data_source`, `permission`. **Ergänzungen:**
+
+| Ergänzung | Warum |
+|---|---|
+| `vehicle_ecu` (Variante ↔ Steuergerät, mit Diagnoseadresse) | Ein Steuergerät steckt in vielen Varianten; ohne Zwischentabelle doppelte Daten. |
+| `text` (`schluessel`, `sprache`, `inhalt`) | Mehrsprachigkeit ohne Schema-Änderung je neuer Sprache. |
+| `source_id` + `gueltig_ab_version` in jeder Wissenstabelle | Lizenz und Herkunft je Zeile; mehrere Quellen für dasselbe Steuergerät nebeneinander. |
+| `protocol` als eigene Liste (UDS, KWP2000/TP 2.0, KWP1281, OBD) | Ältere VW-Steuergeräte (TP 2.0) haben Messwertblöcke statt DIDs; `measurement` bekommt dafür `block` und `feld`. |
+| `uds_service`, `diagnostic_session` als Normdaten | Stammen aus ISO 14229, gehören keinem Hersteller; werden mit dem Programm ausgeliefert. |
+
+### Technische Entscheidungen
+
+| Entscheidung | Vorteil | Nachteil |
+|---|---|---|
+| **SQLite** (eingebettet, `rusqlite` mit `bundled`) statt PostgreSQL | eine Datei, offline, keine Installation, schnell beim Lesen, Sicherung = Datei kopieren | ein Schreiber zur Zeit (reicht für ein Desktop-Programm); für einen zentralen Community-Server später eigenes System |
+| **Community-Daten als Textdateien** (TOML/JSON) im Repo, Datenbank als Zwischenspeicher | Änderungen prüfbar in Pull-Requests, Herkunft im Git-Verlauf, keine Binärdatei im Repo | beim Start oder Update einmal einlesen (wenige Sekunden) |
+| **Eigene Nutzerdaten** in einer zweiten Datei (`nutzer.sqlite`) | Community-Update überschreibt nie eigene Daten; ODX-Importe bleiben getrennt und lokal | Abfragen über zwei Dateien (`ATTACH`) |
+| **Migrationen** über `PRAGMA user_version` und nummerierte SQL-Dateien im Programm | einfach, ohne Zusatzwerkzeug, Test je Migration | nur vorwärts; vorher automatische Sicherung |
+| **Repository- und Service-Schicht** als Rust-Module (`db/`, Traits je Bereich) | GUI, CLI und REST nutzen dieselben Funktionen; Tests mit Speicher-Datenbank | etwas mehr Code als direkte SQL-Aufrufe |
+| **Importer als Rust-Trait**, zuerst fest eingebaut | sicher (kein fremder Code), schnell | neue Formate brauchen ein neues Programm, bis Punkt 60 kommt |
+| **Plugins zuerst nur als Daten-Ordner**, fremder Code erst später (z. B. WASM in einer Sandbox) | fremder Code kann nichts ans Auto senden, was nicht bestätigt wird | Code-Plugins kommen spät |
+| **Cache** im Speicher: nur das aktive Fahrzeug (Steuergeräte, Texte), gefüllt beim Wählen | schnelle Anzeige, wenig Speicher | erste Abfrage je Fahrzeug etwas langsamer |
+
+### Größe und Leistung
+
+Ausgelegt für 100 Hersteller, 10 000 Modelle, 100 000 DIDs und 1 000 000 CAN-Signale:
+
+- 1 Mio. Signale × ca. 120 Byte sind etwa 120 MB in SQLite. Mit Index auf `can_message_id` und `(manufacturer_id, can_id)` dauert eine Abfrage weniger als 1 ms.
+- Volltextsuche (Fehlertexte, Namen) über SQLite **FTS5**.
+- Import großer Dateien in **einer** Transaktion mit vorbereiteten Anweisungen: über 100 000 Zeilen pro Sekunde.
+- `WAL`-Modus: Die GUI kann lesen, während ein Import schreibt.
+- Die Datenbank wird nie vollständig in den Speicher geladen, nur das aktive Fahrzeug (siehe Cache).
+
+### Import
+
+| Format | Inhalt | Hinweis |
+|---|---|---|
+| DBC | CAN-Botschaften und -Signale | Leser vorhanden (`dbc.rs`) |
+| JSON, CSV, TOML | alle Tabellen, festes Spaltenformat | auch für Community-Daten |
+| ODX (ASAM MCD-2D, XML) | Steuergeräte, DIDs, Fehler, Routinen, Codierung | großer Aufwand; nur Daten, die der Nutzer rechtmäßig besitzt |
+| PDX | ZIP mit ODX-Dateien | nach ODX |
+
+Jeder Import legt einen `data_source`-Eintrag an (Art, Name, Version, Lizenz, Zeitpunkt)
+und lässt sich als Ganzes wieder entfernen.
+
+### Lizenzen
+
+- `source_type`: `COMMUNITY`, `ODX`, `PDX`, `DBC`, `USER`, `MANUAL`.
+- **COMMUNITY:** nur frei lizenzierte, nachprüfbare Daten (eigene Mitschnitte, Normen, freie Lizenzen mit Namensnennung). Sie werden mit dem Programm ausgeliefert.
+- **ODX/PDX:** bleiben ausschließlich in der Nutzer-Datenbank. Sie werden nie exportiert, nie ins Repo übernommen und nie an die Community geschickt; das Programm verhindert es technisch über `source_type`. Ob die Nutzung erlaubt ist, regelt der Kaufvertrag des Nutzers.
+- **Keine Daten aus Werkstatt-Programmen** (Label-Dateien, verschlüsselte Datenbanken), auch nicht über einen Importer.
+
+### Sicherung
+
+- Die Nutzer-Datenbank ist Teil der vorhandenen Datensicherung (ZIP). Kopiert wird über die SQLite-Backup-Schnittstelle, die auch im laufenden Betrieb eine stimmige Kopie liefert.
+- Vor jeder Migration und jedem großen Import wird automatisch eine Kopie angelegt.
+- Community-Daten lassen sich jederzeit aus dem Repo neu aufbauen.
+
+### Schnittstelle (REST, mit Punkt 39)
+
+Nur `127.0.0.1`, Schlüssel wie bei der Handy-Anzeige, Version im Pfad:
+
+```
+GET  /api/v1/hersteller                     GET  /api/v1/steuergeraete/{id}/dids
+GET  /api/v1/fahrzeuge?vin=WVW…             GET  /api/v1/steuergeraete/{id}/fehler/{code}
+GET  /api/v1/can/botschaften/{id}/signale   GET  /api/v1/quellen
+POST /api/v1/import   (nur Rolle „verwalten“, Datei + Quellenangabe)
+```
+
+Die Schnittstelle schreibt nur in die Datenbank, nie ans Auto. Schreiben ans Auto
+bleibt in der GUI und CLI mit Bestätigung.
+
+### Projektstruktur (Ziel)
+
+```
+src/db/          schema.rs  migration.rs  repo/ (je Tabelle)  dienst/ (Abfragen für GUI/CLI/REST)  cache.rs
+src/import/      mod.rs (Trait Importer)  dbc.rs  json.rs  csv.rs  toml.rs  odx.rs  pdx.rs
+daten/community/ <hersteller>/*.toml      (im Repo, nur offene Daten)
+plugins/         manufacturers/  importers/  decoders/  coders/  flashers/  analyzers/   (Punkt 60)
+```
+
+### Reihenfolge
+
+1. **D1 (51, 53):** Schema, Migrationen, Repository; Tests mit Speicher-Datenbank.
+2. **D2 (52):** Labels, `systems.rs`, Profile und Fehlertexte in die Datenbank; GUI und CLI lesen daraus, die alten Dateien bleiben als Import.
+3. **D3 (54, 55):** Importer DBC, JSON, CSV, TOML; Community-Ordner im Repo.
+4. **D4 (56, 59):** REST lesend, Rollen.
+5. **D5 (57, 58):** ODX/PDX-Import, zuerst nur DIDs und Fehler.
+6. **D6 (60):** Plugins; Flasher-Plugins erst, wenn „Plan: Flashing“ erfüllt ist.
