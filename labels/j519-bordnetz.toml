@@ -1,11 +1,4 @@
-# J519 — Bordnetzsteuergerät (Adresse 0x09)
-#
-# LEERES GERÜST zum Selbst-Ausfüllen. Keine Texte aus VCDS übernommen.
-# Trage Beschreibungen in DEINEN eigenen Worten ein und die Kanal-/Byte-
-# Nummern aus DEINEN eigenen Auslese-Mitschnitten deines Fahrzeugs.
-#
-# (Die .lbl-Dateien von Ross-Tech bleiben außen vor — deren Texte sind
-#  urheberrechtlich geschützt.)
+
 
 [ecu]
 address = 0x09
