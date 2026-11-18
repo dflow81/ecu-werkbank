@@ -413,6 +413,7 @@ fn schreiben_und_pruefen(v: &mut Verbindung, did: u16, gesichert: &[u8]) -> Resu
 /// übersprungen (mit Grund im Ergebnis). Gibt `Err` nur zurück, wenn das
 /// Steuergerät gar nicht erreichbar ist.
 pub fn zurueckschreiben(be: &Backend, g: &Geraet, vehicle: &str, dids: &[u16]) -> Result<Vec<Geschrieben>> {
+    crate::spannung::vor_dem_schreiben(be)?;
     let soll = g.schnappschuss();
     let login = crate::login::fuer(vehicle, login_id(g));
     let mut v = Verbindung::oeffnen(be, g)?;

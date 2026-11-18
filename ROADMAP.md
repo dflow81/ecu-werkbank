@@ -54,7 +54,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 35 | Weitere Marken: Basis-Diagnose Opel/Ford/Mercedes/BMW über UDS + OBD | Autel | hoch | hoch | mittel | mittel | 2.0 | 🟡 `fremd.rs` findet Steuergeräte |
 | 36 | ECU-Sicherung (Speicher auslesen, wo erlaubt) | Autel, Flash-Tools | mittel | mittel | mittel | mittel | 2.0 | ⏳ Baustein `read_memory` |
 | 37 | Flash-Ablauf (siehe Abschnitt Flashing) | ODIS, E-Sys, Xentry | hoch | hoch | **hoch** | niedrig | Vision | ⏳ |
-| 38 | Spannungsüberwachung während langer Abläufe | ODIS, ISTA+ | hoch | niedrig | niedrig | hoch | 1.0 | 🟡 Batterietest vorhanden |
+| 38 | Spannungsüberwachung während langer Abläufe | ODIS, ISTA+ | hoch | niedrig | niedrig | hoch | 1.0 | 🟡 Prüfung vor jedem Schreiben (`spannung.rs`, ≥ 12,0 V); laufende Überwachung kommt mit dem Flashen |
 | 39 | REST-Schnittstelle (lokal, mit Schlüssel) | – | mittel | mittel | mittel | mittel | 2.0 | ⏳ (`web.rs` als Grundlage) |
 | 40 | Skripte (Lua oder Rhai, eingebettet) | – | mittel | mittel | mittel | niedrig | 2.0 | ⏳ |
 | 41 | Python-Anbindung (pyo3 oder REST) | – | mittel | mittel | niedrig | niedrig | Vision | ⏳ |

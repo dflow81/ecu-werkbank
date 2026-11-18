@@ -11,6 +11,7 @@ schreiben) und **der Rechner/die Daten** (keine Angriffsfläche, keine Datenleck
 | Sicherung vor dem Schreiben | Codierung (UDS + TP 2.0 lang), Anpassungen, Notfall-Komplettsicherung | ✅ |
 | Kontrolle nach dem Schreiben | neu lesen und vergleichen (Codierung, Kurzcodierung, Anpassung) | ✅ |
 | Ungeprüfte Schreibwege | TP-2.0-Langcodierung, Gateway-Codierung, TP-2.0-Anpassung: am echten Auto nur **Probelauf**, bis ein Mitschnitt die Anfrage bestätigt (`kwp::*_GEPRUEFT`) | ✅ |
+| Bordspannung | vor jedem Schreiben über OBD PID 0x42 geprüft, unter 12,0 V Abbruch (`spannung.rs`); nicht lesbar → kein Abbruch | ✅ |
 | Kilometerstand | wird nie geschrieben, durch Test abgesichert | ✅ |
 | Fremde Codierung aufs Auto | Sicherungen werden nur für das gewählte Fahrzeug (VIN) angeboten | ✅ |
 | Mitschnitt abspielen (`replay`) | nur auf `vcan`; Art des Interfaces wird vorher über `ip -details` geprüft, echte Adapter (`can`, `slcan`) werden abgelehnt | ✅ |

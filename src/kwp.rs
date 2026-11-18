@@ -549,6 +549,8 @@ pub fn kurzcodierung_daten(raw_9b: &[u8], neu: u32) -> Option<Vec<u8>> {
 /// Kurzcodierung eines TP-2.0-Steuergeräts schreiben und zur Kontrolle neu
 /// lesen. Gibt (alter Wert, danach gelesener Wert) zurück.
 pub fn kurzcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu: u32) -> Result<(u32, u32)> {
+    // vor dem TP-2.0-Kanal (OBD-Abfrage sperrt den Golf-6-Motor kurz für TP 2.0)
+    crate::spannung::vor_dem_schreiben(be)?;
     let mut ch = open_session(be, adresse)?;
     let mut k = Kwp::new(&mut ch);
     let raw = k.read_ecu_id(ECU_ID_VAG)?;
@@ -632,6 +634,9 @@ pub fn langcodierung_lesen(k: &mut Kwp) -> Option<(LangArt, Vec<u8>)> {
 /// lesen. Am echten Auto nur ein Probelauf, solange der Weg nicht mit einem
 /// Mitschnitt bestätigt ist ([`LANGCODIERUNG_GEPRUEFT`]).
 pub fn langcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu: &[u8]) -> Result<Schreiben> {
+    if darf_senden(be, LANGCODIERUNG_GEPRUEFT || GATEWAY_CODIERUNG_GEPRUEFT) {
+        crate::spannung::vor_dem_schreiben(be)?;
+    }
     let mut ch = open_session(be, adresse)?;
     let mut k = Kwp::new(&mut ch);
     let (art, alt) = langcodierung_lesen(&mut k).ok_or_else(|| anyhow::anyhow!(tr!("Steuergerät {a} hat keine lange Codierung.", a = format!("{adresse:02X}"))))?;
@@ -956,6 +961,7 @@ pub fn anpassung_schreiben(be: &crate::transport::Backend, adresse: u8, kanal: u
     if !darf_senden(be, ANPASSUNG_SCHREIBEN_GEPRUEFT) {
         return Ok(Schreiben::Probelauf { anfrage, alt: alt.to_be_bytes().to_vec() });
     }
+    crate::spannung::vor_dem_schreiben(be)?;
     {
         let mut ch = open_session(be, adresse)?;
         let mut k = Kwp::new(&mut ch);

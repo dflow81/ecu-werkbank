@@ -463,6 +463,7 @@ pub fn zuruecksetzen(be: &Backend, c: &Config, sicherung_ordner: Option<&std::pa
     if werte.is_empty() {
         bail!(tr!("Keine Rückstellwerte eingetragen — erst mit „service merken“ und „service vergleich“ lernen"));
     }
+    crate::spannung::vor_dem_schreiben(be)?;
     let tp = be.open(c.tx, c.rx)?;
     let uds = Uds::new(&*tp);
     uds.diagnostic_session(0x01).context(tr!("Kombi antwortet nicht (Zündung an?)"))?;
@@ -556,6 +557,7 @@ pub fn sicherung_zurueck(be: &Backend, c: &Config, pfad: &std::path::Path) -> Re
     for did in s.keys() {
         crate::km::schreiben_erlaubt(*did, c.tx)?;
     }
+    crate::spannung::vor_dem_schreiben(be)?;
     let tp = be.open(c.tx, c.rx)?;
     let uds = Uds::new(&*tp);
     uds.diagnostic_session(c.sitzung)?;

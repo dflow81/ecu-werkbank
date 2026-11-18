@@ -282,6 +282,7 @@ pub fn restore(be: &Backend, e: &CodingEntry, login: Option<&crate::login::Metho
     if before == want {
         return Ok(before);
     }
+    crate::spannung::vor_dem_schreiben(be)?;
     uds.diagnostic_session(crate::uds::SESSION_EXTENDED)
         .context(crate::trs!("erweiterte Diagnosesitzung (0x03) abgelehnt"))?;
     let mut w = uds.write_data_by_id(did, &want);

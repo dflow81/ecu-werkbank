@@ -69,5 +69,6 @@ quelle = "eigener Mitschnitt"
 2. Vorher sichern, nachher neu lesen und vergleichen.
 3. Neue Schreibwege erst mit Mitschnitt eines Werkstattgeräts bestätigen; bis dahin
    Probelauf am echten Auto (Muster: `kwp::LANGCODIERUNG_GEPRUEFT`, `kwp::darf_senden`).
-4. Nie den Kilometerstand.
-5. Test in `sim.rs`, der den ganzen Ablauf durchspielt.
+4. Vorher `spannung::vor_dem_schreiben` (vor dem Öffnen eines TP-2.0-Kanals).
+5. Nie den Kilometerstand.
+6. Test in `sim.rs`, der den ganzen Ablauf durchspielt.

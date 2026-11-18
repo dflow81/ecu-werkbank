@@ -35,6 +35,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.
 
 ### Geändert
+- **Bordspannung wird vor jedem Schreiben geprüft** (Codierung, Anpassung, Service-Rückstellung,
+  Routinen, Stellglieder): unter 12,0 V wird nichts geschrieben. Ist sie nicht lesbar, wird nicht blockiert.
 - **Fenster friert nicht mehr ein**, wenn ein Steuergerät langsam oder gar nicht antwortet: alle
   Abfragen ans Auto laufen im Hintergrund, der Reihe nach. Ein Drehrad unten links zeigt, dass
   gerade gearbeitet wird; doppelte Klicks werden abgewiesen.

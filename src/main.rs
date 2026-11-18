@@ -1956,6 +1956,9 @@ fn main() -> Result<()> {
                 println!("{}", tr!("Wirklich senden mit --ja. Nur am stehenden Auto."));
                 return Ok(());
             }
+            if let Some(v) = ecu_werkbank::spannung::vor_dem_schreiben(&be)? {
+                println!("{}", tr!("Bordspannung {a} V — in Ordnung.", a = format!("{v:.1}")));
+            }
             println!("{}", tr!("Sende: {a}", a = plan));
             let tp = be.open(tx, rx)?;
             let uds = Uds::new(&*tp);
@@ -1981,6 +1984,9 @@ fn main() -> Result<()> {
                 println!("{}", tr!("Wirklich senden mit --ja. Nur am stehenden Auto."));
                 return Ok(());
             }
+            if let Some(v) = ecu_werkbank::spannung::vor_dem_schreiben(&be)? {
+                println!("{}", tr!("Bordspannung {a} V — in Ordnung.", a = format!("{v:.1}")));
+            }
             println!("{}", tr!("Sende: {a}", a = plan));
             let tp = be.open(tx, rx)?;
             let uds = Uds::new(&*tp);
@@ -2005,6 +2011,9 @@ fn main() -> Result<()> {
                 println!("{}", tr!("Vorschau (nichts gesendet): {a}", a = plan));
                 println!("{}", tr!("Wirklich senden mit --ja. Nur am stehenden Auto."));
                 return Ok(());
+            }
+            if let Some(v) = ecu_werkbank::spannung::vor_dem_schreiben(&be)? {
+                println!("{}", tr!("Bordspannung {a} V — in Ordnung.", a = format!("{v:.1}")));
             }
             println!("{}", tr!("Sende: {a}", a = plan));
             let tp = be.open(tx, rx)?;
