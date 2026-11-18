@@ -998,6 +998,22 @@ GUI: Reiter **„Mitschnitt“**.
 `dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
 Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
 
+### Live-CAN-Monitor (GUI)
+
+**Werkzeuge → CAN-Monitor** zeigt live jede CAN-ID mit Daten, Anzahl und Rate.
+Bytes, die sich gerade ändern, sind farbig; ein Klick auf eine ID zeigt die
+einzelnen Bits. Der Monitor **hört nur zu** und sendet nichts.
+
+Signal finden: **„Rauschen merken“** drücken. Alles, was sich bis dahin von
+selbst geändert hat (Zähler, Prüfsummen), wird danach ignoriert. Dann am Auto
+etwas betätigen, etwa den Blinker: Hervorgehoben werden nur noch die Bits, die
+sich dadurch ändern, und neue IDs (★). Mit **„Mitschnitt speichern“** landet
+alles als candump-Datei im Fahrzeugordner. Eine eigene DBC-Datei zeigt
+Botschaftsnamen und Signale. Geht mit SocketCAN-Adapter und im Demo-Fahrzeug
+(dort mit erfundenem Verkehr und einem Blinker zum Ausprobieren).
+
+Hinweis Golf 6: Am OBD-Stecker kommt durch das Gateway meist nur Diagnose-Verkehr an.
+
 ## Eigene Label-Dateien (dein Inhalt)
 
 Lege `*.toml`-Dateien in den Ordner `labels/` (eine pro Steuergerät). Format und
@@ -1207,6 +1223,7 @@ und Stand in ECUWerkbank:
 | – | Messwerte protokollieren (CSV) | ✅ `obd-live --csv` | ✅ `kwp-block --csv` |
 | – | Mitschnitt aufzeichnen/auswerten | ✅ `record`, `decode-log` | ✅ inkl. Prüfbericht |
 | – | Mitschnitt als PCAP/ASC, DBC-Signale | ✅ `log-export`, `dbc-decode` | ✅ |
+| – | Live-CAN-Monitor mit Rauschfilter | ✅ GUI „CAN-Monitor“ (nur zuhören) | ✅ |
 | – | Steuergerät neu starten, Fehleranzahl | ✅ `ecu-reset` (mit `--ja`), `dtc-anzahl` | – |
 | – | Service-Anzeige lesen / zurückstellen | 🟡 `service` (Kennungen je Fahrzeug lernen; Golf 6: km seit Service bestätigt) | – |
 | – | Verbauliste (verbaute Steuergeräte, nach System) | ✅ `verbauliste`, GUI Steuergeräte → „📋 Verbauliste nach System“ | ✅ aus dem Scan |

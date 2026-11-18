@@ -16,6 +16,7 @@ impl App {
             "tp20" | "blockscan" => (Tab::Tp20, false),
             "obd" => (Tab::Obd, false),
             "mitschnitt" => (Tab::Mitschnitt, false),
+            "canmonitor" => (Tab::CanMonitor, false),
             "editor" => (Tab::Editor, false),
             "fahrzeuge" => (Tab::Fahrzeuge, false),
             "batterie" => (Tab::Batterie, false),
@@ -428,6 +429,7 @@ impl App {
             tp_autostart: tabsel == "tp20",
             demo_autostart: tabsel.clone(),
             bus: Default::default(),
+            cm: Default::default(),
             status: startup_status,
         }
     }

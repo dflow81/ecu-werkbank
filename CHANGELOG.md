@@ -15,6 +15,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Mitschnitte umwandeln: `log-export --out x.pcap` (Wireshark) oder `x.asc` (Vector/SavvyCAN).
 - Eigene DBC-Dateien: `dbc-decode --dbc … --log …` zeigt CAN-Signale im Klartext.
 - Codier-Helfer: **Rückgängig** und **Alles zurück**.
+- **Live-CAN-Monitor** (Werkzeuge → CAN-Monitor): alle IDs mit Daten, Rate und geänderten Bits,
+  „Rauschen merken“ zum Finden von Signalen, Mitschnitt speichern, eigene DBC. Nur zuhören.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.
 
 ### Geändert

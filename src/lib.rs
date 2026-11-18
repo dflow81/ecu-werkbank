@@ -18,6 +18,7 @@ pub mod control;
 pub mod connect;
 pub mod csvlog;
 pub mod datensicherung;
+pub mod canmonitor;
 pub mod dbc;
 pub mod dpf;
 pub mod dtc_db;

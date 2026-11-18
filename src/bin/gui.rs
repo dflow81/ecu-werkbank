@@ -52,6 +52,8 @@ mod diagnose;
 mod kern;
 #[path = "gui/hintergrund.rs"]
 mod hintergrund;
+#[path = "gui/canmonitor_tab.rs"]
+mod canmonitor_tab;
 #[path = "gui/reiter.rs"]
 mod reiter;
 #[path = "gui/scope.rs"]
@@ -305,6 +307,7 @@ enum Tab {
     Testlauf,
     Sicherheit,
     Mitschnitt,
+    CanMonitor,
     Historie,
     Sicherung,
     Namen,
@@ -762,6 +765,8 @@ struct App {
     demo_autostart: String,
     /// Bus-Arbeit im Hintergrund (ein Thread, Aufträge der Reihe nach)
     bus: hintergrund::BusArbeiter,
+    /// Live-CAN-Monitor (Seite „CAN-Monitor“)
+    cm: canmonitor_tab::CanMonitorSeite,
 
     status: String,
 }
@@ -802,6 +807,12 @@ impl eframe::App for App {
             "check" => self.start_check(),
             "diagnose" => self.run_mode06(),
             "verbindung" => self.verbindung_pruefen(),
+            "canmonitor" => {
+                if let Ok(l) = ecu_werkbank::canmonitor::Lauf::starten(ecu_werkbank::canmonitor::Quelle::Demo) {
+                    l.demo_aktion.store(true, std::sync::atomic::Ordering::Relaxed);
+                    self.cm_demo_start(l);
+                }
+            }
             "kaufcheck" => {
                 ecu_werkbank::sim::set_manipuliert(true);
                 self.start_kaufcheck();
@@ -1746,6 +1757,7 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
     ]),
     (trn!("🛠 Werkzeuge"), &[
         (Tab::Testlauf, trn!("Testlauf")),
+        (Tab::CanMonitor, trn!("CAN-Monitor")),
         (Tab::Mitschnitt, trn!("Mitschnitt & Lernhilfe")),
         (Tab::Namen, trn!("Eigene Namen")),
         (Tab::Editor, trn!("Label-Editor")),
