@@ -79,9 +79,9 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 | 53 | Quellen- und Lizenzverwaltung je Datensatz (`data_source`) | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `db quellen`, `db entfernen`, `darf_weitergeben` |
 | 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | ✅ `db dbc/paket/csv/labels`, Export `db export` |
 | 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ✅ `daten/community/`, `db eingebaut` |
-| 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `db::api`; vor dem ODX-Import (57) ODX/PDX-Zeilen dort ausfiltern |
-| 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
-| 58 | PDX-Import (ODX-Paket als ZIP) | ODIS | mittel | mittel | mittel | niedrig | 2.0 | ⏳ nach 57 |
+| 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `db::api`; ODX/PDX-Zeilen werden nie ausgegeben |
+| 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | 🟡 `db odx`: Steuergeräte, Fehler, 0x22-DIDs; Skalierung/Codierung fehlen; mit echter Datei noch nicht geprüft |
+| 58 | PDX-Import (ODX-Paket als ZIP) | ODIS | mittel | mittel | mittel | niedrig | 2.0 | ✅ `db odx` erkennt PDX (gespeichert/deflate) |
 | 59 | Rollen und Rechte (lesen, codieren, flashen, verwalten) | ODIS | mittel | niedrig | niedrig | mittel | 2.0 | ⏳ wichtig erst mit REST |
 | 60 | Plugin-Ordner `plugins/` (Hersteller, Importer, Decoder, Codierer, Flasher, Analyse) | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |
 

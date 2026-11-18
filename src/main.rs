@@ -91,6 +91,14 @@ enum DbAktion {
         #[arg(long)]
         community: bool,
     },
+    /// ODX- oder PDX-Datei übernehmen (nur rechtmäßig erworbene Daten) — bleibt immer lokal
+    Odx {
+        #[arg(long)]
+        datei: PathBuf,
+        /// Hersteller, zu dem die Steuergeräte gehören
+        #[arg(long)]
+        hersteller: String,
+    },
     /// CSV übernehmen: Fehlertexte (code;text) oder DIDs (did;name;einheit;faktor;offset)
     Csv {
         #[arg(long)]
@@ -4525,6 +4533,12 @@ fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std::path::Path
             }
             let e = db.paket_importieren(&p, if community { QuellArt::Community } else { QuellArt::User })?;
             println!("{}", tr!("„{a}“ übernommen: {b} (Quelle {c}).", a = p.quelle.name, b = e.text(), c = e.quelle_id));
+        }
+        DbAktion::Odx { datei, hersteller } => {
+            let (p, art) = ecu_werkbank::db::odx::lesen(&datei, &hersteller)?;
+            let e = db.paket_importieren_lokal(&p, art)?;
+            println!("{}", tr!("{a} übernommen: {b} (Quelle {c}).", a = art.text(), b = e.text(), c = e.quelle_id));
+            println!("{}", tr!("Diese Daten bleiben nur in deiner Datenbank: kein Export, keine Schnittstelle."));
         }
         DbAktion::Csv { datei, lizenz } => {
             let e = db.csv_importieren(&datei, &lizenz)?;

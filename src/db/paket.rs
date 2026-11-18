@@ -166,6 +166,14 @@ impl Db {
         if matches!(art, QuellArt::Odx | QuellArt::Pdx | QuellArt::Dbc) {
             bail!(crate::tr!("Datenpakete sind COMMUNITY, USER oder MANUAL"));
         }
+        self.paket_importieren_lokal(p, art)
+    }
+
+    /// Wie [`Db::paket_importieren`], erlaubt auch ODX/PDX (aus [`super::odx::lesen`]).
+    pub fn paket_importieren_lokal(&self, p: &Datenpaket, art: QuellArt) -> Result<ImportErgebnis> {
+        if art == QuellArt::Dbc {
+            bail!(crate::tr!("DBC über db dbc übernehmen"));
+        }
         let tx = self.con.unchecked_transaction()?;
         tx.execute("DELETE FROM data_source WHERE source_type = ?1 AND source_name = ?2", params![art.text(), p.quelle.name])?;
         let q = self.quelle_anlegen(art, &p.quelle.name, &p.quelle.version, &p.quelle.lizenz, &p.quelle.herkunft)?;

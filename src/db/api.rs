@@ -71,6 +71,10 @@ impl From<anyhow::Error> for Fehler {
 
 type Antwort = std::result::Result<Value, Fehler>;
 
+/// Bedingung: Zeile stammt nicht aus selbst gekauften Herstellerdaten (ODX/PDX) —
+/// die verlassen die Datenbank nie, auch nicht über diese Schnittstelle.
+const TEILBAR: &str = "source_id NOT IN (SELECT id FROM data_source WHERE source_type IN ('ODX', 'PDX'))";
+
 fn zahl(s: &str) -> std::result::Result<i64, Fehler> {
     s.parse().map_err(|_| Fehler::Anfrage(format!("„{s}“ ist keine Nummer")))
 }
@@ -98,7 +102,7 @@ fn hersteller(db: &Db) -> Antwort {
 }
 
 fn steuergeraete(db: &Db, hersteller: i64) -> Antwort {
-    let mut st = db.con.prepare("SELECT id, ecu_name, ecu_family, protocol, diagnostic_address, can_tx, can_rx, source_id FROM ecu WHERE manufacturer_id = ?1 ORDER BY diagnostic_address, id")?;
+    let mut st = db.con.prepare(&format!("SELECT id, ecu_name, ecu_family, protocol, diagnostic_address, can_tx, can_rx, source_id FROM ecu WHERE manufacturer_id = ?1 AND {TEILBAR} ORDER BY diagnostic_address, id"))?;
     let v = st.query_map(params![hersteller], ecu_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(Value::Array(v))
 }
@@ -117,7 +121,7 @@ fn ecu_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
 }
 
 fn steuergeraet(db: &Db, id: i64) -> Antwort {
-    let mut e = db.con.query_row("SELECT id, ecu_name, ecu_family, protocol, diagnostic_address, can_tx, can_rx, source_id FROM ecu WHERE id = ?1", params![id], ecu_json)?;
+    let mut e = db.con.query_row(&format!("SELECT id, ecu_name, ecu_family, protocol, diagnostic_address, can_tx, can_rx, source_id FROM ecu WHERE id = ?1 AND {TEILBAR}"), params![id], ecu_json)?;
     let liste = |sql: &str, f: fn(&rusqlite::Row) -> rusqlite::Result<Value>| -> std::result::Result<Value, Fehler> {
         let mut st = db.con.prepare(sql)?;
         let v = st.query_map(params![id], f)?.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -135,7 +139,7 @@ fn steuergeraet(db: &Db, id: i64) -> Antwort {
 }
 
 fn fehler(db: &Db, code: &str) -> Antwort {
-    let mut st = db.con.prepare("SELECT d.dtc_code, d.title, d.ecu_id, d.source_id, s.source_name FROM dtc d JOIN data_source s ON s.id = d.source_id WHERE d.dtc_code = ?1 ORDER BY d.source_id DESC")?;
+    let mut st = db.con.prepare("SELECT d.dtc_code, d.title, d.ecu_id, d.source_id, s.source_name FROM dtc d JOIN data_source s ON s.id = d.source_id WHERE d.dtc_code = ?1 AND s.source_type NOT IN ('ODX', 'PDX') ORDER BY d.source_id DESC")?;
     let v = st
         .query_map(params![code.trim().to_ascii_uppercase()], |r| {
             Ok(json!({ "code": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?, "steuergeraet": r.get::<_, Option<i64>>(2)?, "quelle": r.get::<_, i64>(3)?, "quelle_name": r.get::<_, String>(4)? }))

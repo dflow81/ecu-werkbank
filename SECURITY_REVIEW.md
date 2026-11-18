@@ -27,7 +27,8 @@ schreiben) und **der Rechner/die Daten** (keine Angriffsfläche, keine Datenleck
 | Thema | Stand | Bewertung |
 |---|---|---|
 | Handy-Anzeige (`web.rs`) | lauscht auf allen Netzwerkkarten (`0.0.0.0`), nur lesend; **neu:** zufälliger Schlüssel in der Adresse, sonst 404 | ✅ behoben |
-| REST-Schnittstelle (`db::api`) | nur `127.0.0.1`, 128-Bit-Schlüssel im Pfad, nur GET, Datenbank nur lesend geöffnet, sendet nie ans Auto | ✅ |
+| REST-Schnittstelle (`db::api`) | nur `127.0.0.1`, 128-Bit-Schlüssel im Pfad, nur GET, Datenbank nur lesend geöffnet, sendet nie ans Auto; ODX/PDX-Zeilen werden herausgefiltert | ✅ |
+| ODX/PDX-Import | XML über `roxmltree` (keine externen Entitäten), ZIP selbst gelesen mit Größengrenze beim Entpacken; Daten nur lokal, Export/Schnittstelle gesperrt (Test `import_bleibt_lokal`) | ✅ |
 | HTTP ohne TLS | im Heimnetz lesbar für Mitlauscher (nur Live-Werte, keine VIN) | 🟡 bewusst einfach; nur im eigenen WLAN nutzen |
 | `unsafe` | 5 Stellen: `localtime_r`/`localtime_s` (Zeit), `ioctl`/Netzwerk-Abfragen (CAN) | ✅ eng begrenzt |
 | Externe Programme | `ip` (CAN-Status), `xdg-open`/`open`, `notify-send`, `paplay` — feste Argumente, keine Shell | ✅ |

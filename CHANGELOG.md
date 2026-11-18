@@ -24,6 +24,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
 - Datenpakete (TOML/JSON) und CSV übernehmen, alles Weitergebbare als Paket exportieren
   (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
+- `db odx --datei … --hersteller …`: ODX/PDX-Dateien (rechtmäßig erworben) übernehmen — Steuergeräte,
+  Fehlertexte, Lese-Kennungen. Bleiben immer lokal: kein Export, nicht über die Schnittstelle.
 - `ecu-werkbank api`: REST-Schnittstelle auf die Fahrzeug-Datenbank — nur lesen, nur dieser Rechner,
   zufälliger Schlüssel in der Adresse; Python-Beispiel in `beispiele/api_abfrage.py`.
 - `konfig-vergleich`: Codierung, Anpassungen und Softwarestände in einem Bericht vergleichen —

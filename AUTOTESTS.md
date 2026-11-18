@@ -60,6 +60,7 @@ Dateien aus dem Werkstattprogramm übernehmen.
 | # | Was | Wie | Status |
 |---|---|---|---|
 | D1 | Mitschnitt abspielen (Roadmap 24) | `sudo modprobe vcan && sudo ip link add vcan0 type vcan && sudo ip link set vcan0 up`, dann `replay --log … --iface vcan0` und gleichzeitig CAN-Monitor auf `vcan0` | ⏳ |
+| D3 | ODX/PDX-Import mit einer echten, rechtmäßig erworbenen Datei (Roadmap 57/58) | `db odx --datei … --hersteller …`, dann `db quellen`, `fehlertext --code …` | ⏳ |
 | D2 | Integrationstests über vcan (Roadmap 28) | wie D1, dann `mockecu` auf vcan0 | ⏳ |
 
 Nach dem Termin: Ergebnisse hier eintragen, Konstanten in `src/kwp.rs` nur
