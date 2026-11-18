@@ -12,7 +12,7 @@ Ein Rust-Projekt, zwei Programme, eine gemeinsame Bibliothek:
 | Teil | Datei | Aufgabe |
 |---|---|---|
 | Bibliothek `ecu_werkbank` | `src/lib.rs` + ~70 Module | Protokolle, Funktionen, Datenhaltung |
-| CLI `ecu-werkbank` | `src/main.rs` | ~110 Befehle (clap), dünne Schicht über der Bibliothek |
+| CLI `ecu-werkbank` | `src/main.rs` (Befehle, Verteilung), `src/cli/*.rs` (Ausführung je Bereich) | ~120 Befehle (clap), dünne Schicht über der Bibliothek |
 | GUI `ecu-werkbank-gui` | `src/bin/gui.rs` + `src/bin/gui/*.rs` | egui/eframe-Oberfläche |
 | Prüf-Steuergerät `mockecu` | `src/bin/mockecu.rs` | UDS-Gegenstelle auf `vcan0` |
 
@@ -152,7 +152,7 @@ Start direkt — nur Simulation.
 
 | Stelle | Problem | Vorschlag |
 |---|---|---|
-| `src/main.rs` (≈4 300 Zeilen) | alle CLI-Befehle in einer Datei, Enum mit ~110 Varianten | in `src/cli/<gruppe>.rs` aufteilen |
+| `src/main.rs` (≈2 700 Zeilen) | Ausführung schon in `src/cli/` verteilt; Befehlsliste (`enum Command`) und Verteilung (`match`) noch in einer Datei | Befehlsgruppen als Unterbefehle (`ecu-werkbank tp20 …`) — ändert die Bedienung, darum später |
 | `src/bin/gui.rs` `struct App` (≈317 Felder) | ein großer Zustand für alle Seiten | je Seite eine eigene Zustands-Struktur |
 | NRC-Tabellen | dreifach: `uds.rs`, `kwp.rs`, `canlog.rs` | eine gemeinsame Tabelle |
 | Steuergeräte-Wissen | verteilt auf `systems.rs`, `kwp::tp20_name`, `profil.rs`, `sim.rs` | Daten-Ordner je Hersteller (siehe ROADMAP, Punkt „Herstellerdaten“) |

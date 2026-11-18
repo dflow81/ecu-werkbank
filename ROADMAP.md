@@ -43,7 +43,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 24 | Mitschnitt abspielen (Replay auf vcan) | CANalyzer | mittel | niedrig | mittel | mittel | 1.0 | 🟡 `replay` (lehnt echte Adapter ab); Lauf auf vcan noch nicht ausprobiert |
 | 25 | Bus-Arbeit der GUI im Hintergrund (kein Einfrieren) | – | hoch | mittel | niedrig | hoch | 1.0 | ✅ `gui/hintergrund.rs` |
 | 26 | Linux-CI: Tests + Clippy + cargo audit bei jedem Push | – | hoch | niedrig | niedrig | hoch | 1.0 | ✅ `.github/workflows/pruefen.yml` |
-| 27 | CLI in Gruppen-Dateien aufteilen | – | mittel | mittel | niedrig | mittel | 1.0 | ⏳ |
+| 27 | CLI in Gruppen-Dateien aufteilen | – | mittel | mittel | niedrig | mittel | 1.0 | ✅ `src/cli/` (7 Bereiche, main.rs 4 600 → 2 700 Zeilen); Befehlsliste bleibt in main.rs |
 | 28 | Integrationstests über `vcan0` + `mockecu` | – | mittel | mittel | niedrig | mittel | 1.0 | 🟡 mockecu vorhanden |
 | 29 | Codierung: Klartext-Assistent mit Abhängigkeiten (Bit A nur mit Bit B) | ODIS, E-Sys | hoch | mittel | mittel | mittel | 2.0 | ✅ `benoetigt`/`schliesst_aus` in Labels, Datenpaketen und Datenbank (Schema 2); Warnung im Codier-Helfer und in der CLI |
 | 30 | Fahrzeug-Konfiguration als Ganzes vergleichen (vorher/nachher, zwei Autos) | E-Sys | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `konfig-vergleich` (CLI); GUI fehlt noch |
