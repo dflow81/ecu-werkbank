@@ -24,6 +24,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
 - Datenpakete (TOML/JSON) und CSV übernehmen, alles Weitergebbare als Paket exportieren
   (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
+- `konfig-vergleich`: Codierung, Anpassungen und Softwarestände in einem Bericht vergleichen —
+  vorher/nachher oder zwei Fahrzeuge (`--a`, `--b`).
 - **Firmenkopf für Berichte:** Werkstattname, Anschrift, Telefon in der Fußzeile jeder PDF-Seite
   (`firmenkopf --name …`, GUI Fahrzeug → Fahrzeuge & Wartung).
 - Mitschnitt-Prüfbericht mit **Auffälligkeiten**: Antwortzeiten, fehlende Antworten, gehäufte

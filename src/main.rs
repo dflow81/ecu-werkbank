@@ -948,6 +948,15 @@ enum Command {
         #[arg(long)]
         aufraeumen: bool,
     },
+    /// Ganze Konfiguration vergleichen (Codierung, Anpassungen, Software): vorher/nachher oder zwei Fahrzeuge
+    KonfigVergleich {
+        /// Fahrzeug (Kennzeichen, VIN oder Ordner); Standard: aktives Fahrzeug
+        #[arg(long)]
+        a: Option<String>,
+        /// zweites Fahrzeug; ohne: neueste gegen vorherige Sicherungen von A
+        #[arg(long)]
+        b: Option<String>,
+    },
     /// Firmenkopf für Berichte (Fußzeile jeder PDF-Seite): anzeigen, setzen oder löschen
     Firmenkopf {
         #[arg(long)]
@@ -1359,6 +1368,26 @@ fn main() -> Result<()> {
         Command::Fahrzeuge => fahrzeuge(),
         Command::Software => software(&be, &db, cli.fahrzeug.as_deref()),
         Command::Nachruestung { name, phase, notiz } => nachruestung(&be, &db, &name, &phase, &notiz, cli.fahrzeug.as_deref()),
+        Command::KonfigVergleich { a, b } => {
+            use ecu_werkbank::konfigvergleich;
+            let a = match active_vehicle(a.as_deref().or(cli.fahrzeug.as_deref()))? {
+                Some(k) => k,
+                None => ecu_werkbank::vehicle::list().into_iter().next().map(|v| v.key).context(tr!("Kein Fahrzeug gespeichert."))?,
+            };
+            let (x, y) = match b {
+                Some(b) => {
+                    let b = active_vehicle(Some(&b))?.context(tr!("Fahrzeug B nicht gefunden."))?;
+                    println!("{}", tr!("Vergleich {a}  →  {b}\n", a = a, b = b));
+                    (konfigvergleich::laden(&a, 0), konfigvergleich::laden(&b, 0))
+                }
+                None => {
+                    println!("{}", tr!("{a}: vorherige → neueste Sicherungen\n", a = a));
+                    (konfigvergleich::laden(&a, 1), konfigvergleich::laden(&a, 0))
+                }
+            };
+            print!("{}", konfigvergleich::text(&x, &y, &db));
+            Ok(())
+        }
         Command::Firmenkopf { name, adresse, telefon, email, zusatz, loeschen } => {
             use ecu_werkbank::firmenkopf;
             let mut f = if loeschen { firmenkopf::Firmenkopf::default() } else { firmenkopf::laden() };

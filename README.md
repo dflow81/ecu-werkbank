@@ -998,6 +998,16 @@ GUI: Reiter **„Mitschnitt“**.
 `dbc-decode` liest eigene oder frei lizenzierte DBC-Dateien (Intel/Motorola,
 Vorzeichen, Faktor/Offset, Wertetexte); ECUWerkbank bringt keine Hersteller-DBC mit.
 
+### Ganze Konfiguration vergleichen
+
+```bash
+./target/release/ecu-werkbank konfig-vergleich                 # aktives Fahrzeug: vorherige → neueste Sicherungen
+./target/release/ecu-werkbank konfig-vergleich --a golf --b polo   # zwei Fahrzeuge
+```
+
+Vergleicht die gespeicherten Codier- und Anpassungs-Sicherungen und Softwarestände
+(vorher mit `coding-backup`, `anpassung-sichern`, `software` sichern). Kein Auto nötig.
+
 ### Firmenkopf für Berichte
 
 ```bash
