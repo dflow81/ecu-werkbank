@@ -465,6 +465,8 @@ struct App {
     tl_text: String,
     si_report: Option<ecu_werkbank::report::ScanReport>,
     code_bytes: String,
+    /// Codier-Helfer: frühere Stände der Hex-Codierung (Rückgängig), neuester zuletzt
+    code_undo: Vec<String>,
 
     // Scope (Live-Grafik, mehrere Kurven)
     scope_did: String,

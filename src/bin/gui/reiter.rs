@@ -269,9 +269,50 @@ impl App {
 
     /// Codier-Helfer: Codierung lesen (Steuergerät oder letzte Sicherung),
     /// Bits ändern und selbst benennen (eigene Texte, sonst `[[coding]]`-Labels).
+    /// Codierung mit Rückgängig: jeder geänderte Stand kommt auf einen Stapel.
     pub(super) fn ui_codierung(&mut self, ui: &mut egui::Ui) {
+        let vorher = self.code_bytes.clone();
+        let mut rueck = false;
+        let mut zum_start = false;
+        self.ui_codierung_seite(ui, &mut rueck, &mut zum_start);
+        if rueck {
+            if let Some(alt) = self.code_undo.pop() {
+                self.code_bytes = alt;
+            }
+        } else if zum_start {
+            if let Some((_, b)) = &self.code_quelle {
+                let start: String = b.iter().map(|x| format!("{x:02X}")).collect();
+                if start != self.code_bytes {
+                    self.code_undo.push(std::mem::replace(&mut self.code_bytes, start));
+                }
+            }
+        } else if self.code_bytes != vorher {
+            // Tippen im Hex-Feld: aufeinanderfolgende Zeichen als ein Schritt
+            let gleiche_laenge = vorher.len() == self.code_bytes.len();
+            if gleiche_laenge || self.code_undo.last().is_none_or(|l| l.len() == vorher.len()) {
+                self.code_undo.push(vorher);
+            }
+            if self.code_undo.len() > 100 {
+                self.code_undo.remove(0);
+            }
+        }
+    }
+
+    fn ui_codierung_seite(&mut self, ui: &mut egui::Ui, rueck: &mut bool, zum_start: &mut bool) {
         use ecu_werkbank::codiertexte;
-        ui.heading(tr!("Codierung"));
+        ui.horizontal(|ui| {
+            ui.heading(tr!("Codierung"));
+            ui.add_space(12.0);
+            if ui.add_enabled(!self.code_undo.is_empty(), egui::Button::new(tr!("↶ Rückgängig"))).on_hover_text(tr!("Letzte Änderung an der Codierung zurücknehmen ({n} Schritte gemerkt)", n = self.code_undo.len())).clicked() {
+                *rueck = true;
+            }
+            if let Some((q, b)) = &self.code_quelle {
+                let start: String = b.iter().map(|x| format!("{x:02X}")).collect();
+                if ui.add_enabled(start != self.code_bytes, egui::Button::new(tr!("⟲ Alles zurück"))).on_hover_text(tr!("Zurück auf {a}", a = q)).clicked() {
+                    *zum_start = true;
+                }
+            }
+        });
         ui.label(tr!("Codierung lesen, Bits ändern und selbst benennen. Deine Texte gelten für das Steuergerät (CAN-ID) und bleiben gespeichert."));
         ui.add_space(4.0);
 

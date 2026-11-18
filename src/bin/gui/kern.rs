@@ -126,6 +126,7 @@ impl App {
             code_rx: "0x7E8".into(),
             code_read: None,
             code_confirm: false,
+            code_undo: Vec::new(),
             code_quelle: None,
             code_bk: None,
             code_texte: ecu_werkbank::codiertexte::Texte::laden(),
