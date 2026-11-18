@@ -23,7 +23,7 @@ impl App {
                 }
             }
             if ui.button(tr!("↻ erneut prüfen")).clicked() {
-                self.con_result = Some(ecu_werkbank::connect::check(&self.backend()));
+                self.verbindung_pruefen();
             }
         });
         if !open {
@@ -221,16 +221,25 @@ impl App {
         if let Some((i, tx, rx, prot)) = loeschen {
             self.fm_confirm = None;
             let be = self.backend();
-            match ecu_werkbank::fremd::loeschen(&be, tx, rx, &prot) {
-                Ok(()) => {
+            let dir = self.labels_dir.clone();
+            self.im_hintergrund(tr!("Fehler löschen"), move || {
+                let r = ecu_werkbank::fremd::loeschen(&be, tx, rx, &prot).map(|()| {
                     // nachlesen
-                    if let (Ok(neu), Some((r, _))) = (ecu_werkbank::fremd::lesen(&be, &self.db, tx, rx), self.fm_result.as_mut()) {
-                        r.modules[i] = neu;
+                    let db = LabelDb::load_dir(&dir).unwrap_or_default();
+                    ecu_werkbank::fremd::lesen(&be, &db, tx, rx).ok()
+                });
+                Box::new(move |app: &mut App| match r {
+                    Ok(neu) => {
+                        if let (Some(neu), Some((r, _))) = (neu, app.fm_result.as_mut()) {
+                            if let Some(m) = r.modules.get_mut(i) {
+                                *m = neu;
+                            }
+                        }
+                        app.status = tr!("Fehler gelöscht und nachgelesen.");
                     }
-                    self.status = tr!("Fehler gelöscht und nachgelesen.");
-                }
-                Err(e) => self.status = tr!("Löschen nicht möglich: {e}", e = format!("{e:#}")),
-            }
+                    Err(e) => app.status = tr!("Löschen nicht möglich: {e}", e = format!("{e:#}")),
+                })
+            });
         }
     }
 
@@ -285,7 +294,7 @@ impl App {
             }
             FreezeFrame => {
                 self.tab = Tab::Obd;
-                self.obd_freeze = Some(self.obd_open().and_then(|tp| Obd::new(&*tp).freeze_frame()).unwrap_or(None));
+                self.freeze_frame_lesen();
             }
             LiveWerte => self.tab = Tab::Scope,
             Websuche => {
@@ -302,7 +311,20 @@ impl App {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let db = LabelDb::load_dir(&labels_dir).unwrap_or_default();
-            let _ = tx.send(ecu_werkbank::report::scan(&be, &db, true, |_| {}).map_err(|e| format!("{e:#}")));
+            let r = ecu_werkbank::report::scan(&be, &db, true, |_| {}).map(|r| {
+                // nach der Reparatur: welche Abgas-Tests sind noch offen? (für den Bericht)
+                let offen: Vec<String> = if step == 2 {
+                    be.open(obd::DEFAULT_TX, obd::DEFAULT_RX)
+                        .ok()
+                        .and_then(|tp| Obd::new(&*tp).readiness().ok())
+                        .map(|rd| rd.monitors.iter().filter(|m| m.available && !m.complete).map(|m| m.name.to_string()).collect())
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                (r, offen)
+            });
+            let _ = tx.send(r.map_err(|e| format!("{e:#}")));
         });
         self.rp_job = Some((step, rx));
     }
@@ -315,7 +337,7 @@ impl App {
             return;
         };
         self.rp_job = None;
-        let mut r = match res {
+        let (mut r, offen) = match res {
             Ok(r) => r,
             Err(e) => {
                 self.status = tr!("Reparatur-Modus: {e}", e = e);
@@ -336,12 +358,6 @@ impl App {
             r.reparatur = self.rp_arbeiten.trim().to_string();
             r.comparison = ecu_werkbank::history::compare_with_previous(&r);
             let _ = ecu_werkbank::history::save(&r);
-            let offen: Vec<String> = self
-                .obd_open()
-                .ok()
-                .and_then(|tp| Obd::new(&*tp).readiness().ok())
-                .map(|rd| rd.monitors.iter().filter(|m| m.available && !m.complete).map(|m| m.name.to_string()).collect())
-                .unwrap_or_default();
             let path = ecu_werkbank::vehicle::load(&r.vehicle)
                 .and_then(|v| v.sub("berichte").ok())
                 .map(|d| d.join(ecu_werkbank::vehicle::stamped("reparaturbericht", "pdf")));
@@ -493,7 +509,14 @@ impl App {
                     ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Löscht alle Fehler und die Readiness."));
                     if ui.button(tr!("Ja, löschen")).clicked() {
                         if let Some(b) = self.rp_before.clone() {
-                            self.rp_cleared = ecu_werkbank::repair::clear_all(&self.backend(), &b);
+                            let be = self.backend();
+                            self.im_hintergrund(tr!("Alle Fehler löschen"), move || {
+                                let r = ecu_werkbank::repair::clear_all(&be, &b);
+                                Box::new(move |app: &mut App| {
+                                    app.status = tr!("{ok} von {a} Steuergerät(en) gelöscht.", ok = r.iter().filter(|(_, x)| x.is_ok()).count(), a = r.len());
+                                    app.rp_cleared = r;
+                                })
+                            });
                         }
                         self.rp_confirm_clear = false;
                     }

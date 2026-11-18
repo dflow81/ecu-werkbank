@@ -62,14 +62,18 @@ impl App {
             }
             if ui.button(tr!("🔎 Fahrzeugtyp erkennen")).on_hover_text(tr!("Spricht das Auto UDS (neuer) oder TP 2.0 (ca. 2004–2010)?")).clicked() {
                 let be = self.backend();
-                let uds = be.open(0x7E0, 0x7E8).and_then(|tp| Uds::new(&*tp).diagnostic_session(0x01).map(|_| ())).is_ok();
-                let tp20 = be.supports_tp20() && be.open_tp20(0x01, std::time::Duration::from_millis(800)).is_ok();
-                self.status = match (uds, tp20) {
-                    (true, true) => tr!("Fahrzeug spricht UDS und TP 2.0 — alle Reiter nutzbar."),
-                    (true, false) => tr!("Fahrzeug spricht UDS (neuere Generation)."),
-                    (false, true) => tr!("Fahrzeug spricht TP 2.0 (ca. 2004–2010) — Reiter „TP 2.0“ nutzen."),
-                    (false, false) => tr!("Keine CAN-Diagnose erkannt — „🔌 Verbindung“ prüfen (Zündung, Bitrate, Adapter)."),
-                };
+                self.im_hintergrund(tr!("Fahrzeugtyp erkennen"), move || {
+                    let uds = be.open(0x7E0, 0x7E8).and_then(|tp| Uds::new(&*tp).diagnostic_session(0x01).map(|_| ())).is_ok();
+                    let tp20 = be.supports_tp20() && be.open_tp20(0x01, std::time::Duration::from_millis(800)).is_ok();
+                    Box::new(move |app: &mut App| {
+                        app.status = match (uds, tp20) {
+                            (true, true) => tr!("Fahrzeug spricht UDS und TP 2.0 — alle Reiter nutzbar."),
+                            (true, false) => tr!("Fahrzeug spricht UDS (neuere Generation)."),
+                            (false, true) => tr!("Fahrzeug spricht TP 2.0 (ca. 2004–2010) — Reiter „TP 2.0“ nutzen."),
+                            (false, false) => tr!("Keine CAN-Diagnose erkannt — „🔌 Verbindung“ prüfen (Zündung, Bitrate, Adapter)."),
+                        };
+                    })
+                });
             }
             if !self.clr_confirm {
                 if ui.button(tr!("✖ Alle Fehler löschen…")).on_hover_text(tr!("Fehlerspeicher aller Steuergeräte löschen")).clicked() {
@@ -80,15 +84,21 @@ impl App {
                 if ui.button(tr!("Ja, alle löschen")).clicked() {
                     self.clr_confirm = false;
                     let be = self.backend();
-                    match ecu_werkbank::report::scan(&be, &self.db, true, |_| {}) {
-                        Ok(r) => {
+                    let dir = self.labels_dir.clone();
+                    self.im_hintergrund(tr!("Alle Fehler löschen"), move || {
+                        let db = LabelDb::load_dir(&dir).unwrap_or_default();
+                        let r = ecu_werkbank::report::scan(&be, &db, true, |_| {}).map(|r| {
                             let res = ecu_werkbank::repair::clear_all(&be, &r);
-                            let ok = res.iter().filter(|(_, x)| x.is_ok()).count();
-                            self.status = tr!("{ok} von {a} Steuergerät(en) gelöscht.", ok = ok, a = res.len());
-                            self.dtc_results.clear();
-                        }
-                        Err(e) => self.status = tr!("Löschen: {e}", e = format!("{:#}", e)),
-                    }
+                            (res.iter().filter(|(_, x)| x.is_ok()).count(), res.len())
+                        });
+                        Box::new(move |app: &mut App| match r {
+                            Ok((ok, n)) => {
+                                app.status = tr!("{ok} von {a} Steuergerät(en) gelöscht.", ok = ok, a = n);
+                                app.dtc_results.clear();
+                            }
+                            Err(e) => app.status = tr!("Löschen: {e}", e = format!("{:#}", e)),
+                        })
+                    });
                 }
                 if ui.button(tr!("Abbrechen")).clicked() {
                     self.clr_confirm = false;
@@ -377,31 +387,34 @@ impl App {
                 ui.label(tr!("TP 2.0 · Adresse {a}", a = format!("{addr:02X}")));
                 if ui.button(tr!("⬇ Vom Steuergerät lesen")).clicked() {
                     // lang (0x0600 / Gateway 0x9A) oder kurz (Identifikation 0x9B)
-                    let res = (|| -> anyhow::Result<kwp::TpCodierung> {
-                        let mut ch = kwp::open_session(&self.backend(), addr)?;
-                        let mut k = Kwp::new(&mut ch);
-                        let raw = k.read_ecu_id(kwp::ECU_ID_VAG).unwrap_or_default();
-                        kwp::codierung_lesen(&mut k, &raw).ok_or_else(|| anyhow::anyhow!(tr!("Keine Codierung lesbar")))
-                    })();
-                    match res {
-                        Ok(kwp::TpCodierung::Lang(b)) => {
-                            self.code_kurz = None;
-                            self.code_bytes = b.iter().map(|x| format!("{x:02X}")).collect();
-                            self.status = tr!("Codierung gelesen: {a}", a = ecu_werkbank::backup::hex(&b));
-                            self.code_quelle = Some((tr!("Stand im Steuergerät"), b.clone()));
-                            self.code_read = Some(b);
-                            self.code_confirm = false;
-                        }
-                        Ok(kwp::TpCodierung::Kurz { wert, .. }) => {
-                            self.code_kurz = Some(wert);
-                            self.code_kurz_neu = format!("{wert:07}");
-                            self.code_kurz_ok = false;
-                            self.code_quelle = None;
-                            self.code_read = None;
-                            self.status = tr!("Kurzcodierung gelesen: {a}", a = format!("{wert:07}"));
-                        }
-                        Err(e) => self.status = tr!("Lesen: {e}", e = format!("{:#}", e)),
-                    }
+                    let be = self.backend();
+                    self.im_hintergrund(tr!("Codierung lesen"), move || {
+                        let res = (|| -> anyhow::Result<kwp::TpCodierung> {
+                            let mut ch = kwp::open_session(&be, addr)?;
+                            let mut k = Kwp::new(&mut ch);
+                            let raw = k.read_ecu_id(kwp::ECU_ID_VAG).unwrap_or_default();
+                            kwp::codierung_lesen(&mut k, &raw).ok_or_else(|| anyhow::anyhow!(tr!("Keine Codierung lesbar")))
+                        })();
+                        Box::new(move |app: &mut App| match res {
+                            Ok(kwp::TpCodierung::Lang(b)) => {
+                                app.code_kurz = None;
+                                app.code_bytes = b.iter().map(|x| format!("{x:02X}")).collect();
+                                app.status = tr!("Codierung gelesen: {a}", a = ecu_werkbank::backup::hex(&b));
+                                app.code_quelle = Some((tr!("Stand im Steuergerät"), b.clone()));
+                                app.code_read = Some(b);
+                                app.code_confirm = false;
+                            }
+                            Ok(kwp::TpCodierung::Kurz { wert, .. }) => {
+                                app.code_kurz = Some(wert);
+                                app.code_kurz_neu = format!("{wert:07}");
+                                app.code_kurz_ok = false;
+                                app.code_quelle = None;
+                                app.code_read = None;
+                                app.status = tr!("Kurzcodierung gelesen: {a}", a = format!("{wert:07}"));
+                            }
+                            Err(e) => app.status = tr!("Lesen: {e}", e = format!("{:#}", e)),
+                        })
+                    });
                 }
                 if ui.small_button(tr!("UDS-Steuergerät eingeben")).clicked() {
                     self.code_tp20 = None;
@@ -420,17 +433,21 @@ impl App {
                 if ui.add_enabled(self.code_kurz_ok && neu.is_some(), egui::Button::new(tr!("✍ Kurzcodierung schreiben"))).clicked() {
                     let neu = neu.expect("geprüft");
                     self.code_kurz_ok = false;
-                    match kwp::kurzcodierung_schreiben(&self.backend(), addr, neu) {
-                        Ok((vorher, danach)) if danach == neu => {
-                            self.code_kurz = Some(danach);
-                            self.status = tr!("Geschrieben und kontrolliert: {a} → {b}.", a = format!("{vorher:07}"), b = format!("{danach:07}"));
-                        }
-                        Ok((vorher, danach)) => {
-                            self.code_kurz = Some(danach);
-                            self.status = tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Wert war {c}.", a = format!("{danach:07}"), b = format!("{neu:07}"), c = format!("{vorher:07}"));
-                        }
-                        Err(e) => self.status = tr!("Schreiben: {e}", e = format!("{:#}", e)),
-                    }
+                    let be = self.backend();
+                    self.im_hintergrund(tr!("Kurzcodierung schreiben"), move || {
+                        let r = kwp::kurzcodierung_schreiben(&be, addr, neu);
+                        Box::new(move |app: &mut App| match r {
+                            Ok((vorher, danach)) if danach == neu => {
+                                app.code_kurz = Some(danach);
+                                app.status = tr!("Geschrieben und kontrolliert: {a} → {b}.", a = format!("{vorher:07}"), b = format!("{danach:07}"));
+                            }
+                            Ok((vorher, danach)) => {
+                                app.code_kurz = Some(danach);
+                                app.status = tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Wert war {c}.", a = format!("{danach:07}"), b = format!("{neu:07}"), c = format!("{vorher:07}"));
+                            }
+                            Err(e) => app.status = tr!("Schreiben: {e}", e = format!("{:#}", e)),
+                        })
+                    });
                 }
                 if neu.is_none() {
                     ui.weak(tr!("Bitte eine Zahl mit höchstens 7 Stellen eingeben."));
@@ -448,26 +465,33 @@ impl App {
                 ui.add_sized([60.0, 20.0], egui::TextEdit::singleline(&mut self.code_rx));
                 if ui.button(tr!("⬇ Vom Steuergerät lesen")).clicked() {
                     let did = self.code_ecu.and_then(|a| self.db.coding_did(a)).unwrap_or(ecu_werkbank::backup::VAG_CODING_DID);
-                    let res = (|| -> anyhow::Result<Vec<u8>> {
-                        let (tx, rx) = (parse_hex(&self.code_tx).ok_or_else(|| anyhow::anyhow!(tr!("TX ungültig")))?, parse_hex(&self.code_rx).ok_or_else(|| anyhow::anyhow!(tr!("RX ungültig")))?);
-                        let tp = self.backend().open(tx, rx)?;
-                        let uds = Uds::new(&*tp);
-                        uds.diagnostic_session(0x01)?;
-                        uds.read_data_by_id(did)
-                    })();
-                    match res {
-                        Ok(b) => {
-                            self.code_bytes = b.iter().map(|x| format!("{x:02X}")).collect();
-                            self.status = tr!("Codierung gelesen: {a}", a = ecu_werkbank::backup::hex(&b));
-                            if self.code_ecu.is_none() {
-                                let tx = parse_hex(&self.code_tx);
-                                self.code_ecu = self.db.ecus_with_can().into_iter().find(|x| Some(x.1) == tx).map(|x| x.0);
-                            }
-                            self.code_quelle = Some((tr!("Stand im Steuergerät"), b.clone()));
-                            self.code_read = Some(b);
-                            self.code_confirm = false;
+                    match (parse_hex(&self.code_tx), parse_hex(&self.code_rx)) {
+                        (Some(tx), Some(rx)) => {
+                            let be = self.backend();
+                            self.im_hintergrund(tr!("Codierung lesen"), move || {
+                                let res = (|| -> anyhow::Result<Vec<u8>> {
+                                    let tp = be.open(tx, rx)?;
+                                    let uds = Uds::new(&*tp);
+                                    uds.diagnostic_session(0x01)?;
+                                    uds.read_data_by_id(did)
+                                })();
+                                Box::new(move |app: &mut App| match res {
+                                    Ok(b) => {
+                                        app.code_bytes = b.iter().map(|x| format!("{x:02X}")).collect();
+                                        app.status = tr!("Codierung gelesen: {a}", a = ecu_werkbank::backup::hex(&b));
+                                        if app.code_ecu.is_none() {
+                                            app.code_ecu = app.db.ecus_with_can().into_iter().find(|x| x.1 == tx).map(|x| x.0);
+                                        }
+                                        app.code_quelle = Some((tr!("Stand im Steuergerät"), b.clone()));
+                                        app.code_read = Some(b);
+                                        app.code_confirm = false;
+                                    }
+                                    Err(e) => app.status = tr!("Lesen: {e}", e = format!("{:#}", e)),
+                                })
+                            });
                         }
-                        Err(e) => self.status = tr!("Lesen: {e}", e = format!("{:#}", e)),
+                        (None, _) => self.status = tr!("Lesen: {e}", e = tr!("TX ungültig")),
+                        (_, None) => self.status = tr!("Lesen: {e}", e = tr!("RX ungültig")),
                     }
                 }
             });
@@ -505,25 +529,31 @@ impl App {
                                     note: tr!("vor dem Schreiben der langen Codierung"),
                                 }],
                             };
-                            let sichern = kwp::darf_senden(&self.backend(), kwp::LANGCODIERUNG_GEPRUEFT || kwp::GATEWAY_CODIERUNG_GEPRUEFT);
-                            let geschrieben = match if sichern { ecu_werkbank::backup::save(&sicherung).map(|_| ()) } else { Ok(()) } {
-                                Ok(_) => kwp::langcodierung_schreiben(&self.backend(), addr, &new),
-                                Err(e) => Err(e.context(tr!("Sicherung vorher fehlgeschlagen — nichts geschrieben"))),
-                            };
-                            self.status = match geschrieben {
-                                Ok(kwp::Schreiben::Probelauf { anfrage, .. }) => tr!("Probelauf — nichts gesendet (noch nicht am Auto bestätigt). Würde senden: {a}", a = ecu_werkbank::backup::hex(&anfrage)),
-                                Ok(kwp::Schreiben::Geschrieben { alt, danach }) => {
-                                    let t = if danach == new {
-                                        tr!("Codierung geschrieben und kontrolliert. Alter Stand: {a}", a = ecu_werkbank::backup::hex(&alt))
-                                    } else {
-                                        tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Stand: {c}", a = ecu_werkbank::backup::hex(&danach), b = ecu_werkbank::backup::hex(&new), c = ecu_werkbank::backup::hex(&alt))
+                            let be = self.backend();
+                            let new = new.clone();
+                            self.im_hintergrund(tr!("Codierung schreiben"), move || {
+                                let sichern = kwp::darf_senden(&be, kwp::LANGCODIERUNG_GEPRUEFT || kwp::GATEWAY_CODIERUNG_GEPRUEFT);
+                                let geschrieben = match if sichern { ecu_werkbank::backup::save(&sicherung).map(|_| ()) } else { Ok(()) } {
+                                    Ok(_) => kwp::langcodierung_schreiben(&be, addr, &new),
+                                    Err(e) => Err(e.context(tr!("Sicherung vorher fehlgeschlagen — nichts geschrieben"))),
+                                };
+                                Box::new(move |app: &mut App| {
+                                    app.status = match geschrieben {
+                                        Ok(kwp::Schreiben::Probelauf { anfrage, .. }) => tr!("Probelauf — nichts gesendet (noch nicht am Auto bestätigt). Würde senden: {a}", a = ecu_werkbank::backup::hex(&anfrage)),
+                                        Ok(kwp::Schreiben::Geschrieben { alt, danach }) => {
+                                            let t = if danach == new {
+                                                tr!("Codierung geschrieben und kontrolliert. Alter Stand: {a}", a = ecu_werkbank::backup::hex(&alt))
+                                            } else {
+                                                tr!("Achtung: danach gelesen {a}, erwartet {b}. Alter Stand: {c}", a = ecu_werkbank::backup::hex(&danach), b = ecu_werkbank::backup::hex(&new), c = ecu_werkbank::backup::hex(&alt))
+                                            };
+                                            app.code_read = Some(danach.clone());
+                                            app.code_quelle = Some((tr!("Stand im Steuergerät"), danach));
+                                            t
+                                        }
+                                        Err(e) => tr!("Schreiben fehlgeschlagen: {e}", e = format!("{:#}", e)),
                                     };
-                                    self.code_read = Some(danach.clone());
-                                    self.code_quelle = Some((tr!("Stand im Steuergerät"), danach));
-                                    t
-                                }
-                                Err(e) => tr!("Schreiben fehlgeschlagen: {e}", e = format!("{:#}", e)),
-                            };
+                                })
+                            });
                         } else if self.code_tp20.is_none() && ui.button(tr!("Ja, schreiben")).clicked() {
                             self.code_confirm = false;
                             let did = self.code_ecu.and_then(|a| self.db.coding_did(a)).unwrap_or(ecu_werkbank::backup::VAG_CODING_DID);
@@ -538,14 +568,22 @@ impl App {
                                 entries: vec![mk(&old)],
                             };
                             let login = ecu_werkbank::login::fuer(&b.vehicle, tx);
-                            self.status = match ecu_werkbank::backup::save(&b).and_then(|_| ecu_werkbank::backup::restore(&self.backend(), &mk(&new), login.as_ref())) {
-                                Ok(_) => {
-                                    self.code_read = Some(new.clone());
-                                    self.code_quelle = Some((tr!("Stand im Steuergerät"), new.clone()));
-                                    tr!("Codierung geschrieben und kontrolliert (alter Stand in Codier-Sicherung).")
-                                }
-                                Err(e) => tr!("Schreiben fehlgeschlagen: {e}", e = format!("{:#}", e)),
-                            };
+                            let be = self.backend();
+                            let eintrag = mk(&new);
+                            let new = new.clone();
+                            self.im_hintergrund(tr!("Codierung schreiben"), move || {
+                                let r = ecu_werkbank::backup::save(&b).and_then(|_| ecu_werkbank::backup::restore(&be, &eintrag, login.as_ref()));
+                                Box::new(move |app: &mut App| {
+                                    app.status = match r {
+                                        Ok(_) => {
+                                            app.code_read = Some(new.clone());
+                                            app.code_quelle = Some((tr!("Stand im Steuergerät"), new));
+                                            tr!("Codierung geschrieben und kontrolliert (alter Stand in Codier-Sicherung).")
+                                        }
+                                        Err(e) => tr!("Schreiben fehlgeschlagen: {e}", e = format!("{:#}", e)),
+                                    };
+                                })
+                            });
                         }
                         if ui.button(tr!("Abbrechen")).clicked() {
                             self.code_confirm = false;

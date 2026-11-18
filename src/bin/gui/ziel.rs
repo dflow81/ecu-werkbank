@@ -23,10 +23,26 @@ impl App {
         if self.zl_last.elapsed() < std::time::Duration::from_millis(200) {
             return;
         }
+        let text = tr!("Zielbereich messen");
+        if self.bus.wartend.contains(&text) {
+            return; // letzter Messwert noch unterwegs
+        }
         self.zl_last = std::time::Instant::now();
+        let (be, pid) = (self.backend(), self.zl_pid);
+        self.im_hintergrund_still(text, move || {
+            let r = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).and_then(|tp| Obd::new(&*tp).read_value(pid));
+            Box::new(move |app: &mut App| app.ziel_auswerten(r))
+        });
+    }
+
+    /// Messwert der Zielbereich-Übung auswerten (im Zeichen-Thread).
+    fn ziel_auswerten(&mut self, r: anyhow::Result<f64>) {
+        if !self.zl_running {
+            return; // inzwischen gestoppt
+        }
         let t = self.zl_start.elapsed().as_secs_f64();
         let soll = self.zl_m.muster().ziel(t);
-        match self.obd_open().and_then(|tp| Obd::new(&*tp).read_value(self.zl_pid)) {
+        match r {
             Ok(ist) => {
                 use ecu_werkbank::control::{bewerten, Richtung};
                 let (r, st) = bewerten(ist, soll, self.zl_tol);

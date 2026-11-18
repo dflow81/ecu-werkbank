@@ -21,14 +21,18 @@ impl App {
     }
 
     pub(super) fn run_mode06(&mut self) {
-        match self.obd_open().and_then(|tp| Obd::new(&*tp).test_results()) {
-            Ok(t) => {
-                self.m6_summary = obd::test_summary(&t);
-                self.status = tr!("{a} Prüfergebnisse gelesen.", a = t.len());
-                self.m6_results = t;
-            }
-            Err(e) => self.status = tr!("Prüfergebnisse: {e}", e = format!("{:#}", e)),
-        }
+        let be = self.backend();
+        self.im_hintergrund(tr!("Prüfergebnisse lesen"), move || {
+            let r = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).and_then(|tp| Obd::new(&*tp).test_results());
+            Box::new(move |app: &mut App| match r {
+                Ok(t) => {
+                    app.m6_summary = obd::test_summary(&t);
+                    app.status = tr!("{a} Prüfergebnisse gelesen.", a = t.len());
+                    app.m6_results = t;
+                }
+                Err(e) => app.status = tr!("Prüfergebnisse: {e}", e = format!("{:#}", e)),
+            })
+        });
     }
 
     pub(super) fn gm_begin(&mut self) {
@@ -50,8 +54,24 @@ impl App {
         if self.gm_last.elapsed() < std::time::Duration::from_millis(300) {
             return;
         }
+        let text = tr!("Gemisch messen");
+        if self.bus.wartend.contains(&text) {
+            return;
+        }
         self.gm_last = std::time::Instant::now();
-        let s = match self.obd_open().and_then(|tp| ecu_werkbank::mixture::sample(&Obd::new(&*tp))) {
+        let be = self.backend();
+        self.im_hintergrund_still(text, move || {
+            let r = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).and_then(|tp| ecu_werkbank::mixture::sample(&Obd::new(&*tp)));
+            Box::new(move |app: &mut App| app.gemisch_auswerten(r))
+        });
+    }
+
+    /// Eine Gemisch-Messung auswerten (im Zeichen-Thread).
+    fn gemisch_auswerten(&mut self, r: anyhow::Result<ecu_werkbank::mixture::Sample>) {
+        if !(1..=2).contains(&self.gm_phase) {
+            return; // inzwischen abgebrochen
+        }
+        let s = match r {
             Ok(s) => s,
             Err(e) => {
                 self.gm_phase = 0;

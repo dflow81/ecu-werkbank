@@ -115,8 +115,24 @@ impl App {
         if self.obd_ready_last.elapsed() < std::time::Duration::from_secs(2) {
             return;
         }
+        let text = tr!("Readiness verfolgen");
+        if self.bus.wartend.contains(&text) {
+            return;
+        }
         self.obd_ready_last = std::time::Instant::now();
-        match self.obd_open().and_then(|tp| ecu_werkbank::readiness::lesen(&Obd::new(&*tp))) {
+        let be = self.backend();
+        self.im_hintergrund_still(text, move || {
+            let r = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).and_then(|tp| ecu_werkbank::readiness::lesen(&Obd::new(&*tp)));
+            Box::new(move |app: &mut App| app.readiness_auswerten(r))
+        });
+    }
+
+    /// Readiness-Stand übernehmen; meldet frisch fertige Abgas-Tests.
+    fn readiness_auswerten(&mut self, r: anyhow::Result<ecu_werkbank::readiness::Stand>) {
+        if !self.obd_ready_live {
+            return;
+        }
+        match r {
             Ok(st) => {
                 let r = st.readiness.clone();
                 let was_open = self.obd_readiness.as_ref().map(|x| !x.all_complete()).unwrap_or(false);

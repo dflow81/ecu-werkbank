@@ -68,7 +68,7 @@ impl Backend {
     /// danach 1 s.
     pub fn open_tp20(&self, address: u8, setup_timeout: std::time::Duration) -> Result<crate::tp20::Channel> {
         use crate::tp20::{CanIo, Tp20};
-        let io: Box<dyn CanIo> = match self {
+        let io: Box<dyn CanIo + Send> = match self {
             Backend::SocketCan { iface } => Box::new(crate::tp20::SocketIo::open(iface, setup_timeout)?),
             Backend::Demo => Box::new(crate::sim::DemoCanIo::new()),
             _ => anyhow::bail!(crate::trs!("TP 2.0 braucht SocketCAN (oder Demo) — ELM327 kann es nicht")),

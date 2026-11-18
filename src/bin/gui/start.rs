@@ -180,7 +180,7 @@ impl App {
             match clicked {
                 Some(0) => self.start_check(),
                 Some(1) => self.start_pdf(),
-                Some(2) => self.con_result = Some(ecu_werkbank::connect::check(&self.backend())),
+                Some(2) => self.verbindung_pruefen(),
                 Some(3) => self.tab = Tab::Diagnose,
                 Some(9) => self.tab = Tab::Steuergeraete,
                 Some(10) => self.tab = Tab::Testlauf,

@@ -40,10 +40,9 @@ impl App {
         if self.tp_live {
             if self.tp_last_read.elapsed() >= std::time::Duration::from_millis(500) {
                 self.tp_last_read = std::time::Instant::now();
-                if let Err(e) = self.read_block_once() {
-                    self.tp_live = false;
-                    self.tp_channel = None;
-                    self.status = tr!("Live-Messung gestoppt: {e}", e = e);
+                // nur ein Lese-Auftrag zur Zeit; wartet einer noch, diesen Takt auslassen
+                if !self.bus.wartend.iter().any(|t| t == &tr!("Messwertblock lesen")) {
+                    self.block_lesen();
                 }
             }
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -98,72 +97,130 @@ impl App {
         out
     }
 
-    pub(super) fn run_tp_ident(&mut self) {
-        let res = (|| -> anyhow::Result<Vec<String>> {
-            let mut ch = kwp::open_session(&self.backend(), self.tp_address()?)?;
-            let data = Kwp::new(&mut ch).read_ecu_id(kwp::ECU_ID_VAG)?;
-            let mut lines = vec![tr!("Kanal tx={a} rx={b}", a = format!("{:#05x}", ch.tx_id()), b = format!("{:#05x}", ch.rx_id()))];
-            lines.extend(kwp::ident_strings(&data));
-            lines.push(tr!("Rohdaten: {a}", a = data.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")));
-            Ok(lines)
-        })();
-        match res {
-            Ok(lines) => {
-                self.tp_lines = lines;
-                self.status = tr!("Identifikation gelesen.");
+    /// Adresse aus dem Eingabefeld; bei Fehler Meldung in der Statuszeile.
+    fn tp_address_oder_meldung(&mut self) -> Option<u8> {
+        match self.tp_address() {
+            Ok(a) => Some(a),
+            Err(e) => {
+                self.status = tr!("Fehler: {e}", e = format!("{:#}", e));
+                None
             }
-            Err(e) => self.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
         }
+    }
+
+    pub(super) fn run_tp_ident(&mut self) {
+        let Some(addr) = self.tp_address_oder_meldung() else { return };
+        let be = self.backend();
+        self.im_hintergrund(tr!("Identifikation lesen"), move || {
+            let res = (|| -> anyhow::Result<Vec<String>> {
+                let mut ch = kwp::open_session(&be, addr)?;
+                let data = Kwp::new(&mut ch).read_ecu_id(kwp::ECU_ID_VAG)?;
+                let mut lines = vec![tr!("Kanal tx={a} rx={b}", a = format!("{:#05x}", ch.tx_id()), b = format!("{:#05x}", ch.rx_id()))];
+                lines.extend(kwp::ident_strings(&data));
+                lines.push(tr!("Rohdaten: {a}", a = data.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")));
+                Ok(lines)
+            })();
+            Box::new(move |app: &mut App| match res {
+                Ok(lines) => {
+                    app.tp_lines = lines;
+                    app.status = tr!("Identifikation gelesen.");
+                }
+                Err(e) => app.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
+            })
+        });
     }
 
     pub(super) fn run_tp_dtc(&mut self) {
-        let addr = self.tp_address().unwrap_or(0);
-        let res = (|| -> anyhow::Result<Vec<(kwp::KwpDtc, Option<Vec<u8>>)>> {
-            let mut ch = kwp::open_session(&self.backend(), self.tp_address()?)?;
-            Kwp::new(&mut ch).read_dtcs_mit_umgebung()
-        })();
-        match res {
-            Ok(dtcs) if dtcs.is_empty() => {
-                self.tp_lines = vec![tr!("Keine Fehlercodes gespeichert.")];
-                self.status = tr!("Fehlerspeicher gelesen.");
-            }
-            Ok(dtcs) => {
-                let mut lines = vec![tr!("{a} Fehlercode(s):", a = dtcs.len())];
-                lines.extend(self.tp_dtc_lines(&dtcs, addr));
-                self.tp_lines = lines;
-                self.status = tr!("Fehlerspeicher gelesen.");
-            }
-            Err(e) => self.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
-        }
+        let Some(addr) = self.tp_address_oder_meldung() else { return };
+        let be = self.backend();
+        self.im_hintergrund(tr!("Fehlerspeicher lesen"), move || {
+            let res = kwp::open_session(&be, addr).and_then(|mut ch| Kwp::new(&mut ch).read_dtcs_mit_umgebung());
+            Box::new(move |app: &mut App| match res {
+                Ok(dtcs) if dtcs.is_empty() => {
+                    app.tp_lines = vec![tr!("Keine Fehlercodes gespeichert.")];
+                    app.status = tr!("Fehlerspeicher gelesen.");
+                }
+                Ok(dtcs) => {
+                    let mut lines = vec![tr!("{a} Fehlercode(s):", a = dtcs.len())];
+                    lines.extend(app.tp_dtc_lines(&dtcs, addr));
+                    app.tp_lines = lines;
+                    app.status = tr!("Fehlerspeicher gelesen.");
+                }
+                Err(e) => app.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
+            })
+        });
     }
 
     pub(super) fn run_tp_clear(&mut self) {
-        let res = (|| -> anyhow::Result<()> {
-            let mut ch = kwp::open_session(&self.backend(), self.tp_address()?)?;
-            Kwp::new(&mut ch).clear_dtcs()
-        })();
-        self.status = match res {
-            Ok(()) => {
-                self.tp_lines = vec![tr!("Fehlerspeicher gelöscht.")];
-                tr!("Fehlerspeicher gelöscht.")
-            }
-            Err(e) => tr!("Fehler: {e}", e = format!("{:#}", e)),
-        };
+        let Some(addr) = self.tp_address_oder_meldung() else { return };
+        let be = self.backend();
+        self.im_hintergrund(tr!("Fehlerspeicher löschen"), move || {
+            let res = kwp::open_session(&be, addr).and_then(|mut ch| Kwp::new(&mut ch).clear_dtcs());
+            Box::new(move |app: &mut App| {
+                app.status = match res {
+                    Ok(()) => {
+                        app.tp_lines = vec![tr!("Fehlerspeicher gelöscht.")];
+                        tr!("Fehlerspeicher gelöscht.")
+                    }
+                    Err(e) => tr!("Fehler: {e}", e = format!("{:#}", e)),
+                };
+            })
+        });
     }
 
-    /// Einen Messwertblock lesen; hält den Kanal für die Live-Anzeige offen.
-    pub(super) fn read_block_once(&mut self) -> anyhow::Result<()> {
-        let addr = self.tp_address()?;
-        let block: u8 = self
-            .tp_block
-            .trim()
-            .parse()
-            .map_err(|_| anyhow::anyhow!(tr!("Blocknummer ungültig (1..255)")))?;
-        if self.tp_channel.as_ref().map(|(a, _)| *a) != Some(addr) {
-            self.tp_channel = Some((addr, kwp::open_session(&self.backend(), addr)?));
+    /// Einen Messwertblock lesen (im Hintergrund). Im Live-Betrieb bleibt
+    /// der Kanal danach offen und wird beim nächsten Lesen wiederverwendet.
+    pub(super) fn block_lesen(&mut self) {
+        let addr = match self.tp_address() {
+            Ok(a) => a,
+            Err(e) => {
+                self.tp_live = false;
+                self.status = tr!("Fehler: {e}", e = format!("{:#}", e));
+                return;
+            }
+        };
+        let Ok(block) = self.tp_block.trim().parse::<u8>() else {
+            self.tp_live = false;
+            self.status = tr!("Blocknummer ungültig (1..255)");
+            return;
+        };
+        let kanal = self.tp_channel.take().filter(|(a, _)| *a == addr).map(|(_, c)| c);
+        let be = self.backend();
+        let live = self.tp_live;
+        let arbeit = move || -> hintergrund::Ergebnis {
+            let r = kanal.map_or_else(|| kwp::open_session(&be, addr), Ok).and_then(|mut ch| {
+                let v = Kwp::new(&mut ch).read_block(block)?;
+                Ok((ch, v))
+            });
+            Box::new(move |app: &mut App| {
+                let r = r.and_then(|(ch, values)| {
+                    if app.tp_live {
+                        app.tp_channel = Some((addr, ch));
+                    }
+                    app.block_uebernehmen(addr, block, values)
+                });
+                match r {
+                    Ok(()) if !app.tp_live => app.status = tr!("Messwertblock gelesen."),
+                    Ok(()) => {}
+                    Err(e) if app.tp_live => {
+                        app.tp_live = false;
+                        app.tp_channel = None;
+                        app.status = tr!("Live-Messung gestoppt: {e}", e = e);
+                    }
+                    Err(e) => app.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
+                }
+            })
+        };
+        if live {
+            // alle 0,5 s: nicht jedes Mal die Statuszeile überschreiben
+            self.im_hintergrund_still(tr!("Messwertblock lesen"), arbeit);
+        } else {
+            self.im_hintergrund(tr!("Messwertblock lesen"), arbeit);
         }
-        let (_, ch) = self.tp_channel.as_mut().expect("Kanal gerade geöffnet");
-        let values = Kwp::new(ch).read_block(block)?;
+    }
+
+    /// Gelesene Werte anzeigen (mit Sollwert-Prüfung) und ggf. in die CSV schreiben.
+    fn block_uebernehmen(&mut self, addr: u8, block: u8, values: Vec<kwp::BlockValue>) -> anyhow::Result<()> {
         if self.tp_block_key != (addr, block) {
             self.mw_edit = None;
         }
@@ -284,11 +341,8 @@ impl App {
             self.tp_addr = format!("{addr:#04x}");
             self.tp_block = b.to_string();
             self.tp_live = false;
-            self.status = match self.read_block_once() {
-                Ok(()) => tr!("Messwertblock gelesen."),
-                Err(e) => tr!("Fehler: {e}", e = format!("{:#}", e)),
-            };
             self.tp_channel = None;
+            self.block_lesen();
         }
     }
 
@@ -475,19 +529,26 @@ impl App {
                 ui.add(egui::TextEdit::singleline(&mut self.an_kanaele).desired_width(160.0).hint_text("1,3,17"));
                 if ui.add_enabled(self.backend().supports_tp20(), egui::Button::new(tr!("📖 Lesen ({a})", a = format!("{addr:02X}")))).clicked() {
                     let kanaele: Vec<u8> = self.an_kanaele.split(',').filter_map(|t| t.trim().parse().ok()).collect();
-                    self.an_result = match kwp::anpassung_lesen(&self.backend(), addr, &kanaele) {
-                        Ok(l) => l
-                            .into_iter()
-                            .map(|r| match r {
-                                Ok(k) => {
-                                    let f: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
-                                    tr!("Kanal {a}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), b = k.wert, c = f.join("  |  "))
-                                }
-                                Err(e) => e,
-                            })
-                            .collect(),
-                        Err(e) => vec![format!("{e:#}")],
-                    };
+                    let be = self.backend();
+                    self.im_hintergrund(tr!("Anpassung lesen"), move || {
+                        let zeilen = match kwp::anpassung_lesen(&be, addr, &kanaele) {
+                            Ok(l) => l
+                                .into_iter()
+                                .map(|r| match r {
+                                    Ok(k) => {
+                                        let f: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
+                                        tr!("Kanal {a}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), b = k.wert, c = f.join("  |  "))
+                                    }
+                                    Err(e) => e,
+                                })
+                                .collect(),
+                            Err(e) => vec![format!("{e:#}")],
+                        };
+                        Box::new(move |app: &mut App| {
+                            app.an_result = zeilen;
+                            app.status = tr!("Anpassung gelesen.");
+                        })
+                    });
                 }
             });
             for z in &self.an_result {
@@ -511,14 +572,19 @@ impl App {
                 self.an_ok = false;
                 let (kanal, wert) = (kanal.unwrap_or_default(), wert.unwrap_or_default());
                 let w = |b: &[u8]| if b.len() == 2 { u16::from_be_bytes([b[0], b[1]]).to_string() } else { ecu_werkbank::backup::hex(b) };
-                let zeile = match kwp::anpassung_schreiben(&self.backend(), addr, kanal, wert) {
-                    Ok(kwp::Schreiben::Probelauf { anfrage, alt }) => tr!("Kanal {a}: Probelauf — nichts gesendet. Jetzt {b}, würde senden: {c}", a = format!("{kanal:03}"), b = w(&alt), c = ecu_werkbank::backup::hex(&anfrage)),
-                    Ok(kwp::Schreiben::Geschrieben { alt, danach }) if danach == wert.to_be_bytes() => tr!("Kanal {a}: gespeichert und kontrolliert, {b} → {c}", a = format!("{kanal:03}"), b = w(&alt), c = w(&danach)),
-                    Ok(kwp::Schreiben::Geschrieben { alt, danach }) => tr!("Kanal {a}: Achtung, danach gelesen {b} (alter Wert {c})", a = format!("{kanal:03}"), b = w(&danach), c = w(&alt)),
-                    Err(e) => format!("{e:#}"),
-                };
-                self.status = zeile.clone();
-                self.an_result.push(zeile);
+                let be = self.backend();
+                self.im_hintergrund(tr!("Anpassung speichern"), move || {
+                    let zeile = match kwp::anpassung_schreiben(&be, addr, kanal, wert) {
+                        Ok(kwp::Schreiben::Probelauf { anfrage, alt }) => tr!("Kanal {a}: Probelauf — nichts gesendet. Jetzt {b}, würde senden: {c}", a = format!("{kanal:03}"), b = w(&alt), c = ecu_werkbank::backup::hex(&anfrage)),
+                        Ok(kwp::Schreiben::Geschrieben { alt, danach }) if danach == wert.to_be_bytes() => tr!("Kanal {a}: gespeichert und kontrolliert, {b} → {c}", a = format!("{kanal:03}"), b = w(&alt), c = w(&danach)),
+                        Ok(kwp::Schreiben::Geschrieben { alt, danach }) => tr!("Kanal {a}: Achtung, danach gelesen {b} (alter Wert {c})", a = format!("{kanal:03}"), b = w(&danach), c = w(&alt)),
+                        Err(e) => format!("{e:#}"),
+                    };
+                    Box::new(move |app: &mut App| {
+                        app.status = zeile.clone();
+                        app.an_result.push(zeile);
+                    })
+                });
             }
             if !self.an_wert.trim().is_empty() && wert.is_none() {
                 ui.weak(tr!("Bitte eine ganze Zahl von 0 bis 65535 eingeben."));
@@ -878,11 +944,8 @@ impl App {
                 self.tp_addr = format!("{a:#04x}");
                 self.tp_block = b.to_string();
                 self.tp_live = false;
-                self.status = match self.read_block_once() {
-                    Ok(()) => tr!("Messwertblock gelesen."),
-                    Err(e) => tr!("Fehler: {e}", e = format!("{:#}", e)),
-                };
                 self.tp_channel = None;
+                self.block_lesen();
             }
             Some(FavAkt::Entfernen(a, b)) => {
                 if let Err(e) = ecu_werkbank::favoriten::entfernen(a, b) {
@@ -983,11 +1046,8 @@ impl App {
             ui.add(egui::TextEdit::singleline(&mut self.tp_block).desired_width(50.0));
             if ui.button(tr!("Lesen")).clicked() {
                 self.tp_live = false;
-                match self.read_block_once() {
-                    Ok(()) => self.status = tr!("Messwertblock gelesen."),
-                    Err(e) => self.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
-                }
                 self.tp_channel = None;
+                self.block_lesen();
             }
             let caption = if self.tp_live { tr!("⏸ Live stoppen") } else { tr!("▶ Live (2×/s)") };
             let was_live = self.tp_live;

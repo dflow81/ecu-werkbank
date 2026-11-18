@@ -131,13 +131,28 @@ Hintergrund nicht dazwischenfunkt).
 - Kilometerstand wird nie geschrieben (`km.rs`, Test `kilometerstand_nie_schreiben`).
 - Siehe [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
+## GUI und Bus: Hintergrund-Arbeiter
+
+Die GUI spricht nie direkt aus dem Zeichen-Thread mit dem Auto. Kurze Aufträge
+(Fehler lesen, Codierung, Identifikation, Live-Takte) laufen über **einen**
+Arbeiter-Thread (`src/bin/gui/hintergrund.rs`, `App::im_hintergrund`), der sie
+der Reihe nach erledigt — nie zwei gleichzeitig auf dem Bus. Ein Auftrag
+liefert eine Funktion zurück, die danach im Zeichen-Thread die Anzeige
+aktualisiert. Gleiche Aufträge werden nicht doppelt angenommen (Doppelklick),
+ein Absturz im Auftrag beendet den Arbeiter nicht. Lange Abläufe mit
+Fortschritt (Suche, Blockscan, Stellglieddiagnose, Batterietest, PDF) haben
+eigene Threads mit Kanal. Offene TP-2.0-Kanäle (`tp20::Channel`) sind `Send`
+und wandern für Live-Messungen mit in den Auftrag.
+
+Ausnahmen: die Demo-Bildschirmfotos (`VAG_TAB=…`) füllen manche Seiten beim
+Start direkt — nur Simulation.
+
 ## Technische Schulden
 
 | Stelle | Problem | Vorschlag |
 |---|---|---|
 | `src/main.rs` (≈4 300 Zeilen) | alle CLI-Befehle in einer Datei, Enum mit ~110 Varianten | in `src/cli/<gruppe>.rs` aufteilen |
 | `src/bin/gui.rs` `struct App` (≈317 Felder) | ein großer Zustand für alle Seiten | je Seite eine eigene Zustands-Struktur |
-| GUI-Aufrufe am Bus (≈90× `self.backend()`) | viele laufen im Zeichen-Thread → Fenster friert bei langsamen Steuergeräten kurz ein | einheitlicher Hintergrund-Auftrag mit Kanal (wie bei Stellglieddiagnose/Blockscan) |
 | NRC-Tabellen | dreifach: `uds.rs`, `kwp.rs`, `canlog.rs` | eine gemeinsame Tabelle |
 | Steuergeräte-Wissen | verteilt auf `systems.rs`, `kwp::tp20_name`, `profil.rs`, `sim.rs` | Daten-Ordner je Hersteller (siehe ROADMAP, Punkt „Herstellerdaten“) |
 | `unwrap()` außerhalb von Tests (≈300) | meist Mutex/Format, wenige echte Risiken | nach und nach durch `?`/`unwrap_or_else` ersetzen |

@@ -38,6 +38,6 @@ schreiben) und **der Rechner/die Daten** (keine Angriffsfläche, keine Datenleck
 ## 3. Offene Punkte
 
 1. CI mit `cargo audit`, `cargo clippy -D warnings`, `cargo test` bei jedem Push.
-2. GUI: Bus-Aufrufe aus dem Zeichen-Thread nehmen (sonst wirkt das Fenster „hängend“ und lädt zu Doppelklicks ein).
+2. ~~GUI: Bus-Aufrufe aus dem Zeichen-Thread nehmen~~ — erledigt: ein Arbeiter-Thread, Aufträge der Reihe nach, doppelte Klicks werden abgewiesen.
 3. Flash-Funktion erst mit vollständigem Schutzkonzept (siehe ROADMAP „Flashing“).
 4. Fremde Plugins/Skripte (geplant) nur mit klaren Rechten: Lesen frei, Schreiben nur über dieselben Bestätigungen wie im Programm.

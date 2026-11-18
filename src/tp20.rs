@@ -110,7 +110,7 @@ impl<T: CanIo + ?Sized> CanIo for &T {
     }
 }
 
-impl CanIo for Box<dyn CanIo> {
+impl CanIo for Box<dyn CanIo + Send> {
     fn write(&self, id: u16, data: &[u8]) -> Result<()> {
         (**self).write(id, data)
     }
@@ -123,7 +123,7 @@ impl CanIo for Box<dyn CanIo> {
 }
 
 /// A TP 2.0 channel over any frame source (SocketCAN or demo vehicle).
-pub type Channel = Tp20<Box<dyn CanIo>>;
+pub type Channel = Tp20<Box<dyn CanIo + Send>>;
 
 /// SocketCAN implementation of [`CanIo`].
 pub struct SocketIo {

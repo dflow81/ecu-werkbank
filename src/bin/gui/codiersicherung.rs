@@ -254,13 +254,17 @@ impl App {
         });
         if let Some(i) = do_restore {
             self.bk_confirm = None;
-            let e = &current.entries[i];
+            let e = current.entries[i].clone();
             let login = ecu_werkbank::login::fuer(&current.vehicle, e.tx);
-            self.status = match backup::restore(&self.backend(), e, login.as_ref()) {
-                Ok(before) if before == e.bytes() => tr!("{a}: war bereits so codiert.", a = e.title()),
-                Ok(before) => tr!("{a}: zurückgeschrieben ({b} zu {c}) und kontrolliert.", a = e.title(), b = backup::hex(&before), c = e.data_hex),
-                Err(err) => format!("{}: {err:#}", e.title()),
-            };
+            let be = self.backend();
+            self.im_hintergrund(tr!("{a} zurückschreiben", a = e.title()), move || {
+                let t = match backup::restore(&be, &e, login.as_ref()) {
+                    Ok(before) if before == e.bytes() => tr!("{a}: war bereits so codiert.", a = e.title()),
+                    Ok(before) => tr!("{a}: zurückgeschrieben ({b} zu {c}) und kontrolliert.", a = e.title(), b = backup::hex(&before), c = e.data_hex),
+                    Err(err) => format!("{}: {err:#}", e.title()),
+                };
+                Box::new(move |app: &mut App| app.status = t)
+            });
         }
     }
 }

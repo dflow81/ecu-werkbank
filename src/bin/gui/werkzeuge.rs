@@ -7,17 +7,23 @@ impl App {
         ui.heading(tr!("Softwarestände"));
         ui.label(tr!("Teilenummer, Software- und Hardwarestand jedes Steuergeräts. Der Vergleich mit dem letzten Mal zeigt getauschte oder neu programmierte Steuergeräte."));
         if ui.button(tr!("⬇ Auslesen und speichern")).clicked() {
-            match ecu_werkbank::swinfo::read(&self.backend(), &self.db, true, |_| {}) {
-                Ok(st) => {
-                    if let Ok(v) = ecu_werkbank::vehicle::resolve(st.vin.as_deref(), self.active_vehicle.as_deref()) {
-                        self.sw_diff = ecu_werkbank::swinfo::list(&v.key).pop().map(|p| ecu_werkbank::swinfo::compare(&p, &st)).unwrap_or_default();
-                        let _ = ecu_werkbank::swinfo::save(&v.key, &st);
+            let be = self.backend();
+            let dir = self.labels_dir.clone();
+            self.im_hintergrund(tr!("Softwarestände auslesen"), move || {
+                let db = LabelDb::load_dir(&dir).unwrap_or_default();
+                let r = ecu_werkbank::swinfo::read(&be, &db, true, |_| {});
+                Box::new(move |app: &mut App| match r {
+                    Ok(st) => {
+                        if let Ok(v) = ecu_werkbank::vehicle::resolve(st.vin.as_deref(), app.active_vehicle.as_deref()) {
+                            app.sw_diff = ecu_werkbank::swinfo::list(&v.key).pop().map(|p| ecu_werkbank::swinfo::compare(&p, &st)).unwrap_or_default();
+                            let _ = ecu_werkbank::swinfo::save(&v.key, &st);
+                        }
+                        app.status = tr!("{a} Steuergerät(e) ausgelesen.", a = st.module.len());
+                        app.sw_last = Some(st);
                     }
-                    self.status = tr!("{a} Steuergerät(e) ausgelesen.", a = st.module.len());
-                    self.sw_last = Some(st);
-                }
-                Err(e) => self.status = tr!("Softwarestände: {e}", e = format!("{:#}", e)),
-            }
+                    Err(e) => app.status = tr!("Softwarestände: {e}", e = format!("{:#}", e)),
+                })
+            });
         }
         if self.sw_last.is_none() {
             if let Some(st) = self.active_vehicle.as_deref().and_then(|k| ecu_werkbank::swinfo::list(k).pop()) {
@@ -93,30 +99,38 @@ impl App {
             return;
         };
         let rx = ecu_werkbank::uds::antwort_id(tx);
-        let mut zeilen: Vec<(String, String)> = Vec::new();
-        match self.backend().open(tx, rx) {
-            Ok(tp) => {
-                let uds = Uds::new(&*tp);
-                if uds.diagnostic_session(ecu_werkbank::uds::SESSION_DEFAULT).is_err() {
-                    self.status = tr!("Steuergerät {a} antwortet nicht (Zündung an?).", a = format!("{tx:#05x}"));
-                }
-                for (did, name) in swinfo::STD_DIDS {
-                    if let Ok(d) = uds.read_data_by_id(*did) {
-                        if !d.is_empty() {
-                            zeilen.push((ecu_werkbank::i18n::t(name), swinfo::ident_wert(*did, &d)));
+        let be = self.backend();
+        self.im_hintergrund(tr!("Identifikation {a} lesen", a = format!("{tx:#05x}")), move || {
+            let mut zeilen: Vec<(String, String)> = Vec::new();
+            let status = match be.open(tx, rx) {
+                Ok(tp) => {
+                    let uds = Uds::new(&*tp);
+                    let stumm = uds.diagnostic_session(ecu_werkbank::uds::SESSION_DEFAULT).is_err();
+                    for (did, name) in swinfo::STD_DIDS {
+                        if let Ok(d) = uds.read_data_by_id(*did) {
+                            if !d.is_empty() {
+                                zeilen.push((ecu_werkbank::i18n::t(name), swinfo::ident_wert(*did, &d)));
+                            }
                         }
                     }
-                }
-                if let Ok(d) = uds.read_data_by_id(ecu_werkbank::backup::VAG_CODING_DID) {
-                    if !d.is_empty() {
-                        zeilen.push((tr!("Codierung (lang)"), ecu_werkbank::backup::hex(&d)));
+                    if let Ok(d) = uds.read_data_by_id(ecu_werkbank::backup::VAG_CODING_DID) {
+                        if !d.is_empty() {
+                            zeilen.push((tr!("Codierung (lang)"), ecu_werkbank::backup::hex(&d)));
+                        }
+                    }
+                    if stumm && zeilen.is_empty() {
+                        tr!("Steuergerät {a} antwortet nicht (Zündung an?).", a = format!("{tx:#05x}"))
+                    } else {
+                        tr!("{a} Kennfeld(er) von {b} gelesen.", a = zeilen.len(), b = format!("{tx:#05x}"))
                     }
                 }
-                self.status = tr!("{a} Kennfeld(er) von {b} gelesen.", a = zeilen.len(), b = format!("{tx:#05x}"));
-            }
-            Err(e) => self.status = tr!("Verbindung: {e}", e = format!("{:#}", e)),
-        }
-        self.ident_result = Some((format!("{tx:#05x}"), zeilen));
+                Err(e) => tr!("Verbindung: {e}", e = format!("{:#}", e)),
+            };
+            Box::new(move |app: &mut App| {
+                app.status = status;
+                app.ident_result = Some((format!("{tx:#05x}"), zeilen));
+            })
+        });
     }
 
     /// Grundeinstellung-Katalog: Nachschlage-Referenz der üblichen
@@ -679,19 +693,25 @@ impl App {
         ui.horizontal(|ui| {
             if ui.button(tr!("⬇ Werte lesen")).clicked() {
                 let c = self.dpf_cfg();
-                match ecu_werkbank::dpf::read(&self.backend(), &c) {
-                    Ok(w) => {
-                        let r = ecu_werkbank::dpf::bewerten(&w, &c);
-                        if let Some(v) = &veh {
-                            let mut tr = Vec::new();
-                            if let Some(x) = w.russ_g { tr.push((tr!("DPF Rußbeladung").to_string(), x, "g".to_string())); }
-                            if let Some(x) = w.diff_mbar { tr.push((tr!("DPF Differenzdruck").to_string(), x, "mbar".to_string())); }
-                            let _ = ecu_werkbank::trend::add(&v.key, v.km, &tr);
+                let be = self.backend();
+                let fz = veh.as_ref().map(|v| (v.key.clone(), v.km));
+                self.im_hintergrund(tr!("Partikelfilter lesen"), move || {
+                    let r = ecu_werkbank::dpf::read(&be, &c);
+                    Box::new(move |app: &mut App| match r {
+                        Ok(w) => {
+                            let r = ecu_werkbank::dpf::bewerten(&w, &c);
+                            if let Some((key, km)) = &fz {
+                                let mut tr = Vec::new();
+                                if let Some(x) = w.russ_g { tr.push((tr!("DPF Rußbeladung").to_string(), x, "g".to_string())); }
+                                if let Some(x) = w.diff_mbar { tr.push((tr!("DPF Differenzdruck").to_string(), x, "mbar".to_string())); }
+                                let _ = ecu_werkbank::trend::add(key, *km, &tr);
+                            }
+                            app.dpf_vals = Some((w, r));
+                            app.status = tr!("Partikelfilter gelesen.");
                         }
-                        self.dpf_vals = Some((w, r));
-                    }
-                    Err(e) => self.status = tr!("Partikelfilter: {e}", e = format!("{:#}", e)),
-                }
+                        Err(e) => app.status = tr!("Partikelfilter: {e}", e = format!("{:#}", e)),
+                    })
+                });
             }
         });
         if let Some((w, r)) = &self.dpf_vals {

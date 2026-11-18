@@ -427,6 +427,7 @@ impl App {
             voll_scan: false,
             tp_autostart: tabsel == "tp20",
             demo_autostart: tabsel.clone(),
+            bus: Default::default(),
             status: startup_status,
         }
     }
@@ -451,46 +452,58 @@ impl App {
         self.db = LabelDb::load_dir(&self.labels_dir).unwrap_or_default();
     }
 
+    /// Die 8 OBD-Motor-Adressen nach UDS-Antwort abfragen (im Hintergrund).
     pub(super) fn run_scan(&mut self) {
-        self.scan_results.clear();
-        for i in 0..8u16 {
-            let (tx, rx) = (0x7E0 + i, 0x7E8 + i);
-            let ok = self.backend().open(tx, rx)
-                .and_then(|tp| Uds::new(&*tp).diagnostic_session(0x01).map(|_| ()))
-                .is_ok();
-            if ok {
-                self.scan_results.push((tx, rx));
-            }
-        }
-        self.status = if self.scan_results.is_empty() {
-            tr!("Keine ECU auf {a}. Zündung an? Bitrate 500k?", a = self.iface)
-        } else {
-            tr!("{a} Steuergerät(e) gefunden.", a = self.scan_results.len())
-        };
+        self.scan_starten(Vec::new(), tr!("Suche Steuergeräte"));
     }
 
     /// (2) Auto-Scan: Label-ECUs mit CAN-IDs + OBD-Bereich.
     pub(super) fn run_autoscan(&mut self) {
-        self.scan_results.clear();
-        let mut targets: Vec<(u16, u16)> =
-            self.db.ecus_with_can().into_iter().map(|(_, tx, rx)| (tx, rx)).collect();
+        let targets: Vec<(u16, u16)> = self.db.ecus_with_can().into_iter().map(|(_, tx, rx)| (tx, rx)).collect();
+        self.scan_starten(targets, tr!("Auto-Scan"));
+    }
+
+    fn scan_starten(&mut self, mut targets: Vec<(u16, u16)>, text: String) {
+        let auto = !targets.is_empty();
         for i in 0..8u16 {
             targets.push((0x7E0 + i, 0x7E8 + i));
         }
-        for (tx, rx) in targets {
-            let ok = self.backend().open(tx, rx)
-                .and_then(|tp| Uds::new(&*tp).diagnostic_session(0x01).map(|_| ()))
-                .is_ok();
-            if ok && !self.scan_results.contains(&(tx, rx)) {
-                self.scan_results.push((tx, rx));
+        let be = self.backend();
+        let iface = self.iface.clone();
+        self.im_hintergrund(text, move || {
+            let mut gefunden: Vec<(u16, u16)> = Vec::new();
+            for (tx, rx) in targets {
+                let ok = be.open(tx, rx).and_then(|tp| Uds::new(&*tp).diagnostic_session(0x01).map(|_| ())).is_ok();
+                if ok && !gefunden.contains(&(tx, rx)) {
+                    gefunden.push((tx, rx));
+                }
             }
-        }
-        self.status = tr!("Auto-Scan: {a} Steuergerät(e).", a = self.scan_results.len());
+            Box::new(move |app: &mut App| {
+                app.status = if auto {
+                    tr!("Auto-Scan: {a} Steuergerät(e).", a = gefunden.len())
+                } else if gefunden.is_empty() {
+                    tr!("Keine ECU auf {a}. Zündung an? Bitrate 500k?", a = iface)
+                } else {
+                    tr!("{a} Steuergerät(e) gefunden.", a = gefunden.len())
+                };
+                app.scan_results = gefunden;
+            })
+        });
+    }
+
+    /// UDS-Fehler als Anzeigezeilen (Code, Art, Text aus den Labels, Status).
+    pub(super) fn uds_dtc_zeilen(&self, dtcs: &[ecu_werkbank::uds::Dtc]) -> Vec<String> {
+        dtcs.iter()
+            .map(|d| {
+                let code = d.code();
+                let text = self.db.dtc_description(&code).unwrap_or("");
+                let art = ecu_werkbank::dtc_db::fehlerart_kurz(d.fehlerart()).map(|t| format!(" ({t})")).unwrap_or_default();
+                format!("{code}{art}  {text}  ({})", ecu_werkbank::report::uds_status_text(d.status))
+            })
+            .collect()
     }
 
     pub(super) fn run_dtc(&mut self) {
-        self.dtc_results.clear();
-        self.dtc_info.clear();
         let (tx, rx) = match (parse_hex(&self.dtc_tx), parse_hex(&self.dtc_rx)) {
             (Some(t), Some(r)) => (t, r),
             _ => {
@@ -498,55 +511,59 @@ impl App {
                 return;
             }
         };
-        // 1. UDS (neuere Steuergeräte)
-        let uds_res = (|| -> anyhow::Result<Vec<String>> {
-            let tp = self.backend().open(tx, rx)?;
-            let uds = Uds::new(&*tp).mit_tx(tx);
-            uds.diagnostic_session(0x01)?;
-            let dtcs = uds.read_dtcs(0xFF)?;
-            Ok(dtcs
-                .iter()
-                .map(|d| {
-                    let code = d.code();
-                    let text = self.db.dtc_description(&code).unwrap_or("");
-                    let art = ecu_werkbank::dtc_db::fehlerart_kurz(d.fehlerart()).map(|t| format!(" ({t})")).unwrap_or_default();
-                    format!("{code}{art}  {text}  ({})", ecu_werkbank::report::uds_status_text(d.status))
-                })
-                .collect())
-        })();
-        let uds_err = match uds_res {
-            Ok(lines) => {
-                self.dtc_info = tr!("UDS ({tx}/{rx}): {a}", tx = format!("{:#05x}", tx), rx = format!("{:#05x}", rx), a = if lines.is_empty() { tr!("keine Fehler gespeichert.") } else { tr!("gelesen.") });
-                self.dtc_results = lines;
-                self.status = tr!("Fehlerspeicher gelesen.");
-                return;
-            }
-            Err(e) => format!("{e:#}"),
-        };
-        // 2. TP 2.0 (ältere VAG, z. B. Golf 6 Motor) — passende Logikadresse suchen
-        if self.backend().supports_tp20() {
-            if let Some(a) = self.tp20_addr_for(self.selected_ecu) {
-                let res = (|| -> anyhow::Result<Vec<(kwp::KwpDtc, Option<Vec<u8>>)>> {
-                    let mut ch = kwp::open_session(&self.backend(), a)?;
-                    Kwp::new(&mut ch).read_dtcs_mit_umgebung()
-                })();
-                match res {
-                    Ok(dtcs) => {
-                        self.dtc_results = self.tp_dtc_lines(&dtcs, a);
-                        self.dtc_info = tr!("Über TP 2.0 (Adresse {a}) gelesen — das Steuergerät spricht kein UDS.{b}", a = format!("{:#04x}", a), b = if dtcs.is_empty() { ecu_werkbank::trs!(" Keine Fehler gespeichert.") } else { "" });
-                        self.status = tr!("Fehlerspeicher gelesen.");
-                        return;
-                    }
-                    Err(e) => {
-                        self.dtc_info = tr!("Keine Antwort — weder UDS ({uds_err}) noch TP 2.0 ({e}). Zündung an? Verbindung prüfen.", uds_err = uds_err, e = format!("{:#}", e));
-                        self.status = tr!("Fehlerspeicher nicht lesbar.");
-                        return;
+        self.dtc_results.clear();
+        self.dtc_info.clear();
+        let be = self.backend();
+        let tp20 = if be.supports_tp20() { self.tp20_addr_for(self.selected_ecu) } else { None };
+        enum Antwort {
+            Uds(Vec<ecu_werkbank::uds::Dtc>),
+            Tp20(u8, Vec<(kwp::KwpDtc, Option<Vec<u8>>)>),
+            Keine { uds: String, tp20: Option<String> },
+        }
+        self.im_hintergrund(tr!("Fehlerspeicher lesen"), move || {
+            // 1. UDS (neuere Steuergeräte)
+            let uds_res = (|| -> anyhow::Result<Vec<ecu_werkbank::uds::Dtc>> {
+                let tp = be.open(tx, rx)?;
+                let uds = Uds::new(&*tp).mit_tx(tx);
+                uds.diagnostic_session(0x01)?;
+                uds.read_dtcs(0xFF)
+            })();
+            let antwort = match uds_res {
+                Ok(d) => Antwort::Uds(d),
+                Err(e) => {
+                    let uds = format!("{e:#}");
+                    // 2. TP 2.0 (ältere VAG, z. B. Golf 6 Motor)
+                    match tp20 {
+                        Some(a) => match kwp::open_session(&be, a).and_then(|mut ch| Kwp::new(&mut ch).read_dtcs_mit_umgebung()) {
+                            Ok(d) => Antwort::Tp20(a, d),
+                            Err(e) => Antwort::Keine { uds, tp20: Some(format!("{e:#}")) },
+                        },
+                        None => Antwort::Keine { uds, tp20: None },
                     }
                 }
-            }
-        }
-        self.dtc_info = tr!("Keine Antwort über UDS: {uds_err}. Ältere Steuergeräte: Auto-Scan starten (findet TP 2.0) oder Seite „TP 2.0“.", uds_err = uds_err);
-        self.status = tr!("Fehlerspeicher nicht lesbar.");
+            };
+            Box::new(move |app: &mut App| match antwort {
+                Antwort::Uds(d) => {
+                    let lines = app.uds_dtc_zeilen(&d);
+                    app.dtc_info = tr!("UDS ({tx}/{rx}): {a}", tx = format!("{:#05x}", tx), rx = format!("{:#05x}", rx), a = if lines.is_empty() { tr!("keine Fehler gespeichert.") } else { tr!("gelesen.") });
+                    app.dtc_results = lines;
+                    app.status = tr!("Fehlerspeicher gelesen.");
+                }
+                Antwort::Tp20(a, dtcs) => {
+                    app.dtc_results = app.tp_dtc_lines(&dtcs, a);
+                    app.dtc_info = tr!("Über TP 2.0 (Adresse {a}) gelesen — das Steuergerät spricht kein UDS.{b}", a = format!("{:#04x}", a), b = if dtcs.is_empty() { ecu_werkbank::trs!(" Keine Fehler gespeichert.") } else { "" });
+                    app.status = tr!("Fehlerspeicher gelesen.");
+                }
+                Antwort::Keine { uds, tp20: Some(e) } => {
+                    app.dtc_info = tr!("Keine Antwort — weder UDS ({uds_err}) noch TP 2.0 ({e}). Zündung an? Verbindung prüfen.", uds_err = uds, e = e);
+                    app.status = tr!("Fehlerspeicher nicht lesbar.");
+                }
+                Antwort::Keine { uds, tp20: None } => {
+                    app.dtc_info = tr!("Keine Antwort über UDS: {uds_err}. Ältere Steuergeräte: Auto-Scan starten (findet TP 2.0) oder Seite „TP 2.0“.", uds_err = uds);
+                    app.status = tr!("Fehlerspeicher nicht lesbar.");
+                }
+            })
+        });
     }
 
     /// Adapter-Ampel: (Stufe, Kurztext, Erklärung). Liest den Zustand höchstens alle 2 s.
@@ -772,101 +789,114 @@ impl App {
     /// Fehlerspeicher eines Steuergeräts löschen, danach neu lesen.
     pub(super) fn fz_clear(&mut self, m: &ecu_werkbank::report::ModuleReport) {
         let be = self.backend();
-        let res: anyhow::Result<()> = (|| {
-            if m.protocol == "TP 2.0" {
-                let a = m.address.ok_or_else(|| anyhow::anyhow!(tr!("keine TP-2.0-Adresse")))? as u8;
-                let mut ch = kwp::open_session(&be, a)?;
-                Kwp::new(&mut ch).clear_dtcs()
-            } else {
-                let (tx, rx) = ecu_werkbank::profil::parse_can(&m.can).ok_or_else(|| anyhow::anyhow!(tr!("CAN-IDs unbekannt")))?;
-                let tp = be.open(tx, rx)?;
-                let uds = Uds::new(&*tp);
-                uds.diagnostic_session(0x01)?;
-                uds.clear_dtcs()
-            }
-        })();
-        match res {
-            Ok(()) => {
-                self.fz_read(m, false);
-                self.fz_info = tr!("Gelöscht. Neu gelesen: {a}", a = self.fz_info);
-                self.status = tr!("Fehlerspeicher {a} gelöscht.", a = m.title());
-            }
-            Err(e) => {
-                self.fz_info = tr!("Löschen fehlgeschlagen: {e}", e = format!("{:#}", e));
-                self.status = tr!("Löschen fehlgeschlagen.");
-            }
-        }
+        let m = m.clone();
+        self.im_hintergrund(tr!("Fehlerspeicher {a} löschen", a = m.title()), move || {
+            let res: anyhow::Result<()> = (|| {
+                if m.protocol == "TP 2.0" {
+                    let a = m.address.ok_or_else(|| anyhow::anyhow!(tr!("keine TP-2.0-Adresse")))? as u8;
+                    let mut ch = kwp::open_session(&be, a)?;
+                    Kwp::new(&mut ch).clear_dtcs()
+                } else {
+                    let (tx, rx) = ecu_werkbank::profil::parse_can(&m.can).ok_or_else(|| anyhow::anyhow!(tr!("CAN-IDs unbekannt")))?;
+                    let tp = be.open(tx, rx)?;
+                    let uds = Uds::new(&*tp);
+                    uds.diagnostic_session(0x01)?;
+                    uds.clear_dtcs()
+                }
+            })();
+            Box::new(move |app: &mut App| match res {
+                Ok(()) => {
+                    app.status = tr!("Fehlerspeicher {a} gelöscht.", a = m.title());
+                    app.fz_read_mit(&m, false, tr!("Gelöscht. Neu gelesen: "));
+                }
+                Err(e) => {
+                    app.fz_info = tr!("Löschen fehlgeschlagen: {e}", e = format!("{:#}", e));
+                    app.status = tr!("Löschen fehlgeschlagen.");
+                }
+            })
+        });
     }
 
     /// Fehler (oder Identifikation) eines Steuergeräts aus dem Scan live lesen.
     pub(super) fn fz_read(&mut self, m: &ecu_werkbank::report::ModuleReport, ident: bool) {
+        self.fz_read_mit(m, ident, String::new());
+    }
+
+    /// Wie `fz_read`; `vorher` wird vor die Ergebnis-Meldung gesetzt.
+    fn fz_read_mit(&mut self, m: &ecu_werkbank::report::ModuleReport, ident: bool, vorher: String) {
+        enum Gelesen {
+            Zeilen(Vec<String>, String),
+            TpDtc(u8, Vec<(kwp::KwpDtc, Option<Vec<u8>>)>),
+            UdsDtc(Vec<ecu_werkbank::uds::Dtc>),
+        }
         self.fz_lines.clear();
         let be = self.backend();
-        let res: anyhow::Result<(Vec<String>, String)> = (|| {
-            if m.protocol == "TP 2.0" {
-                let a = m.address.ok_or_else(|| anyhow::anyhow!(tr!("keine TP-2.0-Adresse")))? as u8;
-                let mut ch = kwp::open_session(&be, a)?;
-                let mut k = Kwp::new(&mut ch);
-                if ident {
-                    let raw = k.read_ecu_id(kwp::ECU_ID_VAG).unwrap_or_default();
-                    let mut l = kwp::ident_9b(&raw).unwrap_or_else(|| kwp::ident_strings(&raw));
-                    if l.is_empty() {
-                        l = kwp::ident_22(&mut k);
-                    }
-                    if let Some(kwp::TpCodierung::Kurz { wert, .. }) = kwp::kurzcodierung_9b(&raw) {
-                        l.push(tr!("Codierung: {a}", a = format!("{wert:07}")));
-                    }
-                    if let Some((w, i, h)) = raw.get(20..26).filter(|_| kwp::kurzcodierung_9b(&raw).is_some()).and_then(ecu_werkbank::swinfo::betriebsnummer) {
-                        l.push(tr!("Betriebsnummer: Werkstatt {w} · Importeur {i} · Händler {h}", w = format!("{w:05}"), i = format!("{i:03}"), h = format!("{h:05}")));
-                    }
-                    return Ok((l, tr!("Identifikation gelesen (TP 2.0).")));
-                }
-                let d = k.read_dtcs_mit_umgebung()?;
-                let n = d.len();
-                Ok((self.tp_dtc_lines(&d, a), if n == 0 { tr!("Keine Fehler gespeichert.") } else { tr!("{n} Fehler (TP 2.0):", n = n) }))
-            } else {
-                let (tx, rx) = ecu_werkbank::profil::parse_can(&m.can).ok_or_else(|| anyhow::anyhow!(tr!("CAN-IDs unbekannt")))?;
-                let tp = be.open(tx, rx)?;
-                let uds = Uds::new(&*tp).mit_tx(tx);
-                uds.diagnostic_session(0x01)?;
-                if ident {
-                    let mut l = Vec::new();
-                    for (did, was) in [(0xF187u16, tr!("Teilenummer")), (0xF189, tr!("Software")), (0xF191, tr!("Hardware")), (0xF197, tr!("System")), (0xF18C, tr!("Seriennummer"))] {
-                        if let Ok(d) = uds.read_data_by_id(did) {
-                            l.push(format!("{was}: {}", String::from_utf8_lossy(&d).trim()));
+        let m = m.clone();
+        let text = if ident { tr!("Identifikation {a} lesen", a = m.title()) } else { tr!("Fehler {a} lesen", a = m.title()) };
+        self.im_hintergrund(text, move || {
+            let res: anyhow::Result<Gelesen> = (|| {
+                if m.protocol == "TP 2.0" {
+                    let a = m.address.ok_or_else(|| anyhow::anyhow!(tr!("keine TP-2.0-Adresse")))? as u8;
+                    let mut ch = kwp::open_session(&be, a)?;
+                    let mut k = Kwp::new(&mut ch);
+                    if ident {
+                        let raw = k.read_ecu_id(kwp::ECU_ID_VAG).unwrap_or_default();
+                        let mut l = kwp::ident_9b(&raw).unwrap_or_else(|| kwp::ident_strings(&raw));
+                        if l.is_empty() {
+                            l = kwp::ident_22(&mut k);
                         }
+                        if let Some(kwp::TpCodierung::Kurz { wert, .. }) = kwp::kurzcodierung_9b(&raw) {
+                            l.push(tr!("Codierung: {a}", a = format!("{wert:07}")));
+                        }
+                        if let Some((w, i, h)) = raw.get(20..26).filter(|_| kwp::kurzcodierung_9b(&raw).is_some()).and_then(ecu_werkbank::swinfo::betriebsnummer) {
+                            l.push(tr!("Betriebsnummer: Werkstatt {w} · Importeur {i} · Händler {h}", w = format!("{w:05}"), i = format!("{i:03}"), h = format!("{h:05}")));
+                        }
+                        return Ok(Gelesen::Zeilen(l, tr!("Identifikation gelesen (TP 2.0).")));
                     }
-                    return Ok((l, tr!("Identifikation gelesen (UDS).")));
+                    Ok(Gelesen::TpDtc(a, k.read_dtcs_mit_umgebung()?))
+                } else {
+                    let (tx, rx) = ecu_werkbank::profil::parse_can(&m.can).ok_or_else(|| anyhow::anyhow!(tr!("CAN-IDs unbekannt")))?;
+                    let tp = be.open(tx, rx)?;
+                    let uds = Uds::new(&*tp).mit_tx(tx);
+                    uds.diagnostic_session(0x01)?;
+                    if ident {
+                        let mut l = Vec::new();
+                        for (did, was) in [(0xF187u16, tr!("Teilenummer")), (0xF189, tr!("Software")), (0xF191, tr!("Hardware")), (0xF197, tr!("System")), (0xF18C, tr!("Seriennummer"))] {
+                            if let Ok(d) = uds.read_data_by_id(did) {
+                                l.push(format!("{was}: {}", String::from_utf8_lossy(&d).trim()));
+                            }
+                        }
+                        return Ok(Gelesen::Zeilen(l, tr!("Identifikation gelesen (UDS).")));
+                    }
+                    Ok(Gelesen::UdsDtc(uds.read_dtcs(0xFF)?))
                 }
-                let d = uds.read_dtcs(0xFF)?;
-                let n = d.len();
-                let lines = d
-                    .iter()
-                    .map(|d| {
-                        let code = d.code();
-                        let text = self.db.dtc_description(&code).unwrap_or("");
-                        let art = ecu_werkbank::dtc_db::fehlerart_kurz(d.fehlerart()).map(|t| format!(" ({t})")).unwrap_or_default();
-                        format!("{code}{art}  {text}  ({})", ecu_werkbank::report::uds_status_text(d.status))
-                    })
-                    .collect();
-                Ok((lines, if n == 0 { tr!("Keine Fehler gespeichert.") } else { tr!("{n} Fehler (UDS):", n = n) }))
-            }
-        })();
-        match res {
-            Ok((l, info)) => {
-                self.fz_lines = l;
-                self.fz_info = info;
-                self.status = tr!("Steuergerät gelesen.");
-            }
-            Err(e) => {
-                let hint = match &be {
-                    Backend::SocketCan { iface } => ecu_werkbank::connect::can_state(iface).and_then(|st| ecu_werkbank::connect::state_hint(iface, &st)).map(|h| format!(" — {}", h.1)).unwrap_or_default(),
-                    _ => String::new(),
+            })();
+            let hint = match (&res, &be) {
+                (Err(_), Backend::SocketCan { iface }) => ecu_werkbank::connect::can_state(iface).and_then(|st| ecu_werkbank::connect::state_hint(iface, &st)).map(|h| format!(" — {}", h.1)).unwrap_or_default(),
+                _ => String::new(),
+            };
+            Box::new(move |app: &mut App| {
+                let (l, info) = match res {
+                    Ok(Gelesen::Zeilen(l, info)) => (l, info),
+                    Ok(Gelesen::TpDtc(a, d)) => {
+                        let n = d.len();
+                        (app.tp_dtc_lines(&d, a), if n == 0 { tr!("Keine Fehler gespeichert.") } else { tr!("{n} Fehler (TP 2.0):", n = n) })
+                    }
+                    Ok(Gelesen::UdsDtc(d)) => {
+                        let n = d.len();
+                        (app.uds_dtc_zeilen(&d), if n == 0 { tr!("Keine Fehler gespeichert.") } else { tr!("{n} Fehler (UDS):", n = n) })
+                    }
+                    Err(e) => {
+                        app.fz_info = tr!("Keine Antwort: {e}{hint}", e = format!("{:#}", e), hint = hint);
+                        app.status = tr!("Steuergerät antwortet nicht.");
+                        return;
+                    }
                 };
-                self.fz_info = tr!("Keine Antwort: {e}{hint}", e = format!("{:#}", e), hint = hint);
-                self.status = tr!("Steuergerät antwortet nicht.");
-            }
-        }
+                app.fz_lines = l;
+                app.fz_info = format!("{vorher}{info}");
+                app.status = tr!("Steuergerät gelesen.");
+            })
+        });
     }
 
     /// TP-2.0-Logikadresse zu einem gewählten Steuergerät: aus dem Auto-Scan
@@ -884,21 +914,28 @@ impl App {
     }
 
     pub(super) fn run_clear(&mut self) {
-        let res = (|| -> anyhow::Result<()> {
-            let tx = parse_hex(&self.dtc_tx).ok_or_else(|| anyhow::anyhow!(tr!("TX ungültig")))?;
-            let rx = parse_hex(&self.dtc_rx).ok_or_else(|| anyhow::anyhow!(tr!("RX ungültig")))?;
-            let tp = self.backend().open(tx, rx)?;
-            let uds = Uds::new(&*tp);
-            uds.diagnostic_session(0x01)?;
-            uds.clear_dtcs()
-        })();
-        self.status = match res {
-            Ok(_) => {
-                self.dtc_results.clear();
-                tr!("Fehlercodes gelöscht.")
-            }
-            Err(e) => tr!("Fehler: {e}", e = e),
+        let (Some(tx), Some(rx)) = (parse_hex(&self.dtc_tx), parse_hex(&self.dtc_rx)) else {
+            self.status = tr!("Ungültige TX/RX-ID.");
+            return;
         };
+        let be = self.backend();
+        self.im_hintergrund(tr!("Fehlercodes löschen"), move || {
+            let res = (|| -> anyhow::Result<()> {
+                let tp = be.open(tx, rx)?;
+                let uds = Uds::new(&*tp);
+                uds.diagnostic_session(0x01)?;
+                uds.clear_dtcs()
+            })();
+            Box::new(move |app: &mut App| {
+                app.status = match res {
+                    Ok(_) => {
+                        app.dtc_results.clear();
+                        tr!("Fehlercodes gelöscht.")
+                    }
+                    Err(e) => tr!("Fehler: {e}", e = e),
+                };
+            })
+        });
     }
 
     /// Eingaben prüfen und einen Sende-Plan bauen — sendet noch nichts.
@@ -923,25 +960,30 @@ impl App {
 
     /// Nach der Bestätigung: den Plan wirklich senden.
     pub(super) fn svc_senden(&mut self, plan: SvcPlan) {
-        let hex = |r: &[u8]| r.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
-        let res = (|| -> anyhow::Result<String> {
-            let (tx, rx) = match &plan {
-                SvcPlan::Routine { tx, rx, .. } | SvcPlan::Io { tx, rx, .. } => (*tx, *rx),
-            };
-            let tp = self.backend().open(tx, rx)?;
-            let uds = Uds::new(&*tp);
-            uds.diagnostic_session(0x03)?;
-            Ok(match &plan {
-                SvcPlan::Routine { sub, id, data, .. } => tr!("Routine OK: [{a}]", a = hex(&uds.routine_control(*sub, *id, data)?)),
-                SvcPlan::Io { did, ctrl, state, .. } => tr!("IO-Control OK: [{a}]", a = hex(&uds.io_control(*did, *ctrl, state)?)),
+        let be = self.backend();
+        self.svc_result = tr!("Wird gesendet …");
+        self.im_hintergrund(tr!("Service senden"), move || {
+            let hex = |r: &[u8]| r.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
+            let res = (|| -> anyhow::Result<String> {
+                let (tx, rx) = match &plan {
+                    SvcPlan::Routine { tx, rx, .. } | SvcPlan::Io { tx, rx, .. } => (*tx, *rx),
+                };
+                let tp = be.open(tx, rx)?;
+                let uds = Uds::new(&*tp);
+                uds.diagnostic_session(0x03)?;
+                Ok(match &plan {
+                    SvcPlan::Routine { sub, id, data, .. } => tr!("Routine OK: [{a}]", a = hex(&uds.routine_control(*sub, *id, data)?)),
+                    SvcPlan::Io { did, ctrl, state, .. } => tr!("IO-Control OK: [{a}]", a = hex(&uds.io_control(*did, *ctrl, state)?)),
+                })
+            })();
+            Box::new(move |app: &mut App| {
+                (app.svc_result, app.status) = match res {
+                    Ok(t) => (t, tr!("Service gesendet.")),
+                    Err(e) => (tr!("Fehler: {e}", e = format!("{e:#}")), tr!("Service fehlgeschlagen.")),
+                };
             })
-        })();
-        self.svc_result = match res {
-            Ok(t) => t,
-            Err(e) => tr!("Fehler: {e}", e = format!("{e:#}")),
-        };
+        });
     }
-
 
     /// Verbauliste direkt aus dem Gateway: was das Gateway als verbaut kennt
     /// und wo es einen gespeicherten Fehler meldet (nur lesen, TP 2.0).

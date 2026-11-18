@@ -18,6 +18,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.
 
 ### Geändert
+- **Fenster friert nicht mehr ein**, wenn ein Steuergerät langsam oder gar nicht antwortet: alle
+  Abfragen ans Auto laufen im Hintergrund, der Reihe nach. Ein Drehrad unten links zeigt, dass
+  gerade gearbeitet wird; doppelte Klicks werden abgewiesen.
 - TP-2.0-Adressen werden immer hexadezimal gelesen, mit oder ohne `0x` (`20` = Bordnetz).
 - Handy-Anzeige: Adresse enthält einen zufälligen Schlüssel; andere Geräte im WLAN sehen nichts mehr.
 - Warten auf „Antwort folgt“ (UDS) höchstens 60 s.

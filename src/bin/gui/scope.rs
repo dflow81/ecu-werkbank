@@ -89,7 +89,7 @@ impl App {
 
     /// Messwertblock als Kurven hinzufügen (Felder werden durch eine erste Abfrage erkannt).
     pub(super) fn scope_add_kwp_block_series(&mut self) {
-        let res = (|| -> anyhow::Result<Vec<Series>> {
+        let pruefung = (|| -> anyhow::Result<(u8, u8)> {
             let addr = parse_hex(&self.scope_add_kwp_addr)
                 .filter(|a| (1..=0x7F).contains(a))
                 .ok_or_else(|| anyhow::anyhow!(tr!("Adresse ungültig")))? as u8;
@@ -97,42 +97,51 @@ impl App {
             if self.scope_series.iter().any(|s| matches!(s.kind, ChanKind::Kwp { addr: a, block: b, .. } if a == addr && b == block)) {
                 anyhow::bail!(tr!("Block {a} ist schon in der Grafik.", a = format!("{:03}", block)));
             }
-            // offenen Kanal der laufenden Aufzeichnung nutzen; sonst neu öffnen
-            // (wartet bis ~5 s, falls der Golf-6-Motor TP 2.0 nach OBD kurz sperrt)
-            let values = match self.scope_kwp_ch.get_mut(&addr) {
-                Some(ch) => Kwp::new(ch).read_block(block),
-                None => Err(anyhow::anyhow!(tr!("kein Kanal"))),
-            };
-            let values = match values {
-                Ok(v) => v,
-                Err(_) => {
-                    self.scope_kwp_ch.remove(&addr);
-                    let mut ch = kwp::open_session(&self.backend(), addr)?;
-                    let v = Kwp::new(&mut ch).read_block(block)?;
-                    if self.scope_running {
-                        self.scope_kwp_ch.insert(addr, ch);
-                    }
-                    v
-                }
-            };
-            Ok(values
-                .iter()
-                .enumerate()
-                .filter(|(_, v)| !v.is_leer())
-                .map(|(i, v)| {
-                    let unit = v.decode().map(|(_, u)| u).unwrap_or("");
-                    let name = self.kwp_kanal_name(addr, block, i, ecu_werkbank::messwerttexte::art(v.formula));
-                    Series::new(&name, unit, ChanKind::Kwp { addr, block, field: i })
-                })
-                .collect())
+            Ok((addr, block))
         })();
-        match res {
-            Ok(v) => {
-                self.status = tr!("{a} Kurve(n) hinzugefügt.", a = v.len());
-                self.scope_series.extend(v);
+        let (addr, block) = match pruefung {
+            Ok(x) => x,
+            Err(e) => {
+                self.status = tr!("Messwertblock: {e}", e = format!("{:#}", e));
+                return;
             }
-            Err(e) => self.status = tr!("Messwertblock: {e}", e = format!("{:#}", e)),
-        }
+        };
+        // offenen Kanal der laufenden Aufzeichnung nutzen; sonst neu öffnen
+        // (wartet bis ~5 s, falls der Golf-6-Motor TP 2.0 nach OBD kurz sperrt)
+        let kanal = self.scope_kwp_ch.remove(&addr);
+        let be = self.backend();
+        self.im_hintergrund(tr!("Messwertblock {a} prüfen", a = format!("{block:03}")), move || {
+            let r = (|| -> anyhow::Result<(Channel, Vec<kwp::BlockValue>)> {
+                if let Some(mut ch) = kanal {
+                    if let Ok(v) = Kwp::new(&mut ch).read_block(block) {
+                        return Ok((ch, v));
+                    }
+                }
+                let mut ch = kwp::open_session(&be, addr)?;
+                let v = Kwp::new(&mut ch).read_block(block)?;
+                Ok((ch, v))
+            })();
+            Box::new(move |app: &mut App| match r {
+                Ok((ch, values)) => {
+                    if app.scope_running {
+                        app.scope_kwp_ch.entry(addr).or_insert(ch);
+                    }
+                    let v: Vec<Series> = values
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, v)| !v.is_leer())
+                        .map(|(i, v)| {
+                            let unit = v.decode().map(|(_, u)| u).unwrap_or("");
+                            let name = app.kwp_kanal_name(addr, block, i, ecu_werkbank::messwerttexte::art(v.formula));
+                            Series::new(&name, unit, ChanKind::Kwp { addr, block, field: i })
+                        })
+                        .collect();
+                    app.status = tr!("{a} Kurve(n) hinzugefügt.", a = v.len());
+                    app.scope_series.extend(v);
+                }
+                Err(e) => app.status = tr!("Messwertblock: {e}", e = format!("{:#}", e)),
+            })
+        });
     }
 
     pub(super) fn poll_scope(&mut self, ctx: &egui::Context) {
@@ -154,11 +163,15 @@ impl App {
         if self.scope_last.elapsed() < std::time::Duration::from_millis(self.scope_interval_ms) {
             return;
         }
+        let text = tr!("Scope messen");
+        if self.bus.wartend.contains(&text) {
+            return; // letzter Takt noch unterwegs (langsames Steuergerät)
+        }
         self.scope_last = std::time::Instant::now();
         let t = self.scope_start.elapsed().as_secs_f64();
         let be = self.backend();
 
-        // KWP: je (Adresse, Block) eine Abfrage; Kanäle bleiben offen
+        // Was gelesen werden soll — die Bus-Arbeit läuft danach im Hintergrund.
         let mut blocks: Vec<(u8, u8)> = self
             .scope_series
             .iter()
@@ -169,82 +182,108 @@ impl App {
             .collect();
         blocks.sort();
         blocks.dedup();
-        for (addr, block) in blocks {
-            let read = (|| -> anyhow::Result<Vec<kwp::BlockValue>> {
-                if let std::collections::hash_map::Entry::Vacant(e) = self.scope_kwp_ch.entry(addr) {
-                    e.insert(kwp::open_session(&be, addr)?);
+        let pids: Vec<u8> = self.scope_series.iter().filter_map(|s| if let ChanKind::Obd(p) = s.kind { Some(p) } else { None }).collect();
+        // UDS-DIDs mit Label-Skalierung (Faktor, Versatz)
+        let dids: Vec<(u16, u16, u16, f64, f64)> = self
+            .scope_series
+            .iter()
+            .filter_map(|s| match s.kind {
+                ChanKind::Did { tx, rx, did } => {
+                    let (f, o) = self.db.measuring_any(did).map(|m| (m.factor, m.offset)).unwrap_or((1.0, 0.0));
+                    Some((tx, rx, did, f, o))
                 }
-                let ch = self.scope_kwp_ch.get_mut(&addr).expect("gerade geöffnet");
-                Kwp::new(ch).read_block(block)
-            })();
-            if read.is_err() {
-                self.scope_kwp_ch.remove(&addr);
-            }
-            for s in self.scope_series.iter_mut() {
-                if let ChanKind::Kwp { addr: a, block: b, field } = s.kind {
-                    if (a, b) != (addr, block) {
-                        continue;
+                _ => None,
+            })
+            .collect();
+        let mut kanaele = std::mem::take(&mut self.scope_kwp_ch);
+        self.im_hintergrund_still(text, move || {
+            // KWP: je (Adresse, Block) eine Abfrage; Kanäle bleiben offen
+            let mut kwp_werte = Vec::new();
+            for (addr, block) in blocks {
+                let read = (|| -> anyhow::Result<Vec<kwp::BlockValue>> {
+                    if let std::collections::hash_map::Entry::Vacant(e) = kanaele.entry(addr) {
+                        e.insert(kwp::open_session(&be, addr)?);
                     }
-                    match &read {
-                        Ok(vals) => match vals.get(field).and_then(|v| v.decode()) {
-                            Some((v, _)) => {
-                                s.push(t, v);
-                                s.error = None;
-                            }
-                            None => s.error = Some(tr!("Feld nicht dekodierbar")),
-                        },
-                        Err(e) => s.error = Some(format!("{e:#}")),
-                    }
-                }
-            }
-        }
-
-        // OBD: eine Verbindung für alle PIDs — erst nach den Messwertblöcken, weil der
-        // Golf-6-Motor nach einer OBD-Abfrage ~3 s keinen neuen TP-2.0-Kanal annimmt
-        if self.scope_series.iter().any(|s| matches!(s.kind, ChanKind::Obd(_))) {
-            match be.open(obd::DEFAULT_TX, obd::DEFAULT_RX) {
-                Ok(tp) => {
-                    let o = Obd::new(&*tp);
-                    for s in self.scope_series.iter_mut() {
-                        if let ChanKind::Obd(pid) = s.kind {
-                            match o.read_value(pid) {
-                                Ok(v) => {
-                                    s.push(t, v);
-                                    s.error = None;
-                                }
-                                Err(e) => s.error = Some(format!("{e:#}")),
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    for s in self.scope_series.iter_mut().filter(|s| matches!(s.kind, ChanKind::Obd(_))) {
-                        s.error = Some(format!("{e:#}"));
-                    }
-                }
-            }
-        }
-
-        // UDS-DIDs (mit Label-Skalierung)
-        for s in self.scope_series.iter_mut() {
-            if let ChanKind::Did { tx, rx, did } = s.kind {
-                let r = (|| -> anyhow::Result<f64> {
-                    let tp = be.open(tx, rx)?;
-                    let uds = Uds::new(&*tp);
-                    uds.diagnostic_session(0x01)?;
-                    let raw = ecu_werkbank::raw_to_f64(&uds.read_data_by_id(did)?);
-                    Ok(match self.db.measuring_any(did) {
-                        Some(m) => raw * m.factor + m.offset,
-                        None => raw,
-                    })
+                    let ch = kanaele.get_mut(&addr).expect("gerade geöffnet");
+                    Kwp::new(ch).read_block(block)
                 })();
-                match r {
-                    Ok(v) => {
-                        s.push(t, v);
-                        s.error = None;
-                    }
-                    Err(e) => s.error = Some(format!("{e:#}")),
+                if read.is_err() {
+                    kanaele.remove(&addr);
                 }
+                kwp_werte.push(((addr, block), read.map_err(|e| format!("{e:#}"))));
+            }
+            // OBD: eine Verbindung für alle PIDs — erst nach den Messwertblöcken, weil der
+            // Golf-6-Motor nach einer OBD-Abfrage ~3 s keinen neuen TP-2.0-Kanal annimmt
+            let obd_werte: Result<Vec<(u8, Result<f64, String>)>, String> = if pids.is_empty() {
+                Ok(Vec::new())
+            } else {
+                be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).map_err(|e| format!("{e:#}")).map(|tp| {
+                    let o = Obd::new(&*tp);
+                    pids.iter().map(|&p| (p, o.read_value(p).map_err(|e| format!("{e:#}")))).collect()
+                })
+            };
+            let did_werte: Vec<((u16, u16, u16), Result<f64, String>)> = dids
+                .into_iter()
+                .map(|(tx, rx, did, f, o)| {
+                    let r = (|| -> anyhow::Result<f64> {
+                        let tp = be.open(tx, rx)?;
+                        let uds = Uds::new(&*tp);
+                        uds.diagnostic_session(0x01)?;
+                        Ok(ecu_werkbank::raw_to_f64(&uds.read_data_by_id(did)?) * f + o)
+                    })();
+                    ((tx, rx, did), r.map_err(|e| format!("{e:#}")))
+                })
+                .collect();
+            Box::new(move |app: &mut App| app.scope_uebernehmen(t, kanaele, kwp_werte, obd_werte, did_werte))
+        });
+    }
+
+    /// Ergebnisse eines Scope-Takts in die Kurven eintragen, dann CSV, Warnungen, Handy.
+    fn scope_uebernehmen(
+        &mut self,
+        t: f64,
+        kanaele: HashMap<u8, Channel>,
+        kwp_werte: Vec<((u8, u8), Result<Vec<kwp::BlockValue>, String>)>,
+        obd_werte: Result<Vec<(u8, Result<f64, String>)>, String>,
+        did_werte: Vec<((u16, u16, u16), Result<f64, String>)>,
+    ) {
+        if !self.scope_running {
+            return; // inzwischen gestoppt: Kanäle werden hier geschlossen
+        }
+        self.scope_kwp_ch.extend(kanaele);
+        let eintragen = |s: &mut Series, r: Result<f64, String>| match r {
+            Ok(v) => {
+                s.push(t, v);
+                s.error = None;
+            }
+            Err(e) => s.error = Some(e),
+        };
+        for s in self.scope_series.iter_mut() {
+            match s.kind {
+                ChanKind::Kwp { addr, block, field } => {
+                    if let Some((_, read)) = kwp_werte.iter().find(|(k, _)| *k == (addr, block)) {
+                        let r = match read {
+                            Ok(vals) => vals.get(field).and_then(|v| v.decode()).map(|(v, _)| v).ok_or_else(|| tr!("Feld nicht dekodierbar")),
+                            Err(e) => Err(e.clone()),
+                        };
+                        eintragen(s, r);
+                    }
+                }
+                ChanKind::Obd(pid) => {
+                    let r = match &obd_werte {
+                        Ok(l) => l.iter().find(|(p, _)| *p == pid).map(|(_, r)| r.clone()),
+                        Err(e) => Some(Err(e.clone())),
+                    };
+                    if let Some(r) = r {
+                        eintragen(s, r);
+                    }
+                }
+                ChanKind::Did { tx, rx, did } => {
+                    if let Some((_, r)) = did_werte.iter().find(|(k, _)| *k == (tx, rx, did)) {
+                        eintragen(s, r.clone());
+                    }
+                }
+                ChanKind::File => {}
             }
         }
 
@@ -337,9 +376,21 @@ impl App {
         if self.trip_last_check.elapsed() < std::time::Duration::from_secs(2) {
             return;
         }
+        let text = tr!("Fahrtenschreiber: Motor prüfen");
+        if self.bus.wartend.contains(&text) {
+            return;
+        }
         self.trip_last_check = std::time::Instant::now();
-        let rpm = self.obd_open().and_then(|tp| Obd::new(&*tp).read_value(0x0C)).unwrap_or(0.0);
-        if rpm < 300.0 {
+        let be = self.backend();
+        self.im_hintergrund_still(text, move || {
+            let rpm = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).and_then(|tp| Obd::new(&*tp).read_value(0x0C)).unwrap_or(0.0);
+            Box::new(move |app: &mut App| app.trip_drehzahl(rpm))
+        });
+    }
+
+    /// Fahrtenschreiber: Aufzeichnung starten, sobald der Motor läuft.
+    fn trip_drehzahl(&mut self, rpm: f64) {
+        if rpm < 300.0 || !self.trip_on || self.scope_running {
             return;
         }
         if self.scope_series.iter().all(|s| s.kind == ChanKind::File) {

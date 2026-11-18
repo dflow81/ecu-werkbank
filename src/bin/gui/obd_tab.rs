@@ -4,69 +4,80 @@
 use super::*;
 
 impl App {
-    pub(super) fn obd_open(&self) -> anyhow::Result<Box<dyn ecu_werkbank::transport::Transport>> {
-        self.backend().open(obd::DEFAULT_TX, obd::DEFAULT_RX)
-    }
-
     pub(super) fn run_obd_info(&mut self) {
-        let res = (|| -> anyhow::Result<(String, ecu_werkbank::readiness::Stand, Vec<u8>)> {
-            let tp = self.obd_open()?;
-            let o = Obd::new(&*tp);
-            let vin = o.vin().unwrap_or_else(|_| tr!("nicht lesbar"));
-            let r = ecu_werkbank::readiness::lesen(&o)?;
-            let sup = o.supported_pids().unwrap_or_default();
-            Ok((vin, r, sup))
-        })();
-        match res {
-            Ok((vin, r, sup)) => {
-                self.obd_vin = vin;
-                self.obd_readiness = Some(r.readiness.clone());
-                self.obd_stand = Some(r);
-                self.obd_supported = sup.into_iter().filter(|p| obd::pid_info(*p).is_some()).collect();
-                self.status = tr!("OBD-II gelesen.");
-            }
-            Err(e) => self.status = tr!("OBD-Fehler: {e}", e = format!("{:#}", e)),
-        }
+        let be = self.backend();
+        self.im_hintergrund(tr!("OBD-II lesen"), move || {
+            let res = (|| -> anyhow::Result<(String, ecu_werkbank::readiness::Stand, Vec<u8>)> {
+                let tp = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX)?;
+                let o = Obd::new(&*tp);
+                let vin = o.vin().unwrap_or_else(|_| tr!("nicht lesbar"));
+                let r = ecu_werkbank::readiness::lesen(&o)?;
+                let sup = o.supported_pids().unwrap_or_default();
+                Ok((vin, r, sup))
+            })();
+            Box::new(move |app: &mut App| match res {
+                Ok((vin, r, sup)) => {
+                    app.obd_vin = vin;
+                    app.obd_readiness = Some(r.readiness.clone());
+                    app.obd_stand = Some(r);
+                    app.obd_supported = sup.into_iter().filter(|p| obd::pid_info(*p).is_some()).collect();
+                    app.status = tr!("OBD-II gelesen.");
+                }
+                Err(e) => app.status = tr!("OBD-Fehler: {e}", e = format!("{:#}", e)),
+            })
+        });
     }
 
     pub(super) fn run_obd_dtc(&mut self) {
-        let res = (|| -> anyhow::Result<Vec<String>> {
-            let tp = self.obd_open()?;
-            let o = Obd::new(&*tp);
-            let mut lines = Vec::new();
-            for (svc, what) in [(obd::DTC_STORED, tr!("Gespeichert")), (obd::DTC_PENDING, tr!("Sporadisch")), (obd::DTC_PERMANENT, tr!("Permanent"))] {
-                match o.read_dtcs(svc) {
-                    Ok(c) if c.is_empty() => lines.push(tr!("{what}: keine", what = what)),
-                    Ok(c) => {
-                        for code in c {
-                            let t = self.db.dtc_description(&code).unwrap_or("");
-                            lines.push(format!("{what}: {code}  {t}"));
+        let be = self.backend();
+        self.im_hintergrund(tr!("OBD-Fehlercodes lesen"), move || {
+            // je Art: Ok(Codes) oder nicht unterstützt
+            let res = (|| -> anyhow::Result<Vec<(String, Option<Vec<String>>)>> {
+                let tp = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX)?;
+                let o = Obd::new(&*tp);
+                Ok([(obd::DTC_STORED, tr!("Gespeichert")), (obd::DTC_PENDING, tr!("Sporadisch")), (obd::DTC_PERMANENT, tr!("Permanent"))]
+                    .into_iter()
+                    .map(|(svc, what)| (what, o.read_dtcs(svc).ok()))
+                    .collect())
+            })();
+            Box::new(move |app: &mut App| match res {
+                Ok(arten) => {
+                    let mut lines = Vec::new();
+                    for (what, codes) in arten {
+                        match codes {
+                            Some(c) if c.is_empty() => lines.push(tr!("{what}: keine", what = what)),
+                            Some(c) => {
+                                for code in c {
+                                    let t = app.db.dtc_description(&code).unwrap_or("");
+                                    lines.push(format!("{what}: {code}  {t}"));
+                                }
+                            }
+                            None => lines.push(tr!("{what}: nicht unterstützt", what = what)),
                         }
                     }
-                    Err(_) => lines.push(tr!("{what}: nicht unterstützt", what = what)),
+                    app.obd_dtcs = lines;
+                    app.status = tr!("OBD-Fehlercodes gelesen.");
                 }
-            }
-            Ok(lines)
-        })();
-        match res {
-            Ok(l) => {
-                self.obd_dtcs = l;
-                self.status = tr!("OBD-Fehlercodes gelesen.");
-            }
-            Err(e) => self.status = tr!("OBD-Fehler: {e}", e = format!("{:#}", e)),
-        }
+                Err(e) => app.status = tr!("OBD-Fehler: {e}", e = format!("{:#}", e)),
+            })
+        });
     }
 
     fn run_obd_clear(&mut self) {
-        let res = self.obd_open().and_then(|tp| Obd::new(&*tp).clear());
-        self.status = match res {
-            Ok(()) => {
-                self.obd_dtcs.clear();
-                self.obd_readiness = None;
-                tr!("OBD-Fehler und Readiness gelöscht.")
-            }
-            Err(e) => tr!("OBD-Fehler: {e}", e = format!("{:#}", e)),
-        };
+        let be = self.backend();
+        self.im_hintergrund(tr!("OBD-Fehler löschen"), move || {
+            let res = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).and_then(|tp| Obd::new(&*tp).clear());
+            Box::new(move |app: &mut App| {
+                app.status = match res {
+                    Ok(()) => {
+                        app.obd_dtcs.clear();
+                        app.obd_readiness = None;
+                        tr!("OBD-Fehler und Readiness gelöscht.")
+                    }
+                    Err(e) => tr!("OBD-Fehler: {e}", e = format!("{:#}", e)),
+                };
+            })
+        });
     }
 
     pub(super) fn poll_obd(&mut self, ctx: &egui::Context) {
@@ -77,43 +88,48 @@ impl App {
             return;
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
-        if self.obd_last.elapsed() < std::time::Duration::from_millis(500) {
+        let text = tr!("OBD-Live lesen");
+        // alle 0,5 s, und nur wenn der letzte Takt fertig ist
+        if self.obd_last.elapsed() < std::time::Duration::from_millis(500) || self.bus.wartend.contains(&text) {
             return;
         }
         self.obd_last = std::time::Instant::now();
         let pids: Vec<u8> = self.obd_selected.iter().copied().collect();
-        let res = (|| -> anyhow::Result<Vec<(String, String, String, Option<Stufe>)>> {
-            let tp = self.obd_open()?;
-            let o = Obd::new(&*tp);
-            let mut out = Vec::new();
-            for pid in pids {
-                let (name, unit) = obd::pid_info(pid).unwrap_or(("PID", ""));
-                let v = o.read_value(pid).ok();
-                let st = v.and_then(|x| self.db.sollwert("obd", None, u16::from(pid), None).map(|r| r.check(x)));
-                out.push((
-                    format!("{name} [{unit}]"),
-                    v.map(|v| format!("{v:.1} {unit}")).unwrap_or_else(|| "—".into()),
-                    v.map(ecu_werkbank::csvlog::num).unwrap_or_default(),
-                    st,
-                ));
-            }
-            Ok(out)
-        })();
-        match res {
-            Ok(rows) => {
-                if let Some(log) = self.obd_csv.as_mut() {
-                    let cols: Vec<(String, String)> = rows.iter().map(|(n, _, c, _)| (n.clone(), c.clone())).collect();
-                    if let Err(e) = log.write(&cols) {
-                        self.status = tr!("CSV-Fehler: {e}", e = format!("{:#}", e));
+        let be = self.backend();
+        self.im_hintergrund_still(text, move || {
+            let res = be.open(obd::DEFAULT_TX, obd::DEFAULT_RX).map(|tp| {
+                let o = Obd::new(&*tp);
+                pids.into_iter().map(|pid| (pid, o.read_value(pid).ok())).collect::<Vec<_>>()
+            });
+            Box::new(move |app: &mut App| {
+                if !app.obd_live {
+                    return; // inzwischen gestoppt
+                }
+                match res {
+                    Ok(werte) => {
+                        let rows: Vec<(String, String, String, Option<Stufe>)> = werte
+                            .into_iter()
+                            .map(|(pid, v)| {
+                                let (name, unit) = obd::pid_info(pid).unwrap_or(("PID", ""));
+                                let st = v.and_then(|x| app.db.sollwert("obd", None, u16::from(pid), None).map(|r| r.check(x)));
+                                (format!("{name} [{unit}]"), v.map(|v| format!("{v:.1} {unit}")).unwrap_or_else(|| "—".into()), v.map(ecu_werkbank::csvlog::num).unwrap_or_default(), st)
+                            })
+                            .collect();
+                        if let Some(log) = app.obd_csv.as_mut() {
+                            let cols: Vec<(String, String)> = rows.iter().map(|(n, _, c, _)| (n.clone(), c.clone())).collect();
+                            if let Err(e) = log.write(&cols) {
+                                app.status = tr!("CSV-Fehler: {e}", e = format!("{:#}", e));
+                            }
+                        }
+                        app.obd_values = rows.into_iter().map(|(n, v, _, st)| (n, v, st)).collect();
+                    }
+                    Err(e) => {
+                        app.obd_live = false;
+                        app.status = tr!("Live-Daten gestoppt: {e}", e = format!("{:#}", e));
                     }
                 }
-                self.obd_values = rows.into_iter().map(|(n, v, _, st)| (n, v, st)).collect();
-            }
-            Err(e) => {
-                self.obd_live = false;
-                self.status = tr!("Live-Daten gestoppt: {e}", e = format!("{:#}", e));
-            }
-        }
+            })
+        });
     }
 
     pub(super) fn ui_obd(&mut self, ui: &mut egui::Ui) {
@@ -230,14 +246,7 @@ impl App {
                 ui.toggle_value(&mut self.obd_ready_live, cap)
                     .on_hover_text(tr!("Fragt alle 2 s den Stand der Abgas-Tests ab — so siehst du während der Fahrt, wann alles fertig ist."));
                 if ui.button(tr!("Umgebungsbedingungen (Freeze-Frame)")).clicked() {
-                    self.obd_freeze = Some(
-                        self.obd_open()
-                            .and_then(|tp| Obd::new(&*tp).freeze_frame())
-                            .unwrap_or_else(|e| {
-                                self.status = tr!("Freeze-Frame: {e}", e = format!("{:#}", e));
-                                None
-                            }),
-                    );
+                    self.freeze_frame_lesen();
                 }
             });
             if let Some(r) = &self.obd_readiness {

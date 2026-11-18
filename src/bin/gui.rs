@@ -50,6 +50,8 @@ mod codiersicherung;
 mod diagnose;
 #[path = "gui/kern.rs"]
 mod kern;
+#[path = "gui/hintergrund.rs"]
+mod hintergrund;
 #[path = "gui/reiter.rs"]
 mod reiter;
 #[path = "gui/scope.rs"]
@@ -567,7 +569,8 @@ struct App {
     // Reparatur-Modus
     rp_before: Option<ecu_werkbank::report::ScanReport>,
     rp_arbeiten: String,
-    rp_job: Option<(u8, mpsc::Receiver<Result<ecu_werkbank::report::ScanReport, String>>)>,
+    /// Schritt, Ergebnis: Scan und (nach der Reparatur) noch offene Readiness-Tests
+    rp_job: Option<(u8, mpsc::Receiver<Result<(ecu_werkbank::report::ScanReport, Vec<String>), String>>)>,
     rp_confirm_clear: bool,
     rp_cleared: Vec<(String, Result<(), String>)>,
 
@@ -757,6 +760,8 @@ struct App {
     tp_autostart: bool,
     /// Demo/Screenshot: Reiter beim Start befüllen (VAG_TAB=obd|mitschnitt|editor)
     demo_autostart: String,
+    /// Bus-Arbeit im Hintergrund (ein Thread, Aufträge der Reihe nach)
+    bus: hintergrund::BusArbeiter,
 
     status: String,
 }
@@ -764,6 +769,7 @@ struct App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.hintergrund_tick(ctx);
         self.erkennung_tick(ctx);
         self.datensicherung_tick(ctx);
         match std::mem::take(&mut self.demo_autostart).as_str() {
@@ -795,7 +801,7 @@ impl eframe::App for App {
             "fahrzeuge" => self.veh_sel = self.active_vehicle.clone(),
             "check" => self.start_check(),
             "diagnose" => self.run_mode06(),
-            "verbindung" => self.con_result = Some(ecu_werkbank::connect::check(&self.backend())),
+            "verbindung" => self.verbindung_pruefen(),
             "kaufcheck" => {
                 ecu_werkbank::sim::set_manipuliert(true);
                 self.start_kaufcheck();
@@ -829,11 +835,7 @@ impl eframe::App for App {
             "tp20-block" | "favoriten" => {
                 self.tp_addr = "0x01".into();
                 self.tp_block = "2".into();
-                self.status = match self.read_block_once() {
-                    Ok(()) => tr!("Messwertblock gelesen."),
-                    Err(e) => tr!("Fehler: {e}", e = format!("{:#}", e)),
-                };
-                self.tp_channel = None;
+                self.block_lesen();
             }
             "sicherheit" => self.si_starten(),
             "steuergeraete-wahl" => {
@@ -945,7 +947,7 @@ impl eframe::App for App {
                         let (st, kurz, lang) = self.adapter_state();
                         dot(ui, stufe_color(st));
                         if ui.add(egui::Label::new(egui::RichText::new(kurz).small()).extend().sense(egui::Sense::click())).on_hover_text(lang).clicked() {
-                            self.con_result = Some(ecu_werkbank::connect::check(&self.backend()));
+                            self.verbindung_pruefen();
                         }
                         self.erkennung_anzeige(ui);
                     }
@@ -1007,7 +1009,7 @@ impl eframe::App for App {
                     self.set_active_vehicle(p);
                 }
                 if ui.button(tr!("🔌 Verbindung")).on_hover_text(tr!("Adapter, Interface, Bitrate und Steuergeräte prüfen")).clicked() {
-                    self.con_result = Some(ecu_werkbank::connect::check(&self.backend()));
+                    self.verbindung_pruefen();
                 }
                 if ui
                     .add_enabled(self.chk_job.is_none(), egui::Button::new(tr!("✅ Schnell-Check")))
@@ -1130,6 +1132,7 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
+                self.ui_hintergrund(ui);
                 if self.status == READY {
                     let t = match self.transport.as_str() {
                         "demo" => tr!("{a} aktiv — alles simuliert, kein Adapter nötig.", a = ecu_werkbank::sim::modell().name()),

@@ -59,7 +59,7 @@ quelle = "eigener Mitschnitt"
 | Simuliertes Steuergerät | `src/sim.rs` | in `demo_module()`/`golf6_module()` eintragen; Antworten in `uds_reply`/`kwp_responses` |
 | Neue Messwert-Formel (TP 2.0) | `kwp::BlockValue::decode` | nur mit Vergleichsmessung am Auto, Datum im Kommentar |
 | Neuer CLI-Befehl | `src/main.rs` (`enum Command` + `match`) | Schreibbefehle immer mit `--ja`, ohne `--ja` nur Vorschau |
-| Neue GUI-Seite | `src/bin/gui/*.rs`, Eintrag in `GROUPS` (`gui.rs`) | lange Bus-Arbeit im Hintergrund-Thread (siehe `tp20_tab.rs` Stellglieddiagnose) |
+| Neue GUI-Seite | `src/bin/gui/*.rs`, Eintrag in `GROUPS` (`gui.rs`) | Bus-Arbeit nie im Zeichen-Thread: kurze Aufträge mit `self.im_hintergrund(…)` (`gui/hintergrund.rs`), lange mit Fortschritt im eigenen Thread (siehe `tp20_tab.rs` Stellglieddiagnose) |
 | Mitschnitt-Format | `src/spurexport.rs` | Funktion `Frame`-Liste → Bytes, Endung in `Format::aus_pfad` |
 
 ## 4. Regeln für Schreibfunktionen
