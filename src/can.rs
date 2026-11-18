@@ -4,7 +4,7 @@
 //! ein echter Windows-CAN-Treiber kann später hier eingehängt werden.
 
 #[cfg(target_os = "linux")]
-pub use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Id, Socket, StandardId};
+pub use socketcan::{CanFrame, CanSocket, EmbeddedFrame, ExtendedId, Id, Socket, StandardId};
 
 #[cfg(not(target_os = "linux"))]
 pub use ersatz::*;
@@ -31,6 +31,9 @@ mod ersatz {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ExtendedId(u32);
     impl ExtendedId {
+        pub fn new(raw: u32) -> Option<Self> {
+            (raw <= 0x1FFF_FFFF).then_some(Self(raw))
+        }
         pub fn as_raw(&self) -> u32 {
             self.0
         }
@@ -44,6 +47,11 @@ mod ersatz {
     impl From<StandardId> for Id {
         fn from(s: StandardId) -> Self {
             Id::Standard(s)
+        }
+    }
+    impl From<ExtendedId> for Id {
+        fn from(e: ExtendedId) -> Self {
+            Id::Extended(e)
         }
     }
 

@@ -51,6 +51,7 @@ pub mod obd;
 pub mod pdf;
 pub mod readiness;
 pub mod repair;
+pub mod replay;
 pub mod report;
 pub mod profil;
 pub mod rekorder;

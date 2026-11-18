@@ -13,6 +13,7 @@ schreiben) und **der Rechner/die Daten** (keine Angriffsfläche, keine Datenleck
 | Ungeprüfte Schreibwege | TP-2.0-Langcodierung, Gateway-Codierung, TP-2.0-Anpassung: am echten Auto nur **Probelauf**, bis ein Mitschnitt die Anfrage bestätigt (`kwp::*_GEPRUEFT`) | ✅ |
 | Kilometerstand | wird nie geschrieben, durch Test abgesichert | ✅ |
 | Fremde Codierung aufs Auto | Sicherungen werden nur für das gewählte Fahrzeug (VIN) angeboten | ✅ |
+| Mitschnitt abspielen (`replay`) | nur auf `vcan`; Art des Interfaces wird vorher über `ip -details` geprüft, echte Adapter (`can`, `slcan`) werden abgelehnt | ✅ |
 | ECUReset, Stellglieder, Grundeinstellung | nur mit `--ja`; Stellglieder mit Warnhinweis in der GUI | ✅ |
 | Datenübertragung (0x34–0x37) | nur Bausteine, kein Flash-Ablauf | ✅ bewusst |
 | Flashen | **nicht eingebaut.** Braucht Spannungsüberwachung, VIN-/Teilenummer-Prüfung, Prüfsummen, Wiederaufnahme nach Abbruch und signierte Daten. Ohne all das droht ein unbrauchbares Steuergerät. | ⏳ siehe ROADMAP |

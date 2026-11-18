@@ -28,6 +28,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   (`firmenkopf --name …`, GUI Fahrzeug → Fahrzeuge & Wartung).
 - Mitschnitt-Prüfbericht mit **Auffälligkeiten**: Antwortzeiten, fehlende Antworten, gehäufte
   Ablehnungen, Pausen (`decode-log`, GUI Mitschnitt).
+- `replay`: Mitschnitt auf ein **virtuelles** CAN-Interface (vcan) abspielen, z. B. für den
+  CAN-Monitor. Echte Adapter werden abgelehnt.
 - **Dateien ins Fenster ziehen:** Mitschnitt (.log/.asc), DBC, Aufzeichnung (.csv) und Label (.toml)
   öffnen sich auf der passenden Seite.
 - Dokumentation: ARCHITECTURE, ROADMAP, CONTRIBUTING, PLUGIN_DEVELOPMENT, SECURITY_REVIEW.

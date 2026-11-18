@@ -252,6 +252,20 @@ enum Command {
         #[arg(long, value_parser = parse_hex)]
         rx: u16,
     },
+    /// Mitschnitt abspielen — nur auf ein virtuelles CAN-Interface (vcan), nie aufs Auto
+    Replay {
+        #[arg(long)]
+        log: PathBuf,
+        /// virtuelles Interface, z. B. vcan0 (echte Adapter werden abgelehnt)
+        #[arg(long, default_value = "vcan0")]
+        iface: String,
+        /// 2.0 = doppelt so schnell
+        #[arg(long, default_value_t = 1.0)]
+        tempo: f64,
+        /// immer wieder von vorn (Strg-C beendet)
+        #[arg(long)]
+        schleife: bool,
+    },
     /// CAN-Mitschnitt (candump) umwandeln: .pcap für Wireshark, .asc für Vector-/SavvyCAN-Werkzeuge
     LogExport {
         /// Mitschnitt im candump-Format
@@ -1232,6 +1246,23 @@ fn main() -> Result<()> {
         Command::Dtc { tx, rx, mask } => read_dtc(&be, tx, rx, mask as u8, &db),
         Command::Tp20 { address, request } => tp20_send(&be, address as u8, &request),
         Command::Clear { tx, rx } => clear_dtc(&be, tx, rx),
+        Command::Replay { log, iface, tempo, schleife } => {
+            let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
+            let frames: Vec<_> = text.lines().filter_map(ecu_werkbank::canlog::parse_line).collect();
+            if frames.is_empty() {
+                anyhow::bail!(tr!("Keine Frames in {a}.", a = log.display()));
+            }
+            ecu_werkbank::replay::nur_vcan(&iface)?;
+            loop {
+                println!("{}", tr!("Spiele {n} Frames auf {i} ab (Tempo {t})…", n = frames.len(), i = iface, t = tempo));
+                let n = ecu_werkbank::replay::auf_vcan(&iface, &frames, tempo, || true)?;
+                println!("{}", tr!("{n} Frames gesendet.", n = n));
+                if !schleife {
+                    break;
+                }
+            }
+            Ok(())
+        }
         Command::LogExport { log, out } => {
             let format = ecu_werkbank::spurexport::Format::aus_pfad(&out).context(tr!("Zieldatei braucht die Endung .pcap oder .asc"))?;
             let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;

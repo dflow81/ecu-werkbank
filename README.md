@@ -1033,6 +1033,17 @@ Datenpakete steht in `src/db/paket.rs`, ein Beispiel in
 `daten/community/vw/adressliste.toml`. Tippfehler im Paket werden gemeldet,
 nicht still übergangen. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
 
+### Mitschnitt abspielen (nur vcan)
+
+```bash
+sudo modprobe vcan && sudo ip link add vcan0 type vcan && sudo ip link set vcan0 up   # einmal
+./target/release/ecu-werkbank replay --log mitschnitt.log --iface vcan0 [--tempo 2] [--schleife]
+```
+
+Spielt einen Mitschnitt im Originaltakt auf ein **virtuelles** CAN-Interface, etwa um
+den CAN-Monitor oder eigene Werkzeuge ohne Auto zu testen. Echte Adapter werden
+abgelehnt — es wird nie etwas aufs Auto gesendet.
+
 ### Live-CAN-Monitor (GUI)
 
 **Werkzeuge → CAN-Monitor** zeigt live jede CAN-ID mit Daten, Anzahl und Rate.
