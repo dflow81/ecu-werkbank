@@ -64,7 +64,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 45 | MDF4-/BLF-Export | CANalyzer | niedrig | hoch | niedrig | niedrig | Vision | ⏳ |
 | 46 | Dashboard / frei belegbare Instrumente | Autel | mittel | mittel | niedrig | mittel | 2.0 | ✅ Armaturen: Rundinstrument, große Zahl, Balken (Rechtsklick); Ansichten speichern/laden |
 | 47 | Drag-and-Drop (Mitschnitte, Sicherungen, DBC ins Fenster ziehen) | – | niedrig | niedrig | niedrig | mittel | 1.0 | ✅ `gui/ablegen.rs` (Sicherungen nur mit Hinweis) |
-| 48 | Responsive Layout (kleine Bildschirme, Tablet) | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 |
+| 48 | Responsive Layout (kleine Bildschirme, Tablet) | Autel | mittel | mittel | niedrig | mittel | 2.0 | ✅ bei 600×560 geprüft (Start, Fahrzeuge, Armaturen): alles bricht um, nichts abgeschnitten; Zoom mit Strg +/− |
 | 49 | Berichte mit Firmenkopf / Kunde (Werkstattbetrieb) | Autel, ODIS | mittel | niedrig | niedrig | mittel | 1.0 | ✅ Firmenkopf in jeder PDF-Fußzeile (`firmenkopf`, GUI Fahrzeuge); Kunde über Kennzeichen/Notiz |
 | 50 | Online-Funktionen der Hersteller (SFD, FEC, Online-Login) | ODIS, E-Sys | – | – | – | **nicht geplant** | – | ❌ nur mit Herstellerzugang, nicht offen nachbaubar |
 
