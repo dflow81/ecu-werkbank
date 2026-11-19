@@ -224,16 +224,26 @@ impl Db {
     /// CSV mit Fehlertexten (`code;text`) oder DIDs (`did;name;einheit;faktor;offset`)
     /// als Quelle „USER“ übernehmen. Trennzeichen `;` oder `,`; erste Zeile darf eine Kopfzeile sein.
     pub fn csv_importieren(&self, pfad: &Path, lizenz: &str) -> Result<ImportErgebnis> {
-        let text = std::fs::read_to_string(pfad).with_context(|| crate::tr!("{a} lesen", a = pfad.display()))?;
+        let roh = std::fs::read(pfad).with_context(|| crate::tr!("{a} lesen", a = pfad.display()))?;
+        // UTF-8, sonst Windows-1252/Latin-1 (so schreiben viele Werkstattprogramme)
+        let text = String::from_utf8(roh.clone()).unwrap_or_else(|_| roh.iter().map(|&b| b as char).collect());
         let name = pfad.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         self.csv_text_importieren(&text, &name, lizenz)
     }
 
     pub fn csv_text_importieren(&self, text: &str, name: &str, lizenz: &str) -> Result<ImportErgebnis> {
+        // Exporte eines Werkstattprogramms erkennen und erklären statt falsch einzulesen
+        let kopf = text.lines().map(str::trim).find(|z| !z.is_empty() && !z.starts_with(';') && !z.starts_with('#')).unwrap_or("");
+        if kopf.starts_with("Block,") {
+            bail!(crate::tr!("Das ist ein Export der Messwertblöcke eines Werkstattprogramms. Daraus lassen sich Texte für Messwerte lernen: ecu-werkbank wertetexte-lernen --blockmap {a} --address <Steuergerät>", a = name));
+        }
+        if kopf.starts_with("Kanal,") {
+            bail!(crate::tr!("Das ist ein Export der Anpassungskanäle eines Werkstattprogramms. Er enthält nur Kanalnummern und die Werte deines Autos, keine Namen — zum Vergleichen, nicht zum Übernehmen."));
+        }
         let trenner = if text.lines().next().is_some_and(|z| z.contains(';')) { ';' } else { ',' };
         let zeilen: Vec<Vec<String>> = text
             .lines()
-            .filter(|z| !z.trim().is_empty() && !z.trim_start().starts_with('#'))
+            .filter(|z| !z.trim().is_empty() && !z.trim_start().starts_with('#') && !z.trim_start().starts_with(';'))
             .map(|z| z.split(trenner).map(|f| f.trim().trim_matches('"').to_string()).collect())
             .collect();
         let Some(erste) = zeilen.first() else { bail!(crate::tr!("CSV ist leer")) };
@@ -437,6 +447,14 @@ dids = [{ did = 0xF40C, name = "Drehzahl", einheit = "U/min", faktor = 0.25 }]
         let e = db.csv_text_importieren("did,name,einheit,faktor,offset\n0xF40C,Drehzahl,U/min,0.25,0\n61452,Nochmal,,1,0\n", "d.csv", "").unwrap();
         assert_eq!(e.messwerte, 2);
         assert!(db.csv_text_importieren("did,name,einheit\nkaputt,x,y\n", "k.csv", "").is_err());
+        // Kommentarzeilen mit ; werden übersprungen
+        let e = db.csv_text_importieren(";Kopf\ncode;text\nP0171;System zu mager\n", "s.csv", "").unwrap();
+        assert_eq!(e.fehler, 1);
+        // Exporte eines Werkstattprogramms werden erkannt, nicht falsch eingelesen
+        let f = db.csv_text_importieren(";SW:x\n\nKanal,,Feld 1,\n01,0,n.v.,\n", "adpmap.csv", "").unwrap_err();
+        assert!(format!("{f:#}").contains("Anpassungskanäle"));
+        let f = db.csv_text_importieren(";SW:x\nBlock,Feld 1,Datentyp,\n1,ein,,\n", "blockmap.csv", "").unwrap_err();
+        assert!(format!("{f:#}").contains("wertetexte-lernen"));
     }
 
     #[test]

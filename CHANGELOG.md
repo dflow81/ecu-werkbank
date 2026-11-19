@@ -16,6 +16,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   Firmenkopf und Einstellungen. Beim ersten Start übernommen; die alten Dateien liegen danach
   in `<Datenordner>/vor-datenbank/`. PDFs, CSV-Aufzeichnungen und Mitschnitte bleiben Dateien,
   die Spracheinstellung ebenfalls.
+- `db csv` liest auch Dateien im Windows-Zeichensatz und überspringt Kommentarzeilen (`;`);
+  Exporte eines Werkstattprogramms (Messwertblöcke, Anpassungskanäle) werden erkannt und erklärt
+  statt falsch eingelesen.
 - Datensicherung und „Fahrzeug als ZIP“ schreiben alles weiter als lesbare Dateien (auch eigene
   Texte und Labels); Einspielen holt es zurück in die Datenbank. Alte Sicherungen lassen sich
   weiter einspielen.
