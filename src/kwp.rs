@@ -820,7 +820,8 @@ pub fn tp20_name(address: u8, ident: &[String]) -> String {
             "Anhängersteuergerät"
         } else if has("RNS") || has("RCD") || has("NAVI") || has("RADIO") {
             "Radio/Navigation"
-        } else if has("GATEWAY") {
+        } else if has("GATEWAY") || has("GW-") {
+            // Polo 6R: „GW-K-CAN TP20“ (am Auto gesehen, 19.11.2026)
             "Gateway"
         } else if has("TUER") || has("TÜR") {
             "Türsteuergerät"
@@ -834,7 +835,8 @@ pub fn tp20_name(address: u8, ident: &[String]) -> String {
             "Bordnetzsteuergerät"
         } else if has("ABS") || has("ESP") {
             "ABS/ESP"
-        } else if has("KLIMA") || has("CLIMA") {
+        } else if has("KLIMA") || has("CLIMA") || has("MAN AC") || has("AUTO AC") {
+            // Polo 6R: „Man AC“ (manuelle Klimaanlage, am Auto gesehen, 19.11.2026)
             "Klimaanlage"
         } else if has("MED17") || has("EDC") || has("MOTOR") || has("SIMOS") || has("ME7") {
             "Motorsteuergerät"
@@ -1129,7 +1131,15 @@ pub fn kanaele_aus_verbauliste(l: &[VerbauEintrag]) -> Vec<u8> {
 pub fn gateway_verbauliste(be: &crate::transport::Backend) -> Result<Vec<VerbauEintrag>> {
     let mut ch = open_session(be, GATEWAY)?;
     let mut k = Kwp::new(&mut ch);
-    let raw = k.read_ecu_id(ECU_ID_VERBAULISTE)?;
+    let raw = k.read_ecu_id(ECU_ID_VERBAULISTE).map_err(|e| {
+        let t = format!("{e:#}");
+        if t.contains("NRC 0x11") || t.contains("NRC 0x12") {
+            // Polo 6R (Gateway 6N0 909 901): kennt keine Verbauliste (am Auto gesehen, 19.11.2026)
+            anyhow::anyhow!(tr!("Dieses Gateway liefert keine Verbauliste (ältere Bauart). Die Steuergeräte findet der normale Scan."))
+        } else {
+            e
+        }
+    })?;
     let l = verbauliste_9f(&raw);
     if l.is_empty() {
         anyhow::bail!(tr!("Das Gateway hat keine Verbauliste geliefert."));
@@ -1139,6 +1149,12 @@ pub fn gateway_verbauliste(be: &crate::transport::Backend) -> Result<Vec<VerbauE
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn namen_polo_6r() {
+        // Kennungen vom Polo 6R (2012), 19.11.2026
+        assert_eq!(super::tp20_name(0x1F, &["6N0909901  0254".into(), "GW-K-CAN TP20".into()]), "Gateway");
+        assert_eq!(super::tp20_name(0x2C, &["6R0820045M  0202".into(), "Man AC".into()]), "Klimaanlage");
+    }
 
     #[test]
     fn stellglied_antworten_wie_am_golf6() {
