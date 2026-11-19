@@ -2,7 +2,7 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
-## Unveröffentlicht
+## 0.3.0 — 19.11.2026
 
 ### Neu
 - **Ältere Steuergeräte (TP 2.0): lange Codierung schreiben** (Bordnetz, ABS, Einparkhilfe, Gateway) —
