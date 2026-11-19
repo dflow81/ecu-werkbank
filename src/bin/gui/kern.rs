@@ -647,7 +647,7 @@ impl App {
                     vb_export = true;
                 }
                 ui.add_space(6.0);
-                self.ui_gateway_verbauliste(ui);
+                self.ui_gateway_verbauliste(ui, Some(&last));
             });
         if vb_export {
             let txt = ecu_werkbank::verbauliste::text(&gruppen);
@@ -992,7 +992,9 @@ impl App {
 
     /// Verbauliste direkt aus dem Gateway: was das Gateway als verbaut kennt
     /// und wo es einen gespeicherten Fehler meldet (nur lesen, TP 2.0).
-    pub(super) fn ui_gateway_verbauliste(&mut self, ui: &mut egui::Ui) {
+    /// Verbauliste aus dem Gateway als Steuergerätebaum (Gateway → Bus → Steuergeräte),
+    /// abgeglichen mit dem letzten Scan.
+    pub(super) fn ui_gateway_verbauliste(&mut self, ui: &mut egui::Ui, scan: Option<&ecu_werkbank::report::ScanReport>) {
         if let Some(rx) = &self.gw_vb_job {
             if let Ok(r) = rx.try_recv() {
                 self.gw_vb = Some(r);
@@ -1022,15 +1024,34 @@ impl App {
         });
         match &self.gw_vb {
             Some(Ok(l)) => {
-                let mut verbaut: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
-                verbaut.sort_by_key(|e| e.adresse);
-                ui.weak(tr!("Laut Gateway verbaut: {a}, davon {b} mit Fehler.", a = verbaut.len(), b = verbaut.iter().filter(|e| e.fehler()).count()));
-                for e in verbaut {
-                    ui.horizontal_wrapped(|ui| {
-                        dot(ui, stufe_color(if e.fehler() { Stufe::Warnung } else { Stufe::Gut }));
-                        let name = ecu_werkbank::systems::name(u16::from(e.adresse));
-                        let st = if e.fehler() { tr!("Fehler gespeichert") } else { tr!("i.O.") };
-                        ui.label(format!("{:02X}  {}  —  {}", e.adresse, name, st));
+                let aeste = ecu_werkbank::verbauliste::baum(l, scan);
+                let n: usize = aeste.iter().map(|a| a.geraete.len()).sum();
+                let fehler = aeste.iter().flat_map(|a| &a.geraete).filter(|g| g.fehler_laut_gateway).count();
+                let fehlen = aeste.iter().flat_map(|a| &a.geraete).filter(|g| g.im_scan.is_none()).count();
+                ui.weak(tr!("Laut Gateway verbaut: {a}, davon {b} mit Fehler.", a = n, b = fehler));
+                if scan.is_some() && fehlen > 0 {
+                    ui.colored_label(stufe_color(Stufe::Hinweis), tr!("{a} davon im letzten Scan nicht gefunden — antworten sie nicht (Sicherung, Stecker, Steuergerät)?", a = fehlen));
+                }
+                ui.strong(tr!("🌳 Gateway"));
+                for a in &aeste {
+                    egui::CollapsingHeader::new(format!("{}  ({})", a.name, a.geraete.len())).id_source(("bus", a.bus)).default_open(true).show(ui, |ui| {
+                        for g in &a.geraete {
+                            ui.horizontal_wrapped(|ui| {
+                                let stufe = if g.fehler_laut_gateway {
+                                    Stufe::Warnung
+                                } else if scan.is_some() && g.im_scan.is_none() {
+                                    Stufe::Hinweis
+                                } else {
+                                    Stufe::Gut
+                                };
+                                dot(ui, stufe_color(stufe));
+                                let mut st = if g.fehler_laut_gateway { tr!("Fehler gespeichert") } else { tr!("i.O.") };
+                                if scan.is_some() && g.im_scan.is_none() {
+                                    st.push_str(&tr!(" · im letzten Scan nicht gefunden"));
+                                }
+                                ui.label(format!("{:02X}  {}  —  {}", g.adresse, g.name, st));
+                            });
+                        }
                     });
                 }
             }

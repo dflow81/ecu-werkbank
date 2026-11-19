@@ -413,13 +413,11 @@ pub(super) fn notfall_sicherung(be: &Backend, db: &LabelDb, fahrzeug: Option<&st
 pub(super) fn gateway_verbauliste(be: &Backend) -> Result<()> {
     println!("{}", tr!("Verbauliste aus dem Gateway über {a} (nur lesen) …", a = be.describe()));
     let l = kwp::gateway_verbauliste(be)?;
-    let mut verbaut: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
-    verbaut.sort_by_key(|e| e.adresse);
-    for e in &verbaut {
-        let name = ecu_werkbank::systems::name(u16::from(e.adresse));
-        let status = if e.fehler() { tr!("Fehler gespeichert") } else { tr!("i.O.") };
-        println!("  {a:02X}  {b:<28} {c}", a = e.adresse, b = name, c = status);
-    }
+    let verbaut: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
+    // mit dem letzten gespeicherten Scan des aktiven Fahrzeugs abgleichen
+    let scan = load_active().and_then(|k| ecu_werkbank::history::list(&k).pop()).map(|(_, r)| r);
+    let aeste = ecu_werkbank::verbauliste::baum(&l, scan.as_ref());
+    print!("{}", ecu_werkbank::verbauliste::baum_text(&aeste, scan.is_some()));
     let fehler = verbaut.iter().filter(|e| e.fehler()).count();
     println!("{}", tr!("\n{a} verbaut, davon {b} mit Fehler; {c} weitere Adressen kennt das Gateway als nicht verbaut.", a = verbaut.len(), b = fehler, c = l.len() - verbaut.len()));
     Ok(())

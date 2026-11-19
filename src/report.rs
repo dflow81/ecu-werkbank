@@ -29,7 +29,7 @@ pub struct DtcEntry {
     pub frueher: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModuleReport {
     /// "UDS" oder "TP 2.0"
     pub protocol: String,

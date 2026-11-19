@@ -146,9 +146,123 @@ pub fn text(gruppen: &[Gruppe]) -> String {
     s
 }
 
+/// Ein Steuergerät im Steuergerätebaum.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BaumGeraet {
+    /// Diagnoseadresse laut Gateway (z. B. 0x17)
+    pub adresse: u8,
+    pub name: String,
+    /// Gateway meldet einen gespeicherten Fehler
+    pub fehler_laut_gateway: bool,
+    /// Ergebnis im letzten Scan: None = dort nicht gefunden (antwortet nicht?),
+    /// Some(None) = gefunden, Speicher nicht lesbar, Some(Some(n)) = n Fehler
+    pub im_scan: Option<Option<usize>>,
+}
+
+/// Ein Bus am Gateway mit seinen Steuergeräten.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BusAst {
+    pub bus: u8,
+    pub name: String,
+    pub geraete: Vec<BaumGeraet>,
+}
+
+/// Name der Bus-Kennung aus der Gateway-Verbauliste. Am Golf 6 beobachtet
+/// (Verbauliste mit der Lage der Steuergeräte verglichen, 15.11.2026);
+/// unbekannte Kennungen erscheinen als „Bus xx“.
+pub fn bus_name(bus: u8) -> String {
+    match bus {
+        0x00 => crate::tr!("Antriebs-CAN"),
+        0x02 => crate::tr!("Komfort-CAN"),
+        0x04 => crate::tr!("Infotainment-CAN"),
+        b => crate::tr!("Bus {a}", a = format!("{b:02X}")),
+    }
+}
+
+/// Steuergerätebaum: Gateway → Bus → Steuergeräte, abgeglichen mit dem letzten
+/// Scan. So fällt auf, was laut Gateway verbaut ist, im Scan aber fehlt.
+pub fn baum(gateway: &[crate::kwp::VerbauEintrag], scan: Option<&ScanReport>) -> Vec<BusAst> {
+    use std::collections::BTreeMap;
+    let mut aeste: BTreeMap<u8, Vec<BaumGeraet>> = BTreeMap::new();
+    for e in gateway.iter().filter(|e| e.verbaut()) {
+        let treffer = scan.and_then(|r| {
+            r.modules.iter().find(|m| {
+                let a = m.address;
+                (m.protocol == "TP 2.0" && e.tp20 != 0 && a == Some(u16::from(e.tp20))) || (m.protocol != "TP 2.0" && a == Some(u16::from(e.adresse)))
+            })
+        });
+        let name = treffer
+            .map(|m| m.name.clone())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| {
+                let n = crate::systems::name(u16::from(e.adresse));
+                if n.is_empty() { crate::tr!("Steuergerät {a}", a = format!("{:02X}", e.adresse)) } else { n.to_string() }
+            });
+        aeste.entry(e.bus).or_default().push(BaumGeraet {
+            adresse: e.adresse,
+            name,
+            fehler_laut_gateway: e.fehler(),
+            im_scan: scan.map(|_| treffer.map(|m| m.dtcs.as_ref().map(Vec::len))).unwrap_or(Some(None)),
+        });
+    }
+    aeste
+        .into_iter()
+        .map(|(bus, mut geraete)| {
+            geraete.sort_by_key(|g| g.adresse);
+            BusAst { bus, name: bus_name(bus), geraete }
+        })
+        .collect()
+}
+
+/// Baum als Text (für die CLI).
+pub fn baum_text(aeste: &[BusAst], mit_scan: bool) -> String {
+    let mut s = crate::tr!("Gateway");
+    s.push('\n');
+    for (i, a) in aeste.iter().enumerate() {
+        let letzter = i + 1 == aeste.len();
+        s.push_str(&format!("{} {}\n", if letzter { "└─" } else { "├─" }, a.name));
+        for (j, g) in a.geraete.iter().enumerate() {
+            let zweig = if letzter { "   " } else { "│  " };
+            let ende = if j + 1 == a.geraete.len() { "└─" } else { "├─" };
+            let mut st = if g.fehler_laut_gateway { crate::tr!("Fehler gespeichert") } else { crate::tr!("i.O.") };
+            if mit_scan && g.im_scan.is_none() {
+                st.push_str(&crate::tr!(" · im letzten Scan nicht gefunden"));
+            }
+            s.push_str(&format!("{zweig}{ende} {:02X} {}  —  {st}\n", g.adresse, g.name));
+        }
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn baum_mit_abgleich() {
+        use crate::kwp::VerbauEintrag;
+        let gw = vec![
+            VerbauEintrag { adresse: 0x01, tp20: 0x01, bus: 0x00, status: 0x01 },
+            VerbauEintrag { adresse: 0x09, tp20: 0x20, bus: 0x02, status: 0x05 },
+            VerbauEintrag { adresse: 0x56, tp20: 0x00, bus: 0x04, status: 0x01 },
+            VerbauEintrag { adresse: 0x15, tp20: 0x15, bus: 0x00, status: 0x00 }, // nicht verbaut
+        ];
+        let mut r = ScanReport::default();
+        r.modules.push(ModuleReport { protocol: "TP 2.0".into(), address: Some(0x01), name: "Motor".into(), dtcs: Some(vec![]), ..Default::default() });
+        r.modules.push(ModuleReport { protocol: "TP 2.0".into(), address: Some(0x20), name: "Bordnetz".into(), dtcs: None, ..Default::default() });
+        let b = baum(&gw, Some(&r));
+        assert_eq!(b.len(), 3, "drei Busse");
+        assert_eq!(b[0].name, "Antriebs-CAN");
+        assert_eq!(b[0].geraete.len(), 1, "nicht verbautes Airbag-Gerät fehlt");
+        assert_eq!(b[0].geraete[0].im_scan, Some(Some(0)));
+        assert!(b[1].geraete[0].fehler_laut_gateway);
+        assert_eq!(b[1].geraete[0].im_scan, Some(None));
+        assert_eq!(b[2].geraete[0].im_scan, None, "Radio im Scan nicht gefunden");
+        let t = baum_text(&b, true);
+        assert!(t.contains("56 Radio  —  i.O. · im letzten Scan nicht gefunden"), "{t}");
+        assert!(t.contains("09 Bordnetz  —  Fehler gespeichert"), "{t}");
+        assert_eq!(bus_name(0x07), "Bus 07");
+    }
     use crate::report::{DtcEntry, ModuleReport};
 
     fn modul(proto: &str, addr: Option<u16>, name: &str, teil: &str, fehler: Option<usize>) -> ModuleReport {

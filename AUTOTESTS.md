@@ -26,6 +26,7 @@ Status: ⏳ offen · ✅ erledigt · ❌ Problem
 | A7 | Mitschnitt-Auffälligkeiten (Roadmap 44) | GUI Mitschnitt: einen neuen Mitschnitt öffnen | keine falschen ⚠ | ⏳ |
 | A8 | Polo 6R: kompletter Scan | `autoscan`, `report`, `verbauliste` | alle Steuergeräte gefunden, Namen passen | ⏳ |
 | A10 | Fremdes Auto mit 29-Bit-Adressen (falls eines greifbar ist, z. B. bei Bekannten) | `fremd` bzw. GUI „Andere Marken“ mit SocketCAN, danach mit ELM327 | Steuergeräte `0x18da…` gefunden, Kennung/Fehler lesbar | ⏳ |
+| A11 | Steuergerätebaum (Roadmap 21) | GUI Steuergeräte → Verbauliste → „aus dem Gateway lesen“ nach einem Scan; `gateway-verbauliste` | Bus-Zuordnung stimmt; Bus 06 und 14 benennen (vermutlich Kombi-CAN / Gateway selbst) | ⏳ |
 | A9 | Polo 6R: Fahrzeugtyp / Gateway-Verbauliste (Roadmap 16) | GUI „Fahrzeugtyp erkennen“, Verbauliste aus dem Gateway | UDS oder TP 2.0 richtig erkannt | ⏳ |
 
 ## B. Mitschnitte mit dem Werkstattgerät (Y-Kabel, Werkstattgerät liest/schreibt)

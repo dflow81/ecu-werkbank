@@ -37,7 +37,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 18 | Service-Rückstellung für weitere Modelle | Autel, VCDS | hoch | mittel | mittel | hoch | 1.0 | 🟡 Golf 6 |
 | 19 | Batterie anlernen (BEM/Batteriewechsel) | Autel, ISTA+ | hoch | mittel | mittel | hoch | 1.0 | ⏳ |
 | 20 | Herstellerdaten als Daten-Ordner (`manufacturers/<marke>/`) | alle | hoch | mittel | niedrig | hoch | 1.0 | ⏳ Plan unten |
-| 21 | Steuergerätebaum (Bus → Gateway → Steuergeräte) in der GUI | ODIS, ISTA+ | mittel | mittel | niedrig | mittel | 1.0 | ⏳ |
+| 21 | Steuergerätebaum (Bus → Gateway → Steuergeräte) in der GUI | ODIS, ISTA+ | mittel | mittel | niedrig | mittel | 1.0 | ✅ aus der Gateway-Verbauliste, mit Abgleich zum letzten Scan (GUI + `gateway-verbauliste`); Busnamen 06/14 am Auto offen |
 | 22 | Live-CAN-Monitor in der GUI (IDs, Rate, Änderungen) | SavvyCAN, Autel | hoch | mittel | niedrig | hoch | 1.0 | ✅ Werkzeuge → CAN-Monitor, mit Rauschfilter |
 | 23 | DBC in der GUI (Signale live, ins Scope) | CANalyzer | hoch | mittel | niedrig | mittel | 1.0 | ✅ CAN-Monitor → 📈 → Live-Grafik |
 | 24 | Mitschnitt abspielen (Replay auf vcan) | CANalyzer | mittel | niedrig | mittel | mittel | 1.0 | 🟡 `replay` (lehnt echte Adapter ab); Lauf auf vcan noch nicht ausprobiert |
