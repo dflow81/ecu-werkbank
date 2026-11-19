@@ -534,6 +534,11 @@ impl LabelDb {
 /// Warnung übersprungen. Nur noch für die einmalige Übernahme in die
 /// Datenbank und für Prüfungen.
 pub fn dateien_lesen(dir: &Path) -> Vec<LabelFile> {
+    dateien_lesen_mit_pfad(dir).into_iter().map(|(_, l)| l).collect()
+}
+
+/// Wie [`dateien_lesen`], mit dem Pfad jeder Datei.
+pub fn dateien_lesen_mit_pfad(dir: &Path) -> Vec<(std::path::PathBuf, LabelFile)> {
     let mut out = Vec::new();
     if !dir.is_dir() {
         return out; // kein Label-Ordner
@@ -579,7 +584,7 @@ pub fn dateien_lesen(dir: &Path) -> Vec<LabelFile> {
                     continue;
                 }
             };
-            out.push(lf);
+            out.push((path, lf));
         }
     out
 }

@@ -128,7 +128,11 @@ impl Db {
         }
         let vorhanden: Vec<Option<u16>> = self.eigene_labels()?.into_iter().map(|(_, l)| l.ecu.address).collect();
         let mut n = 0;
-        for lf in crate::labels::dateien_lesen(ordner) {
+        for (pfad, lf) in crate::labels::dateien_lesen_mit_pfad(ordner) {
+            // die mitgelieferte Beispieldatei ist kein echtes Steuergerät
+            if pfad.file_name().is_some_and(|n| n == "beispiel.toml") {
+                continue;
+            }
             if lf.ecu.address.is_some() && vorhanden.contains(&lf.ecu.address) {
                 continue;
             }
@@ -238,6 +242,7 @@ max = 1500.0
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("09.toml"), "[ecu]\naddress = 0x09\nname = \"Datei\"\n").unwrap();
         std::fs::write(dir.join("kaputt.toml"), "das ist kein toml [").unwrap();
+        std::fs::write(dir.join("beispiel.toml"), "[ecu]\naddress = 0x01\nname = \"Beispiel\"\n").unwrap();
         let db = Db::im_speicher().unwrap();
         assert_eq!(db.label_ordner_uebernehmen(&dir).unwrap(), 1);
         // zweiter Aufruf: nichts mehr; Änderung an der Datei wird nicht mehr gelesen
