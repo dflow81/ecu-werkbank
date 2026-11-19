@@ -1053,6 +1053,7 @@ Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
 ./target/release/ecu-werkbank db eingebaut             # Normdaten + mitgelieferte Community-Daten
 ./target/release/ecu-werkbank db labels                # eigene Label-Dateien übernehmen
 ./target/release/ecu-werkbank db dbc --datei vw_pq.dbc --lizenz MIT --hersteller Volkswagen
+./target/release/ecu-werkbank db import --datei irgendwas.dbc   # Art wird erkannt (DBC, Paket, Label, CSV, ODX)
 ./target/release/ecu-werkbank db paket --datei meine-daten.toml   # Datenpaket (TOML/JSON)
 ./target/release/ecu-werkbank db csv --datei fehler.csv           # code;text  oder  did;name;einheit;faktor;offset
 ./target/release/ecu-werkbank db export --ziel beitrag.toml --lizenz CC0-1.0
@@ -1062,6 +1063,7 @@ Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
 ./target/release/ecu-werkbank db sichern --ziel kopie.sqlite
 ```
 
+In der GUI: **Werkzeuge → Fahrzeug-Datenbank** (oder Datei ins Fenster ziehen).
 Daten ohne Lizenzangabe und selbst gekaufte Herstellerdaten bleiben immer nur
 bei dir; `db export` lässt sie weg und sagt, was fehlt. Das Format der
 Datenpakete steht in `src/db/paket.rs`, ein Beispiel in

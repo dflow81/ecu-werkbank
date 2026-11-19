@@ -7,6 +7,8 @@ use super::*;
 /// Was mit einer abgelegten Datei passiert.
 #[derive(Debug, PartialEq)]
 pub(super) enum Ziel {
+    /// Datenpaket (TOML/JSON), ODX/PDX → Fahrzeug-Datenbank
+    Datenbank,
     Mitschnitt,
     Dbc,
     Kurven,
@@ -21,7 +23,11 @@ pub(super) fn ziel_fuer(p: &std::path::Path) -> Ziel {
         "log" | "txt" | "asc" | "candump" => Ziel::Mitschnitt,
         "dbc" => Ziel::Dbc,
         "csv" => Ziel::Kurven,
-        "toml" => Ziel::Label,
+        "toml" => match ecu_werkbank::db::import::erkennen(p) {
+            Ok(ecu_werkbank::db::import::Art::Datenpaket) => Ziel::Datenbank,
+            _ => Ziel::Label,
+        },
+        "json" | "odx" | "pdx" | "odx-d" => Ziel::Datenbank,
         "zip" => Ziel::Datensicherung,
         _ => Ziel::Unbekannt,
     }
@@ -38,14 +44,16 @@ impl App {
             maler.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                tr!("Datei hier ablegen\nMitschnitt (.log/.asc) · DBC · Aufzeichnung (.csv) · Label (.toml)"),
+                tr!("Datei hier ablegen\nMitschnitt (.log/.asc) · DBC · Aufzeichnung (.csv) · Label/Datenpaket (.toml/.json) · ODX/PDX"),
                 egui::FontId::proportional(22.0),
                 egui::Color32::WHITE,
             );
         }
+        let mut fuer_db = Vec::new();
         for f in abgelegt {
             let Some(p) = f.path else { continue };
             match ziel_fuer(&p) {
+                Ziel::Datenbank => fuer_db.push(p),
                 Ziel::Mitschnitt => {
                     self.load_log(p);
                     self.tab = Tab::Mitschnitt;
@@ -69,6 +77,7 @@ impl App {
                 Ziel::Unbekannt => self.status = tr!("Mit {a} kann ECUWerkbank nichts anfangen.", a = p.display()),
             }
         }
+        self.db_dateien_importieren(fuer_db);
     }
 }
 
@@ -86,6 +95,8 @@ mod tests {
         assert_eq!(z("09-bordnetz.toml"), Ziel::Label);
         assert_eq!(z("sicherung.zip"), Ziel::Datensicherung);
         assert_eq!(z("bild.png"), Ziel::Unbekannt);
+        assert_eq!(z("paket.json"), Ziel::Datenbank);
+        assert_eq!(z("gekauft.pdx"), Ziel::Datenbank);
         assert_eq!(z("ohne_endung"), Ziel::Unbekannt);
     }
 }

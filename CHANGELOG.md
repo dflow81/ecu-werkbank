@@ -16,6 +16,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   Firmenkopf und Einstellungen. Beim ersten Start übernommen; die alten Dateien liegen danach
   in `<Datenordner>/vor-datenbank/`. PDFs, CSV-Aufzeichnungen und Mitschnitte bleiben Dateien,
   die Spracheinstellung ebenfalls.
+- **Neue Seite Werkzeuge → Fahrzeug-Datenbank:** Übersicht und Quellen (mit Entfernen), Datei
+  importieren (Art wird erkannt: DBC, Datenpaket, Label-Datei, CSV, ODX/PDX), mitgelieferte Daten
+  aktualisieren, Messwert-Texte lernen (Block-Export + Lesung am Auto oder gespeichert), Export.
+  Datenpakete und ODX/PDX lassen sich auch ins Fenster ziehen. Im Terminal: `db import --datei …`.
 - `db csv` liest auch Dateien im Windows-Zeichensatz und überspringt Kommentarzeilen (`;`);
   Exporte eines Werkstattprogramms (Messwertblöcke, Anpassungskanäle) werden erkannt und erklärt
   statt falsch eingelesen.

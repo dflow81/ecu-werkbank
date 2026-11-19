@@ -58,6 +58,8 @@ mod canmonitor_tab;
 mod ablegen;
 #[path = "gui/skript_tab.rs"]
 mod skript_tab;
+#[path = "gui/datenbank_tab.rs"]
+mod datenbank_tab;
 #[path = "gui/reiter.rs"]
 mod reiter;
 #[path = "gui/scope.rs"]
@@ -313,6 +315,7 @@ enum Tab {
     Mitschnitt,
     CanMonitor,
     Skripte,
+    Datenbank,
     Historie,
     Sicherung,
     Namen,
@@ -777,6 +780,8 @@ struct App {
     cm: canmonitor_tab::CanMonitorSeite,
     /// Seite „Skripte“
     sk: skript_tab::SkriptSeite,
+    /// Seite „Fahrzeug-Datenbank“
+    dbs: datenbank_tab::DatenbankSeite,
     /// Firmenkopf für Berichte (beim ersten Anzeigen geladen)
     firmenkopf: Option<ecu_werkbank::firmenkopf::Firmenkopf>,
 
@@ -1893,6 +1898,7 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
         (Tab::Mitschnitt, trn!("Mitschnitt & Lernhilfe")),
         (Tab::Namen, trn!("Eigene Namen")),
         (Tab::Editor, trn!("Label-Editor")),
+        (Tab::Datenbank, trn!("Fahrzeug-Datenbank")),
         (Tab::Wissen, trn!("Fehlerbilder")),
         (Tab::GrundLexikon, trn!("Grundeinstellungen (Referenz)")),
         (Tab::Service, trn!("Experten: Routine & Stellglied (UDS)")),

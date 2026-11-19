@@ -42,6 +42,14 @@ pub(super) fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std:
                 println!("{}", tr!("Community „{a}“: {b}", a = name, b = e.text()));
             }
         }
+        DbAktion::Import { datei, hersteller, lizenz } => {
+            for p in datei {
+                match ecu_werkbank::db::import::datei(&db, &p, &hersteller, &lizenz) {
+                    Ok((art, text)) => println!("{}", tr!("✓ {a} — {b}: {c}", a = p.display(), b = art.text(), c = text)),
+                    Err(e) => println!("{}", tr!("✗ {a}: {e}", a = p.display(), e = format!("{e:#}"))),
+                }
+            }
+        }
         DbAktion::Paket { datei, community } => {
             use ecu_werkbank::db::{paket::Datenpaket, QuellArt};
             let p = Datenpaket::lesen(&datei)?;

@@ -28,6 +28,7 @@ impl App {
             Tab::Mitschnitt => self.ui_mitschnitt(ui),
             Tab::CanMonitor => self.ui_canmonitor(ui),
             Tab::Skripte => self.ui_skripte(ui),
+            Tab::Datenbank => self.ui_datenbank(ui),
             Tab::Historie => self.ui_historie(ui),
             Tab::Sicherung => self.ui_sicherung(ui),
             Tab::Namen => self.ui_namen(ui),

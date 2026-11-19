@@ -83,6 +83,15 @@ enum DbAktion {
     Quellen,
     /// Normdaten und die mitgelieferten Community-Daten übernehmen/aktualisieren
     Eingebaut,
+    /// Beliebige Datei übernehmen — die Art wird erkannt (DBC, Datenpaket, Label, CSV, ODX/PDX)
+    Import {
+        #[arg(long)]
+        datei: Vec<PathBuf>,
+        #[arg(long, default_value = "Volkswagen")]
+        hersteller: String,
+        #[arg(long, default_value = "")]
+        lizenz: String,
+    },
     /// Datenpaket (TOML oder JSON) übernehmen; gleiche Quelle wird ersetzt
     Paket {
         #[arg(long)]

@@ -18,6 +18,7 @@ impl App {
             "mitschnitt" => (Tab::Mitschnitt, false),
             "canmonitor" | "canmonitor-grafik" => (Tab::CanMonitor, false),
             "skripte" => (Tab::Skripte, false),
+            "datenbank" => (Tab::Datenbank, false),
             "editor" => (Tab::Editor, false),
             "fahrzeuge" => (Tab::Fahrzeuge, false),
             "batterie" => (Tab::Batterie, false),
@@ -433,6 +434,7 @@ impl App {
             bus: Default::default(),
             cm: Default::default(),
             sk: Default::default(),
+            dbs: Default::default(),
             firmenkopf: None,
             status: startup_status,
         }
