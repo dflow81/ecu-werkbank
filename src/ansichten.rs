@@ -69,7 +69,7 @@ pub fn pfad() -> PathBuf {
 
 /// Alle gespeicherten Ansichten (leer, wenn keine Datei da ist).
 pub fn laden() -> Vec<Ansicht> {
-    std::fs::read_to_string(pfad()).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.ansichten).unwrap_or_default()
+    crate::ablage::lesen(pfad()).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.ansichten).unwrap_or_default()
 }
 
 fn schreiben(ansichten: Vec<Ansicht>) -> Result<()> {
@@ -77,7 +77,7 @@ fn schreiben(ansichten: Vec<Ansicht>) -> Result<()> {
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d)?;
     }
-    std::fs::write(&p, toml::to_string(&Datei { ansichten })?).with_context(|| crate::tr!("{a} schreiben", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(&Datei { ansichten })?).with_context(|| crate::tr!("{a} schreiben", a = p.display()))
 }
 
 /// Ansicht speichern; eine gleichnamige wird ersetzt.

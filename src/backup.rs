@@ -196,12 +196,12 @@ pub fn save(b: &CodingBackup) -> Result<PathBuf> {
     let dir = backup_dir(&key);
     std::fs::create_dir_all(&dir).with_context(|| tr!("Ordner anlegen: {a}", a = dir.display()))?;
     let path = dir.join(format!("{}.toml", b.timestamp));
-    std::fs::write(&path, toml::to_string(b)?).with_context(|| tr!("Schreiben: {a}", a = path.display()))?;
+    crate::ablage::schreiben(&path, toml::to_string(b)?).with_context(|| tr!("Schreiben: {a}", a = path.display()))?;
     Ok(path)
 }
 
 pub fn load(path: &Path) -> Result<CodingBackup> {
-    let text = std::fs::read_to_string(path).with_context(|| tr!("Lesen: {a}", a = path.display()))?;
+    let text = crate::ablage::lesen(path).with_context(|| tr!("Lesen: {a}", a = path.display()))?;
     toml::from_str(&text).with_context(|| tr!("Keine gültige Codierungs-Sicherung: {a}", a = path.display()))
 }
 
@@ -209,8 +209,7 @@ pub fn load(path: &Path) -> Result<CodingBackup> {
 pub fn list_all() -> Vec<(PathBuf, CodingBackup)> {
     let mut v = Vec::new();
     for veh in crate::vehicle::list() {
-        for f in std::fs::read_dir(backup_dir(&veh.key)).into_iter().flatten().flatten() {
-            let p = f.path();
+        for p in crate::ablage::liste(&backup_dir(&veh.key)) {
             if p.extension().and_then(|e| e.to_str()) == Some("toml") {
                 if let Ok(b) = load(&p) {
                     v.push((p, b));

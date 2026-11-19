@@ -332,11 +332,11 @@ pub fn speichern(s: &Schnappschuss, pfad: &std::path::Path) -> Result<()> {
     if let Some(p) = pfad.parent() {
         std::fs::create_dir_all(p)?;
     }
-    std::fs::write(pfad, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = pfad.display()))
+    crate::ablage::schreiben(pfad, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = pfad.display()))
 }
 
 pub fn laden(pfad: &std::path::Path) -> Result<Schnappschuss> {
-    let t = std::fs::read_to_string(pfad).with_context(|| tr!("Lesen: {a}", a = pfad.display()))?;
+    let t = crate::ablage::lesen(pfad).with_context(|| tr!("Lesen: {a}", a = pfad.display()))?;
     let m: BTreeMap<String, String> = toml::from_str(&t)?;
     m.iter()
         .map(|(k, v)| Ok((u16::from_str_radix(k, 16).with_context(|| tr!("Kennung ungültig: {k}", k = k))?, if v.is_empty() { vec![] } else { parse_hex(v)? })))
@@ -612,11 +612,8 @@ pub fn merk_pfad(ordner: &std::path::Path, name: &str) -> std::path::PathBuf {
 
 /// Neueste Service-Sicherung im Ordner.
 pub fn neueste_sicherung(ordner: &std::path::Path) -> Option<std::path::PathBuf> {
-    let mut l: Vec<_> = std::fs::read_dir(ordner)
+    let mut l: Vec<_> = crate::ablage::liste(ordner)
         .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("service-sicherung-")))
         .collect();
     l.sort();

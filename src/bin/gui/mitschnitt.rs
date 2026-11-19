@@ -4,7 +4,7 @@ use super::*;
 
 impl App {
     pub(super) fn load_log(&mut self, path: PathBuf) {
-        match std::fs::read_to_string(&path) {
+        match ecu_werkbank::ablage::lesen(&path) {
             Ok(text) => {
                 let d = ecu_werkbank::canlog::Decoder::decode_text(&text);
                 self.log_lines = d.lines().iter().map(|l| gui_text(l)).collect();
@@ -77,7 +77,7 @@ impl App {
                         let path = dir.join(ecu_werkbank::vehicle::stamped("mitschnitt", "log"));
                         match self.backend() {
                             Backend::Demo => {
-                                let _ = std::fs::write(&path, ecu_werkbank::canlog::demo_log_aktion());
+                                let _ = ecu_werkbank::ablage::schreiben(&path, ecu_werkbank::canlog::demo_log_aktion());
                                 self.load_log(path);
                                 self.status = tr!("Demo: Beispiel-Mitschnitt mit Werkstatt-Aktion erzeugt.");
                             }

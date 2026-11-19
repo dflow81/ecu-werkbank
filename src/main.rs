@@ -1300,7 +1300,7 @@ fn main() -> Result<()> {
         Command::Tp20 { address, request } => tp20_send(&be, address as u8, &request),
         Command::Clear { tx, rx } => clear_dtc(&be, tx, rx),
         Command::Replay { log, iface, tempo, schleife } => {
-            let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
+            let text = ecu_werkbank::ablage::lesen(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
             let frames: Vec<_> = text.lines().filter_map(ecu_werkbank::canlog::parse_line).collect();
             if frames.is_empty() {
                 anyhow::bail!(tr!("Keine Frames in {a}.", a = log.display()));
@@ -1318,15 +1318,15 @@ fn main() -> Result<()> {
         }
         Command::LogExport { log, out } => {
             let format = ecu_werkbank::spurexport::Format::aus_pfad(&out).context(tr!("Zieldatei braucht die Endung .pcap oder .asc"))?;
-            let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
+            let text = ecu_werkbank::ablage::lesen(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
             let n = ecu_werkbank::spurexport::frames(&text).len();
-            std::fs::write(&out, ecu_werkbank::spurexport::umwandeln(&text, format))?;
+            ecu_werkbank::ablage::schreiben(&out, ecu_werkbank::spurexport::umwandeln(&text, format))?;
             println!("{}", tr!("{n} Frames geschrieben: {a}", n = n, a = out.display()));
             Ok(())
         }
         Command::DbcDecode { dbc, log, nur } => {
-            let d = ecu_werkbank::dbc::Dbc::lesen(&std::fs::read_to_string(&dbc).with_context(|| tr!("DBC lesen: {a}", a = dbc.display()))?);
-            let text = std::fs::read_to_string(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
+            let d = ecu_werkbank::dbc::Dbc::lesen(&ecu_werkbank::ablage::lesen(&dbc).with_context(|| tr!("DBC lesen: {a}", a = dbc.display()))?);
+            let text = ecu_werkbank::ablage::lesen(&log).with_context(|| tr!("Log lesen: {a}", a = log.display()))?;
             println!("{}", tr!("{n} Botschaften in der DBC", n = d.botschaften.len()));
             for f in ecu_werkbank::spurexport::frames(&text) {
                 let w: Vec<String> = d.entschluesseln(f.id, &f.data).iter().filter(|w| nur.as_ref().is_none_or(|n| w.signal.contains(n.as_str()))).map(|w| w.anzeige()).collect();
@@ -1387,7 +1387,7 @@ fn main() -> Result<()> {
                 },
             };
             if aktion && matches!(be, Backend::Demo) {
-                std::fs::write(&out, ecu_werkbank::canlog::demo_log_aktion())?;
+                ecu_werkbank::ablage::schreiben(&out, ecu_werkbank::canlog::demo_log_aktion())?;
                 println!("{}", tr!("Beispiel-Mitschnitt mit Werkstatt-Aktion: {a}", a = out.display()));
                 return Ok(());
             }
@@ -1417,7 +1417,7 @@ fn main() -> Result<()> {
             let csv = std::fs::read(&blockmap).with_context(|| tr!("{a} lesen", a = blockmap.display()))?;
             let anzeige = wertetexte::anzeige_aus_csv(&csv);
             let roh = match (scan, address) {
-                (Some(p), _) => wertetexte::roh_aus_blockscan(&std::fs::read_to_string(&p).with_context(|| tr!("{a} lesen", a = p.display()))?),
+                (Some(p), _) => wertetexte::roh_aus_blockscan(&ecu_werkbank::ablage::lesen(&p).with_context(|| tr!("{a} lesen", a = p.display()))?),
                 (None, Some(a)) => {
                     println!("{}", tr!("Lese alle Messwertblöcke von {a} (nur lesen) …", a = format!("{a:02X}")));
                     ecu_werkbank::kwp::blockscan(&be, a as u8, 1, 255, |_| {})?
@@ -1469,7 +1469,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Skript { datei } => {
-            let code = std::fs::read_to_string(&datei).with_context(|| tr!("{a} lesen", a = datei.display()))?;
+            let code = ecu_werkbank::ablage::lesen(&datei).with_context(|| tr!("{a} lesen", a = datei.display()))?;
             let stopp = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             ecu_werkbank::skript::ausfuehren(be.clone(), std::sync::Arc::new(db), &code, |s| println!("{s}"), stopp)
         }
@@ -1581,7 +1581,7 @@ fn main() -> Result<()> {
                     None => PathBuf::from(&name),
                 },
             };
-            std::fs::write(&path, &text)?;
+            ecu_werkbank::ablage::schreiben(&path, &text)?;
             println!("{}", tr!("\nGespeichert: {a}", a = path.display()));
             Ok(())
         }
@@ -1656,7 +1656,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::FehlertexteUebernehmen { datei } => {
-            let inhalt = std::fs::read_to_string(&datei).with_context(|| tr!("Lesen: {a}", a = datei.display()))?;
+            let inhalt = ecu_werkbank::ablage::lesen(&datei).with_context(|| tr!("Lesen: {a}", a = datei.display()))?;
             let (neu, geaendert, gleich) = ecu_werkbank::fehlergeruest::uebernehmen(&inhalt)?;
             println!("{}", tr!("Übernommen: {a} neu, {b} geändert, {c} unverändert. Gilt ab jetzt in allen Anzeigen und Berichten.", a = neu, b = geaendert, c = gleich));
             Ok(())
@@ -1761,7 +1761,7 @@ fn main() -> Result<()> {
                 Some(p) => p,
                 None => v.sub("berichte")?.join(ecu_werkbank::vehicle::stamped("fehlerspeicher", "pdf")),
             };
-            std::fs::write(&out, r.to_pdf())?;
+            ecu_werkbank::ablage::schreiben(&out, r.to_pdf())?;
             let _ = ecu_werkbank::history::save(&r);
             println!("{}", tr!("PDF: {a}", a = out.display()));
             Ok(())
@@ -1798,8 +1798,8 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Lernen { log, vergleich, out, adresse, name } => {
-            let text = std::fs::read_to_string(&log).with_context(|| tr!("Lesen: {a}", a = log.display()))?;
-            let cmp = vergleich.as_ref().map(std::fs::read_to_string).transpose()?;
+            let text = ecu_werkbank::ablage::lesen(&log).with_context(|| tr!("Lesen: {a}", a = log.display()))?;
+            let cmp = vergleich.as_ref().map(ecu_werkbank::ablage::lesen).transpose()?;
             let v = ecu_werkbank::learn::lernen(&text, cmp.as_deref());
             if v.is_empty() {
                 println!("{}", tr!("Keine Stellfunktionen, Schreibbefehle oder Messwerte gefunden."));
@@ -1812,7 +1812,7 @@ fn main() -> Result<()> {
             match out {
                 Some(p) => {
                     LabelDb::check_file(&file).context(tr!("erzeugte Label-Datei ist ungültig"))?;
-                    std::fs::write(&p, &file)?;
+                    ecu_werkbank::ablage::schreiben(&p, &file)?;
                     println!("{}", tr!("\nLabel-Datei gespeichert: {a} — Namen, Einheiten und Grenzen prüfen!", a = p.display()));
                 }
                 None => println!("\n{file}"),
@@ -1851,13 +1851,13 @@ fn main() -> Result<()> {
                 Some(p) => p,
                 None => v.sub("berichte")?.join(ecu_werkbank::vehicle::stamped("fahrzeugakte", "pdf")),
             };
-            std::fs::write(&out, ecu_werkbank::akte::to_pdf(&v, &db))?;
+            ecu_werkbank::ablage::schreiben(&out, ecu_werkbank::akte::to_pdf(&v, &db))?;
             println!("{}", tr!("Fahrzeugakte: {a}", a = out.display()));
             Ok(())
         }
         Command::AkteZip { out } => {
             let v = need_vehicle(cli.fahrzeug.as_deref())?;
-            let n = ecu_werkbank::zip::zip_dir(&v.dir(), &out, &v.key)?;
+            let n = ecu_werkbank::ablage::ordner_zippen(&v.dir(), &out, &v.key)?;
             println!("{}", tr!("{n} Datei(en) gesichert: {a}", n = n, a = out.display()));
             println!("{}", tr!("Wiederherstellen: ecu-werkbank fahrzeug-import {a}", a = out.display()));
             Ok(())
@@ -1893,7 +1893,13 @@ fn main() -> Result<()> {
         }
         Command::FahrzeugImport { datei, ueberschreiben } => {
             let root = ecu_werkbank::vehicle::root();
-            let dateien = ecu_werkbank::zip::unzip_to(&datei, &root, ueberschreiben)?;
+            // erst entpacken, dann einspielen: Daten in die Datenbank, Dokumente als Dateien
+            let tmp = std::env::temp_dir().join(format!("ecu-werkbank-import-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&tmp);
+            std::fs::create_dir_all(&tmp)?;
+            let r = ecu_werkbank::zip::unzip_to(&datei, &tmp, true).and_then(|_| Ok(ecu_werkbank::ablage::einspielen(&tmp, &root, ueberschreiben)?));
+            let _ = std::fs::remove_dir_all(&tmp);
+            let dateien = r?.2;
             // betroffene Fahrzeuge = oberste Ordnerebene der Einträge
             let mut keys: Vec<String> = dateien.iter().filter_map(|p| p.split('/').next().map(str::to_string)).collect();
             keys.sort();
@@ -2037,7 +2043,7 @@ fn main() -> Result<()> {
                 Some(p) => p,
                 None => v.sub("berichte")?.join("wartung.ics"),
             };
-            std::fs::write(&pfad, ecu_werkbank::kalender::ics(&v, &t)).with_context(|| tr!("Schreiben: {a}", a = pfad.display()))?;
+            ecu_werkbank::ablage::schreiben(&pfad, ecu_werkbank::kalender::ics(&v, &t)).with_context(|| tr!("Schreiben: {a}", a = pfad.display()))?;
             println!("{}", tr!("{a} Termine gespeichert: {b} — Datei aufs Handy schicken oder im Kalender importieren.", a = t.len(), b = pfad.display()));
             Ok(())
         }
@@ -2244,7 +2250,7 @@ fn verbauliste(be: &Backend, db: &LabelDb, with_tp20: bool, gespeichert: bool, o
     let t = ecu_werkbank::verbauliste::text(&gruppen);
     print!("{t}");
     if let Some(p) = out {
-        std::fs::write(p, &t).with_context(|| tr!("Schreiben: {a}", a = p.display()))?;
+        ecu_werkbank::ablage::schreiben(p, &t).with_context(|| tr!("Schreiben: {a}", a = p.display()))?;
         println!("{}", tr!("Gespeichert: {a}", a = p.display()));
     }
     Ok(())
@@ -2339,7 +2345,7 @@ fn csv_pdf(file: &std::path::Path, out: Option<&std::path::Path>, fahrzeug: Opti
     if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir)?;
     }
-    std::fs::write(&out, ecu_werkbank::chart::to_pdf(ecu_werkbank::trs!("Messwert-Aufzeichnung"), &meta, &cols))?;
+    ecu_werkbank::ablage::schreiben(&out, ecu_werkbank::chart::to_pdf(ecu_werkbank::trs!("Messwert-Aufzeichnung"), &meta, &cols))?;
     println!("{}", tr!("{a} Kurve(n) → {b}", a = cols.len(), b = out.display()));
     Ok(())
 }

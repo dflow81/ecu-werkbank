@@ -67,13 +67,13 @@ fn pfad(vehicle: &str) -> std::path::PathBuf {
 }
 
 pub fn laden(vehicle: &str) -> Einstellung {
-    std::fs::read_to_string(pfad(vehicle)).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::ablage::lesen(pfad(vehicle)).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
 }
 
 pub fn speichern(vehicle: &str, e: &Einstellung) -> Result<()> {
     let p = pfad(vehicle);
     std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(e)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(e)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
 }
 
 /// Felder, deren Art zu einer Winkelangabe passt (Kandidaten für die

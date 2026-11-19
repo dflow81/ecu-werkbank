@@ -39,22 +39,22 @@ pub fn pfad() -> PathBuf {
 
 /// Gespeicherten Firmenkopf lesen (leer, wenn keiner da ist).
 pub fn laden() -> Firmenkopf {
-    std::fs::read_to_string(pfad()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::ablage::lesen(pfad()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
 }
 
 /// Speichern; ein leerer Firmenkopf löscht die Datei.
 pub fn speichern(f: &Firmenkopf) -> Result<()> {
     let p = pfad();
     if f.ist_leer() {
-        if p.exists() {
-            std::fs::remove_file(&p)?;
+        if crate::ablage::existiert(&p) {
+            crate::ablage::entfernen(&p)?;
         }
         return Ok(());
     }
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d)?;
     }
-    std::fs::write(&p, toml::to_string(f)?).with_context(|| crate::tr!("{a} schreiben", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(f)?).with_context(|| crate::tr!("{a} schreiben", a = p.display()))
 }
 
 /// Fußzeile für PDFs, falls ein Firmenkopf eingetragen ist.

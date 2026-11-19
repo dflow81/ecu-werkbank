@@ -74,7 +74,7 @@ impl App {
                     .ok()
                     .and_then(|v| v.sub("berichte").ok())
                     .map(|d| d.join(ecu_werkbank::vehicle::stamped("kaufcheck", "pdf")));
-                let saved = path.and_then(|p| std::fs::write(&p, e.to_pdf()).ok().map(|_| p));
+                let saved = path.and_then(|p| ecu_werkbank::ablage::schreiben(&p, e.to_pdf()).ok().map(|_| p));
                 let _ = ecu_werkbank::history::save(&e.report);
                 if let Some(p) = &saved {
                     self.pdf_last = Some(p.clone());
@@ -106,7 +106,7 @@ impl App {
                             self.set_active_vehicle(Some(v.key.clone()));
                         }
                         let p = v.sub("berichte").ok()?.join(ecu_werkbank::vehicle::stamped("fehlerspeicher", "pdf"));
-                        std::fs::write(&p, r.to_pdf()).ok().map(|_| p)
+                        ecu_werkbank::ablage::schreiben(&p, r.to_pdf()).ok().map(|_| p)
                     });
                     let _ = ecu_werkbank::history::save(&r);
                     if let Some(p) = &self.fm_pdf {
@@ -255,7 +255,7 @@ impl App {
         let saved = ecu_werkbank::vehicle::load(&key)
             .and_then(|v| v.sub("berichte").ok())
             .map(|d| d.join(ecu_werkbank::vehicle::stamped("kaufcheck", "pdf")))
-            .and_then(|p| std::fs::write(&p, e.to_pdf()).ok().map(|_| p));
+            .and_then(|p| ecu_werkbank::ablage::schreiben(&p, e.to_pdf()).ok().map(|_| p));
         if let Some(p) = &saved {
             self.pdf_last = Some(p.clone());
         }
@@ -360,7 +360,7 @@ impl App {
                 .and_then(|v| v.sub("berichte").ok())
                 .map(|d| d.join(ecu_werkbank::vehicle::stamped("reparaturbericht", "pdf")));
             if let Some(p) = path {
-                if std::fs::write(&p, ecu_werkbank::repair::bericht_pdf(&before, &r, &self.rp_arbeiten, &offen)).is_ok() {
+                if ecu_werkbank::ablage::schreiben(&p, ecu_werkbank::repair::bericht_pdf(&before, &r, &self.rp_arbeiten, &offen)).is_ok() {
                     let d = ecu_werkbank::history::diff(&before, &r, &[]);
                     self.status = tr!("Reparaturbericht gespeichert ({a} behoben, {b} noch da): {c}", a = d.gone.len(), b = d.still.len(), c = p.display());
                     self.pdf_last = Some(p);
@@ -547,7 +547,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 if ui.button(tr!("📂 Vergleich (ohne Aktion) laden…")).clicked() {
                     if let Some(p) = rfd::FileDialog::new().add_filter("Log", &["log", "txt"]).pick_file() {
-                        if let Ok(t) = std::fs::read_to_string(&p) {
+                        if let Ok(t) = ecu_werkbank::ablage::lesen(&p) {
                             self.log_cmp = Some((p.display().to_string(), t));
                         }
                     }

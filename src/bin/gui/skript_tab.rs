@@ -66,7 +66,7 @@ impl App {
             }
             if ui.add_enabled(!laeuft, egui::Button::new(tr!("📂 Öffnen…"))).clicked() {
                 if let Some(p) = rfd::FileDialog::new().add_filter("Rhai", &["rhai"]).pick_file() {
-                    match std::fs::read_to_string(&p) {
+                    match ecu_werkbank::ablage::lesen(&p) {
                         Ok(t) => {
                             self.sk.code = t;
                             self.status = tr!("Skript geladen: {a}", a = p.display());
@@ -79,7 +79,7 @@ impl App {
             if ui.button(tr!("💾 Speichern…")).clicked() {
                 let ziel = self.sk.datei.clone().or_else(|| rfd::FileDialog::new().add_filter("Rhai", &["rhai"]).set_file_name("skript.rhai").save_file());
                 if let Some(p) = ziel {
-                    self.status = match std::fs::write(&p, &self.sk.code) {
+                    self.status = match ecu_werkbank::ablage::schreiben(&p, &self.sk.code) {
                         Ok(()) => tr!("Skript gespeichert: {a}", a = p.display()),
                         Err(e) => tr!("Skript: {e}", e = e),
                     };

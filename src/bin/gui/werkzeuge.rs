@@ -221,7 +221,7 @@ impl App {
                     let _ = ecu_werkbank::backup::save(&st.codierung);
                     if let Ok(d) = v.sub("berichte") {
                         let p = d.join(ecu_werkbank::vehicle::stamped("nachruestung", "pdf"));
-                        if std::fs::write(&p, ecu_werkbank::retrofit::pdf(self.nr_name.trim(), &vorher, &st, &self.nr_result, &self.nr_notiz)).is_ok() {
+                        if ecu_werkbank::ablage::schreiben(&p, ecu_werkbank::retrofit::pdf(self.nr_name.trim(), &vorher, &st, &self.nr_result, &self.nr_notiz)).is_ok() {
                             self.status = tr!("Nachrüstprotokoll gespeichert: {a}", a = p.display());
                             self.pdf_last = Some(p);
                         }
@@ -873,7 +873,7 @@ impl App {
             }
             if ui.button(tr!("📂 Ausgefüllte Datei übernehmen")).on_hover_text(tr!("Eine Datei aus „ecu-werkbank fehler-geruest“ bzw. „Als Datei speichern“")).clicked() {
                 if let Some(p) = rfd::FileDialog::new().add_filter("TOML", &["toml"]).pick_file() {
-                    self.status = match std::fs::read_to_string(&p).map_err(anyhow::Error::from).and_then(|t| ecu_werkbank::fehlergeruest::uebernehmen(&t)) {
+                    self.status = match ecu_werkbank::ablage::lesen(&p).map_err(anyhow::Error::from).and_then(|t| ecu_werkbank::fehlergeruest::uebernehmen(&t)) {
                         Ok((n, g, _)) => {
                             for (c, t) in ecu_werkbank::fehlertexte::alle() {
                                 self.db.set_dtc_text(&c, &t);
@@ -911,7 +911,7 @@ impl App {
                 let text = ecu_werkbank::fehlergeruest::geruest(&self.fg_geraete, &self.db, &name, &ecu_werkbank::report::now_local());
                 let datei = ecu_werkbank::vehicle::stamped("fehlertexte-geruest", "toml");
                 let pfad = v.and_then(|v| v.sub("berichte").ok()).unwrap_or_else(ecu_werkbank::history::data_dir).join(datei);
-                self.status = match std::fs::write(&pfad, text) {
+                self.status = match ecu_werkbank::ablage::schreiben(&pfad, text) {
                     Ok(()) => tr!("Gespeichert: {a}", a = pfad.display()),
                     Err(e) => format!("{e:#}"),
                 };
@@ -1009,7 +1009,7 @@ impl App {
                         .and_then(|v| v.sub("berichte").ok())
                         .unwrap_or_else(ecu_werkbank::history::data_dir)
                         .join(name);
-                    let saved = std::fs::write(&path, &text).map(|_| path.display().to_string()).map_err(|e| e.to_string());
+                    let saved = ecu_werkbank::ablage::schreiben(&path, &text).map(|_| path.display().to_string()).map_err(|e| e.to_string());
                     let _ = tx.send(TlMsg::Done(text, saved));
                 });
                 self.tl_job = Some(rx);

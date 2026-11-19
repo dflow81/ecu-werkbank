@@ -1385,7 +1385,7 @@ fn load_active_vehicle() -> Option<String> {
     if let Ok(v) = std::env::var("VAG_FAHRZEUG") {
         return ecu_werkbank::vehicle::find(&v).map(|v| v.key);
     }
-    let key = std::fs::read_to_string(ecu_werkbank::history::data_dir().join("aktives-fahrzeug")).ok()?;
+    let key = ecu_werkbank::ablage::lesen(ecu_werkbank::history::data_dir().join("aktives-fahrzeug")).ok()?;
     let key = key.trim().to_string();
     ecu_werkbank::vehicle::load(&key).map(|v| v.key)
 }

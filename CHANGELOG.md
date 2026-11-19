@@ -11,7 +11,14 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   die Dateien bleiben als Sicherung liegen (`*.toml.uebernommen`), gelesen wird nur noch die Datenbank.
 - Label-Editor: Einträge statt Dateien; „Als Datei…“ zum Weitergeben, „Löschen…“ mit Rückfrage;
   hineingezogene Label-Dateien werden mit „Speichern“ übernommen.
-- Datensicherung schreibt die Datenbank vorher fest (stimmige Kopie im ZIP).
+- **Auch alle übrigen Daten liegen jetzt in der Datenbank:** Fahrzeuge, Scans, Codier-,
+  Anpassungs- und Software-Sicherungen, Trends, Profile, Logins, Fehlerbilder, Ansichten,
+  Firmenkopf und Einstellungen. Beim ersten Start übernommen; die alten Dateien liegen danach
+  in `<Datenordner>/vor-datenbank/`. PDFs, CSV-Aufzeichnungen und Mitschnitte bleiben Dateien,
+  die Spracheinstellung ebenfalls.
+- Datensicherung und „Fahrzeug als ZIP“ schreiben alles weiter als lesbare Dateien (auch eigene
+  Texte und Labels); Einspielen holt es zurück in die Datenbank. Alte Sicherungen lassen sich
+  weiter einspielen.
 
 ## 0.3.0 — 19.11.2026
 

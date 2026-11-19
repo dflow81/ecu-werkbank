@@ -21,7 +21,7 @@ pub mod odx;
 pub mod paket;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
-const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql")];
+const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql"), include_str!("schema_004.sql")];
 
 /// Aktuelle Schema-Version dieses Programms.
 pub const SCHEMA_VERSION: u32 = MIGRATIONEN.len() as u32;
@@ -135,7 +135,7 @@ pub fn standard_pfad() -> PathBuf {
 }
 
 pub struct Db {
-    con: Connection,
+    pub(crate) con: Connection,
 }
 
 impl Db {

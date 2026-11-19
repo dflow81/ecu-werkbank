@@ -1118,7 +1118,7 @@ zurückgespielt, das geht nur bewusst über „Fahrzeuge & Wartung“.
 
 ## Eigene Labels (dein Inhalt)
 
-Seit 0.4 liegen eigene Labels und alle eigenen Texte (Fehlertexte, Namen für
+Seit 0.4 liegen alle Daten (Fahrzeuge, Scans, Sicherungen, Einstellungen) sowie eigene Labels und alle eigenen Texte (Fehlertexte, Namen für
 Messwerte, Codier-Bits, Anpassungen, Messwert-Texte) **in der Fahrzeug-Datenbank**
 (`<Datenordner>/fahrzeugdaten.sqlite`). Bearbeitet wird im GUI-Reiter
 **„Label-Editor“**; eine Label-Datei (`*.toml`, Format wie

@@ -189,22 +189,19 @@ pub fn speichern(s: &Sicherung) -> Result<PathBuf> {
     let d = ordner(&s.vehicle);
     std::fs::create_dir_all(&d).with_context(|| tr!("Ordner anlegen: {a}", a = d.display()))?;
     let p = d.join(format!("{}.toml", s.timestamp));
-    std::fs::write(&p, toml::to_string(s)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))?;
+    crate::ablage::schreiben(&p, toml::to_string(s)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))?;
     Ok(p)
 }
 
 pub fn laden(p: &Path) -> Result<Sicherung> {
-    let t = std::fs::read_to_string(p).with_context(|| tr!("Lesen: {a}", a = p.display()))?;
+    let t = crate::ablage::lesen(p).with_context(|| tr!("Lesen: {a}", a = p.display()))?;
     toml::from_str(&t).with_context(|| tr!("Keine gültige Anpassungs-Sicherung: {a}", a = p.display()))
 }
 
 /// Sicherungen eines Fahrzeugs, neueste zuerst.
 pub fn liste(vehicle: &str) -> Vec<(PathBuf, Sicherung)> {
-    let mut v: Vec<_> = std::fs::read_dir(ordner(vehicle))
+    let mut v: Vec<_> = crate::ablage::liste(&ordner(vehicle))
         .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x == "toml"))
         .filter_map(|p| laden(&p).ok().map(|s| (p, s)))
         .collect();
@@ -526,7 +523,7 @@ pub fn vorher_sichern(vehicle: &str, g: &Geraet, ergebnis: &[Geschrieben]) -> Re
     };
     // nicht über eine andere Sicherung derselben Sekunde schreiben
     let mut s = s;
-    while ordner(vehicle).join(format!("{}.toml", s.timestamp)).exists() {
+    while crate::ablage::existiert(ordner(vehicle).join(format!("{}.toml", s.timestamp))) {
         s.timestamp += 1;
     }
     speichern(&s).map(Some)

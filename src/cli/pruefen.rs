@@ -15,7 +15,7 @@ pub(super) fn sprache_cmd(setzen: Option<String>, vorlage: Option<String>, datei
     use ecu_werkbank::i18n;
     if verwaist || aufraeumen {
         let p = datei.context(tr!("Bitte mit --datei die Sprachdatei angeben, z. B. --datei lang/en.toml"))?;
-        let text = std::fs::read_to_string(&p).with_context(|| tr!("Lesen: {a}", a = p.display()))?;
+        let text = ecu_werkbank::ablage::lesen(&p).with_context(|| tr!("Lesen: {a}", a = p.display()))?;
         let liste = i18n::verwaist(&text);
         if liste.is_empty() {
             println!("{}", tr!("{a}: keine verwaisten Einträge.", a = p.display()));
@@ -28,7 +28,7 @@ pub(super) fn sprache_cmd(setzen: Option<String>, vorlage: Option<String>, datei
         if aufraeumen {
             let (neu, n) = i18n::aufraeumen(&text);
             std::fs::copy(&p, p.with_extension("toml.bak"))?;
-            std::fs::write(&p, neu)?;
+            ecu_werkbank::ablage::schreiben(&p, neu)?;
             println!("{}", tr!("{n} Einträge entfernt. Sicherung: {a}", n = n, a = p.with_extension("toml.bak").display()));
         } else {
             println!("{}", tr!("Entfernen mit --aufraeumen."));
@@ -48,7 +48,7 @@ pub(super) fn sprache_cmd(setzen: Option<String>, vorlage: Option<String>, datei
         if let Some(d) = p.parent() {
             std::fs::create_dir_all(d)?;
         }
-        std::fs::write(&p, i18n::vorlage(&c))?;
+        ecu_werkbank::ablage::schreiben(&p, i18n::vorlage(&c))?;
         let (da, alle) = i18n::abdeckung(&c);
         println!("{}", tr!("Vorlage geschrieben: {a}  ({da} von {alle} Texten übersetzt)", a = p.display(), da = da, alle = alle));
         println!("{}", tr!("Rechts die Übersetzung eintragen; leere Zeilen bleiben deutsch. Wirkt beim nächsten Start."));
@@ -358,7 +358,7 @@ pub(super) fn battery_test(be: &Backend, seconds: u64, fahrzeug: Option<&str>) -
         None => ecu_werkbank::vehicle::resolve(None, None)?.sub("berichte")?,
     };
     let out = dir.join(ecu_werkbank::vehicle::stamped("batterietest", "pdf"));
-    std::fs::write(&out, ecu_werkbank::chart::to_pdf(ecu_werkbank::trs!("Batterie- und Starttest"), &meta, &[col]))?;
+    ecu_werkbank::ablage::schreiben(&out, ecu_werkbank::chart::to_pdf(ecu_werkbank::trs!("Batterie- und Starttest"), &meta, &[col]))?;
     println!("{}", tr!("PDF: {a}", a = out.display()));
     Ok(())
 }

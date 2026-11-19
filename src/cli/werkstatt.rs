@@ -218,7 +218,7 @@ pub(super) fn kaufcheck(be: &Backend, db: &LabelDb, out: Option<&std::path::Path
         Some(p) => p.to_path_buf(),
         None => v.sub("berichte")?.join(ecu_werkbank::vehicle::stamped("kaufcheck", "pdf")),
     };
-    std::fs::write(&out, e.to_pdf())?;
+    ecu_werkbank::ablage::schreiben(&out, e.to_pdf())?;
     let _ = ecu_werkbank::history::save(&e.report);
     println!("{}", tr!("PDF: {a}", a = out.display()));
     Ok(())
@@ -227,7 +227,7 @@ pub(super) fn kaufcheck(be: &Backend, db: &LabelDb, out: Option<&std::path::Path
 /// Gebrauchtwagen-Check ohne Auto aus dem letzten gespeicherten Scan mit Abgasdaten.
 pub(super) fn kaufcheck_aus_scan(out: Option<&std::path::Path>, note: &str, fahrzeug: Option<&str>) -> Result<()> {
     // ohne --fahrzeug: das in der GUI gewählte Fahrzeug
-    let gewaehlt = || std::fs::read_to_string(ecu_werkbank::history::data_dir().join("aktives-fahrzeug")).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let gewaehlt = || ecu_werkbank::ablage::lesen(ecu_werkbank::history::data_dir().join("aktives-fahrzeug")).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let key = active_vehicle(fahrzeug)?.or_else(gewaehlt).context(tr!("Kein Fahrzeug gewählt — mit --fahrzeug angeben"))?;
     let v = ecu_werkbank::vehicle::load(&key).context(tr!("Fahrzeug nicht gefunden"))?;
     let r = ecu_werkbank::usedcar::letzter_scan(&v.key).context(tr!("Für dieses Fahrzeug ist noch kein Scan gespeichert"))?;
@@ -244,7 +244,7 @@ pub(super) fn kaufcheck_aus_scan(out: Option<&std::path::Path>, note: &str, fahr
         Some(p) => p.to_path_buf(),
         None => v.sub("berichte")?.join(ecu_werkbank::vehicle::stamped("kaufcheck", "pdf")),
     };
-    std::fs::write(&out, e.to_pdf())?;
+    ecu_werkbank::ablage::schreiben(&out, e.to_pdf())?;
     println!("{}", tr!("PDF: {a}", a = out.display()));
     Ok(())
 }
@@ -264,7 +264,7 @@ pub(super) fn reparaturbericht(be: &Backend, db: &LabelDb, arbeiten: &str, fahrz
         .map(|r| r.monitors.iter().filter(|m| m.available && !m.complete).map(|m| m.name.to_string()).collect())
         .unwrap_or_default();
     let out = v.sub("berichte")?.join(ecu_werkbank::vehicle::stamped("reparaturbericht", "pdf"));
-    std::fs::write(&out, ecu_werkbank::repair::bericht_pdf(&before, &after, arbeiten, &offen))?;
+    ecu_werkbank::ablage::schreiben(&out, ecu_werkbank::repair::bericht_pdf(&before, &after, arbeiten, &offen))?;
     history::save(&after)?;
     let d = history::diff(&before, &after, &[]);
     println!("{}", tr!("Vorher {a} Fehler ({b}), nachher {c} Fehler.", a = before.total_dtcs(), b = before.created, c = after.total_dtcs()));
@@ -306,8 +306,8 @@ pub(super) fn nachruestung(be: &Backend, db: &LabelDb, name: &str, phase: &str, 
     match phase {
         "vorher" => {
             let st = retrofit::aufnehmen(be, db, |_| {})?;
-            std::fs::write(dir.join("vorher-scan.toml"), toml::to_string(&st.scan)?)?;
-            std::fs::write(dir.join("vorher-codierung.toml"), toml::to_string(&st.codierung)?)?;
+            ecu_werkbank::ablage::schreiben(dir.join("vorher-scan.toml"), toml::to_string(&st.scan)?)?;
+            ecu_werkbank::ablage::schreiben(dir.join("vorher-codierung.toml"), toml::to_string(&st.codierung)?)?;
             println!("{}", tr!("Vorher-Stand gesichert ({a} Steuergeräte, {b} Fehler). Jetzt einbauen, dann --phase nachher.", a = st.scan.modules.len(), b = st.scan.total_dtcs()));
         }
         "nachher" => {
@@ -323,7 +323,7 @@ pub(super) fn nachruestung(be: &Backend, db: &LabelDb, name: &str, phase: &str, 
                 println!("  [{}] {t}", st.text());
             }
             let out = v.sub("berichte")?.join(ecu_werkbank::vehicle::stamped("nachruestung", "pdf"));
-            std::fs::write(&out, retrofit::pdf(name, &vorher, &nachher, &r, notiz))?;
+            ecu_werkbank::ablage::schreiben(&out, retrofit::pdf(name, &vorher, &nachher, &r, notiz))?;
             ecu_werkbank::history::save(&nachher.scan)?;
             nachher.codierung.vehicle = v.key.clone();
             ecu_werkbank::backup::save(&nachher.codierung)?;

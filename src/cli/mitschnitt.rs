@@ -8,7 +8,7 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 pub(super) fn decode_log(file: &std::path::Path, report_only: bool) -> Result<()> {
-    let text = std::fs::read_to_string(file).with_context(|| tr!("Log lesen: {a}", a = file.display()))?;
+    let text = ecu_werkbank::ablage::lesen(file).with_context(|| tr!("Log lesen: {a}", a = file.display()))?;
     let d = ecu_werkbank::canlog::Decoder::decode_text(&text);
     if !report_only {
         for l in d.lines() {
@@ -23,7 +23,7 @@ pub(super) fn decode_log(file: &std::path::Path, report_only: bool) -> Result<()
 pub(super) fn record(be: &Backend, iface: &str, out: &std::path::Path, seconds: u64) -> Result<()> {
     use std::io::Write;
     if let Backend::Demo = be {
-        std::fs::write(out, ecu_werkbank::canlog::demo_log())?;
+        ecu_werkbank::ablage::schreiben(out, ecu_werkbank::canlog::demo_log())?;
         println!("{}", tr!("Beispiel-Mitschnitt aus dem Demo-Fahrzeug: {a}", a = out.display()));
         println!("{}", tr!("Ansehen mit:  ecu-werkbank decode-log {a}", a = out.display()));
         return Ok(());

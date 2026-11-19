@@ -199,7 +199,7 @@ impl App {
                     Some(v) => {
                         let res = v.sub("berichte").and_then(|d| {
                             let p = d.join(ecu_werkbank::vehicle::stamped("fahrzeugakte", "pdf"));
-                            std::fs::write(&p, ecu_werkbank::akte::to_pdf(&v, &self.db))?;
+                            ecu_werkbank::ablage::schreiben(&p, ecu_werkbank::akte::to_pdf(&v, &self.db))?;
                             Ok(p)
                         });
                         match res {

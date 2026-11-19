@@ -189,7 +189,7 @@ struct Datei {
 }
 
 fn alle(fahrzeug: &str) -> Vec<Ablauf> {
-    std::fs::read_to_string(datei(fahrzeug)).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.ablauf).unwrap_or_default()
+    crate::ablage::lesen(datei(fahrzeug)).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.ablauf).unwrap_or_default()
 }
 
 /// Gelernter Ablauf für dieses Steuergerät dieses Fahrzeugs — `None` = gesperrt.
@@ -205,7 +205,7 @@ pub fn merken(fahrzeug: &str, a: &Ablauf) -> Result<()> {
     v.sort_by_key(|x| x.adresse);
     let p = datei(fahrzeug);
     std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&Datei { ablauf: v })?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(&Datei { ablauf: v })?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
 }
 
 /// Ablauf vergessen (Steuergerät wieder sperren).
@@ -213,7 +213,7 @@ pub fn vergessen(fahrzeug: &str, adresse: u8) -> Result<()> {
     let mut v = alle(fahrzeug);
     v.retain(|x| x.adresse != adresse);
     let p = datei(fahrzeug);
-    std::fs::write(&p, toml::to_string(&Datei { ablauf: v })?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(&Datei { ablauf: v })?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
 }
 
 // --- Ausführen ---

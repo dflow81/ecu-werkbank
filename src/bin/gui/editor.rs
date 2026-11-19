@@ -168,7 +168,7 @@ impl App {
             if ui.button(tr!("📄 Als Datei…")).on_hover_text(tr!("Diesen Eintrag als Label-Datei (TOML) speichern — zum Weitergeben oder als Sicherung")).clicked() {
                 let name = format!("{}.toml", ecu_werkbank::labels::dateiname(self.ed_file.ecu.address.unwrap_or(0), &self.ed_file.ecu.name));
                 if let Some(p) = rfd::FileDialog::new().add_filter("TOML", &["toml"]).set_file_name(&name).save_file() {
-                    self.status = match std::fs::write(&p, self.ed_file.to_toml()) {
+                    self.status = match ecu_werkbank::ablage::schreiben(&p, self.ed_file.to_toml()) {
                         Ok(()) => tr!("Gespeichert: {a}", a = p.display()),
                         Err(e) => tr!("Speichern fehlgeschlagen: {e}", e = e),
                     };

@@ -30,7 +30,7 @@ fn path() -> std::path::PathBuf {
 }
 
 pub fn eigene() -> Vec<Eintrag> {
-    std::fs::read_to_string(path()).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.eintrag).unwrap_or_default()
+    crate::ablage::lesen(path()).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.eintrag).unwrap_or_default()
 }
 
 pub fn hinzufuegen(e: Eintrag) -> Result<()> {
@@ -38,7 +38,7 @@ pub fn hinzufuegen(e: Eintrag) -> Result<()> {
     d.eintrag.push(Eintrag { code: normalize(&e.code), datum: if e.datum.is_empty() { crate::vehicle::today() } else { e.datum }, ..e });
     let p = path();
     std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&d)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(&d)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
 }
 
 pub fn loeschen(i: usize) -> Result<()> {
@@ -46,7 +46,7 @@ pub fn loeschen(i: usize) -> Result<()> {
     if i < d.eintrag.len() {
         d.eintrag.remove(i);
     }
-    std::fs::write(path(), toml::to_string(&d)?)?;
+    crate::ablage::schreiben(path(), toml::to_string(&d)?)?;
     Ok(())
 }
 

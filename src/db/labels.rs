@@ -152,6 +152,37 @@ pub fn laden(ordner: &Path) -> Result<Vec<LabelFile>> {
     })
 }
 
+/// Alle eigenen Labels als Label-Dateien nach `ordner` schreiben (für Sicherungen).
+pub fn ausgeben(ordner: &Path) -> Result<usize> {
+    let l = mit_db(|db| db.eigene_labels())?;
+    if l.is_empty() {
+        return Ok(0);
+    }
+    std::fs::create_dir_all(ordner)?;
+    for (id, lf) in &l {
+        let name = format!("{}-{id}.toml", crate::labels::dateiname(lf.ecu.address.unwrap_or(0), &lf.ecu.name));
+        std::fs::write(ordner.join(name), lf.to_toml())?;
+    }
+    Ok(l.len())
+}
+
+/// Eine Label-Datei (z. B. aus einer Sicherung) einspielen. Gibt es schon ein
+/// eigenes Label mit derselben Adresse, bleibt es — außer `ueberschreiben`.
+/// Gibt true zurück, wenn eingespielt wurde.
+pub fn datei_einspielen(text: &str, ueberschreiben: bool) -> Result<bool> {
+    let lf: LabelFile = toml::from_str(text)?;
+    mit_db(|db| {
+        let gleich = db.eigene_labels()?.into_iter().find(|(_, l)| l.ecu.address.is_some() && l.ecu.address == lf.ecu.address).map(|(id, _)| id);
+        match (gleich, ueberschreiben) {
+            (Some(_), false) => Ok(false),
+            (id, _) => {
+                db.label_speichern(id, &lf)?;
+                Ok(true)
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

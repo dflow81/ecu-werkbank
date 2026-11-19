@@ -116,9 +116,15 @@ Hintergrund nicht dazwischenfunkt).
 
 ## Datenablage
 
-- **Datenordner** (`~/.local/share/ecu-werkbank`, über `VAG_DATA_DIR` änderbar):
-  ein Ordner je Fahrzeug (VIN) mit Scans, Berichten, Codier- und Anpassungs-Sicherungen,
-  Trends, Profil. Der Umzug vom alten Namen `vag-diag` passiert einmal automatisch.
+- **Datenordner** (`~/.local/share/ecu-werkbank`, über `VAG_DATA_DIR` änderbar): enthält die
+  **Fahrzeug-Datenbank** `fahrzeugdaten.sqlite` und die Dokumente. Alle Daten (Fahrzeuge,
+  Scans, Codier-/Anpassungs-/Software-Sicherungen, Trends, Profile, Einstellungen) liegen in
+  der Datenbank, Tabelle `ablage`, Schlüssel = früherer Pfad (`src/ablage.rs` — gleiche
+  Aufrufe wie `std::fs`; Pfade außerhalb des Datenordners gehen weiter aufs Dateisystem).
+  Dokumente (PDF, CSV, Mitschnitte) bleiben Dateien je Fahrzeugordner. Sprache und eigene
+  Sprachdateien bleiben Dateien (werden auch ohne Datenbank gebraucht). Beim ersten Start
+  werden alte Daten-Dateien übernommen und nach `vor-datenbank/` verschoben. Sicherungen
+  und ZIP-Exporte schreiben die Einträge wieder als lesbare TOML-Dateien.
 - **Eigene Labels und Texte**: in der Fahrzeug-Datenbank (Quelle „Eigene Labels“, Tabelle `eigener_text`). Der frühere Label-Ordner (`~/.config/…/labels`) und die Text-Dateien werden einmal übernommen (`db::labels`, `db::eigen`) und danach nicht mehr gelesen. Nie fremde Label-Dateien.
 - **Fahrzeug-Datenbank** (`<Datenordner>/fahrzeugdaten.sqlite`): Schema in `src/db/schema_NNN.sql`, Migration beim Öffnen mit Kopie vorher; jede Zeile mit Quelle und Lizenz. Siehe ROADMAP „Plan: Fahrzeug-Datenbank“.
 - **Sprachen**: `lang/<code>.toml` eingebaut, eigene im Datenordner unter `sprachen/`.

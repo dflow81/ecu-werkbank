@@ -80,7 +80,7 @@ pub(super) fn kwp_clear(be: &Backend, address: u8) -> Result<()> {
 
 /// In der GUI zuletzt gewähltes Fahrzeug (<Datenordner>/aktives-fahrzeug).
 pub(super) fn load_active() -> Option<String> {
-    let key = std::fs::read_to_string(ecu_werkbank::history::data_dir().join("aktives-fahrzeug")).ok()?;
+    let key = ecu_werkbank::ablage::lesen(ecu_werkbank::history::data_dir().join("aktives-fahrzeug")).ok()?;
     ecu_werkbank::vehicle::load(key.trim()).map(|v| v.key)
 }
 
@@ -117,7 +117,7 @@ pub(super) fn fehler_geruest(be: &Backend, db: &LabelDb, out: Option<PathBuf>, f
     if let Some(p) = pfad.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(p)?;
     }
-    std::fs::write(&pfad, &text).with_context(|| tr!("Schreiben: {a}", a = pfad.display()))?;
+    ecu_werkbank::ablage::schreiben(&pfad, &text).with_context(|| tr!("Schreiben: {a}", a = pfad.display()))?;
     let n: usize = g.iter().map(|x| x.codes.len()).sum();
     for x in &g {
         println!("{}", tr!("  {a} {b}  {c} mögliche Fehler", a = format!("{:<28}", x.name), b = format!("{:#05x}", x.tx), c = x.codes.len()));
@@ -388,7 +388,7 @@ pub(super) fn login_cmd(be: &Backend, geraet: Option<u16>, sa2: Option<String>, 
         let mut l = login::laden(&v.key);
         if l.geraete.remove(&format!("{id:#05x}")).is_some() {
             let d = ecu_werkbank::vehicle::dir(&v.key).join("logins.toml");
-            std::fs::write(&d, toml::to_string(&l)?)?;
+            ecu_werkbank::ablage::schreiben(&d, toml::to_string(&l)?)?;
             println!("{}", tr!("Login für {a} gelöscht.", a = format!("{id:#05x}")));
         }
         return Ok(());

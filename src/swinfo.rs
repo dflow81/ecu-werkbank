@@ -184,7 +184,7 @@ pub fn save(vehicle: &str, s: &Stand) -> Result<std::path::PathBuf> {
     let dir = crate::vehicle::dir(vehicle).join("software");
     std::fs::create_dir_all(&dir)?;
     let p = dir.join(format!("{}.toml", s.timestamp));
-    std::fs::write(&p, toml::to_string(s)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))?;
+    crate::ablage::schreiben(&p, toml::to_string(s)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))?;
     Ok(p)
 }
 
@@ -199,11 +199,9 @@ pub fn teilenummer_fuer(vehicle: &str, geraet: u16) -> Option<String> {
 
 pub fn list(vehicle: &str) -> Vec<Stand> {
     let dir = crate::vehicle::dir(vehicle).join("software");
-    let mut v: Vec<Stand> = std::fs::read_dir(dir)
+    let mut v: Vec<Stand> = crate::ablage::liste(&dir)
         .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+        .filter_map(|p| crate::ablage::lesen(p).ok())
         .filter_map(|t| toml::from_str(&t).ok())
         .collect();
     v.sort_by_key(|s| s.timestamp);

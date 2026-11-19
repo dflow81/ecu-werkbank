@@ -226,7 +226,7 @@ impl App {
         };
         let Some(dir) = self.vehicle_sub("berichte") else { return };
         let p = dir.join(ecu_werkbank::vehicle::stamped("batterietest", "pdf"));
-        match std::fs::write(&p, ecu_werkbank::chart::to_pdf(ecu_werkbank::trs!("Batterie- und Starttest"), &meta, &[col])) {
+        match ecu_werkbank::ablage::schreiben(&p, ecu_werkbank::chart::to_pdf(ecu_werkbank::trs!("Batterie- und Starttest"), &meta, &[col])) {
             Ok(()) => {
                 self.status = tr!("PDF gespeichert: {a}", a = p.display());
                 self.pdf_last = Some(p);

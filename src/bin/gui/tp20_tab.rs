@@ -613,7 +613,7 @@ impl App {
             for px in &img.pixels {
                 daten.extend_from_slice(&[px.r(), px.g(), px.b()]);
             }
-            if let Err(e) = std::fs::write(&*pfad, daten) {
+            if let Err(e) = ecu_werkbank::ablage::schreiben(&*pfad, daten) {
                 eprintln!("Foto: {e}");
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -646,7 +646,7 @@ impl App {
                 }
                 let _ = std::fs::create_dir_all(&f.dir);
                 let pfad = f.dir.join(format!("frame_{:04}.ppm", f.zaehler));
-                if let Err(e) = std::fs::write(&pfad, daten) {
+                if let Err(e) = ecu_werkbank::ablage::schreiben(&pfad, daten) {
                     eprintln!("Film: {e}");
                 }
                 f.zaehler += 1;
@@ -863,7 +863,7 @@ impl App {
         });
         match akt {
             Some(Akt::Auswerten(addr, g, pfad)) => {
-                self.ge_status = match std::fs::read_to_string(&pfad) {
+                self.ge_status = match ecu_werkbank::ablage::lesen(&pfad) {
                     Err(e) => tr!("Lesen: {e}", e = e),
                     Ok(text) => {
                         let d = ecu_werkbank::canlog::Decoder::decode_text(&text);

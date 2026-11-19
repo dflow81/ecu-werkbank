@@ -238,7 +238,7 @@ fn schluessel(tx: u16) -> String {
 }
 
 pub fn laden(vehicle: &str) -> Logins {
-    std::fs::read_to_string(datei(vehicle)).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::ablage::lesen(datei(vehicle)).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
 }
 
 /// Login für ein Steuergerät (UDS-Anfrage-ID) merken.
@@ -249,7 +249,7 @@ pub fn setzen(vehicle: &str, tx: u16, m: Methode) -> Result<()> {
     if let Some(p) = d.parent() {
         std::fs::create_dir_all(p).ok();
     }
-    std::fs::write(&d, toml::to_string(&l)?).with_context(|| tr!("Schreiben: {a}", a = d.display()))?;
+    crate::ablage::schreiben(&d, toml::to_string(&l)?).with_context(|| tr!("Schreiben: {a}", a = d.display()))?;
     Ok(())
 }
 

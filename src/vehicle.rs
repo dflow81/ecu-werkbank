@@ -394,7 +394,7 @@ pub fn load(key: &str) -> Option<Vehicle> {
     if !d.is_dir() {
         return None;
     }
-    let mut v: Vehicle = std::fs::read_to_string(d.join("fahrzeug.toml"))
+    let mut v: Vehicle = crate::ablage::lesen(d.join("fahrzeug.toml"))
         .ok()
         .and_then(|t| toml::from_str(&t).ok())
         .unwrap_or_else(|| Vehicle {
@@ -408,12 +408,9 @@ pub fn load(key: &str) -> Option<Vehicle> {
 
 /// Alle Fahrzeuge, sortiert nach Anzeige-Name.
 pub fn list() -> Vec<Vehicle> {
-    let mut v: Vec<Vehicle> = std::fs::read_dir(root())
+    let mut v: Vec<Vehicle> = crate::ablage::unterordner(&root())
         .into_iter()
-        .flatten()
-        .flatten()
-        .filter(|e| e.path().is_dir())
-        .filter_map(|e| load(&e.file_name().to_string_lossy()))
+        .filter_map(|p| p.file_name().and_then(|n| n.to_str()).and_then(load))
         .collect();
     v.sort_by_key(|x| x.label().to_lowercase());
     v
@@ -422,7 +419,7 @@ pub fn list() -> Vec<Vehicle> {
 pub fn save(v: &Vehicle) -> Result<()> {
     let d = v.dir();
     std::fs::create_dir_all(&d).with_context(|| tr!("Ordner anlegen: {a}", a = d.display()))?;
-    std::fs::write(d.join("fahrzeug.toml"), toml::to_string(v)?)
+    crate::ablage::schreiben(d.join("fahrzeug.toml"), toml::to_string(v)?)
         .with_context(|| tr!("Schreiben: {a}", a = d.join("fahrzeug.toml").display()))
 }
 
@@ -432,7 +429,7 @@ pub fn create(kennzeichen: &str, vin: &str, bezeichnung: &str) -> Result<Vehicle
     if key == UNKNOWN {
         bail!(tr!("Bitte Kennzeichen oder Fahrgestellnummer angeben"));
     }
-    if dir(&key).exists() {
+    if dir(&key).exists() || crate::ablage::existiert(dir(&key).join("fahrzeug.toml")) {
         bail!(tr!("Fahrzeug {key} gibt es schon", key = key));
     }
     let v = Vehicle {
@@ -455,10 +452,10 @@ pub fn update(mut v: Vehicle) -> Result<Vehicle> {
     let new_key = key_for(&v.kennzeichen, &v.vin);
     if new_key != v.key && new_key != UNKNOWN {
         let (from, to) = (dir(&v.key), dir(&new_key));
-        if to.exists() {
+        if to.exists() || crate::ablage::existiert(to.join("fahrzeug.toml")) {
             bail!(tr!("Es gibt schon einen Ordner {new_key}", new_key = new_key));
         }
-        std::fs::rename(&from, &to).with_context(|| tr!("Umbenennen {a} → {b}", a = from.display(), b = to.display()))?;
+        crate::ablage::ordner_umbenennen(&from, &to).with_context(|| tr!("Umbenennen {a} → {b}", a = from.display(), b = to.display()))?;
         v.key = new_key;
     }
     save(&v)?;
@@ -515,7 +512,9 @@ pub fn stats(v: &Vehicle) -> Vec<(&'static str, usize)> {
     SUBDIRS
         .iter()
         .map(|s| {
-            let n = std::fs::read_dir(v.dir().join(s)).map(|r| r.flatten().count()).unwrap_or(0);
+            // Einträge der Ablage (Scans, Sicherungen) + echte Dateien (PDFs, CSV)
+            let d = v.dir().join(s);
+            let n = crate::ablage::liste(&d).len() + std::fs::read_dir(&d).map(|r| r.flatten().filter(|e| e.path().is_file()).count()).unwrap_or(0);
             (*s, n)
         })
         .collect()

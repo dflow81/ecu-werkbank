@@ -34,7 +34,7 @@ fn path() -> std::path::PathBuf {
 
 /// Alle Favoriten (nach Adresse, dann Block sortiert).
 pub fn alle() -> Vec<Favorit> {
-    let mut v = std::fs::read_to_string(path())
+    let mut v = crate::ablage::lesen(path())
         .ok()
         .and_then(|t| toml::from_str::<Datei>(&t).ok())
         .map(|d| d.favorit)
@@ -47,7 +47,7 @@ fn speichern(list: &[Favorit]) -> Result<()> {
     let p = path();
     std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
     let d = Datei { favorit: list.to_vec() };
-    std::fs::write(&p, toml::to_string(&d)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(&d)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
 }
 
 /// Ist dieser Block schon gemerkt?

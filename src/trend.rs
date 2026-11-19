@@ -33,7 +33,7 @@ fn path(vehicle: &str) -> std::path::PathBuf {
 }
 
 pub fn load(vehicle: &str) -> Vec<Punkt> {
-    std::fs::read_to_string(path(vehicle)).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.punkt).unwrap_or_default()
+    crate::ablage::lesen(path(vehicle)).ok().and_then(|t| toml::from_str::<Datei>(&t).ok()).map(|d| d.punkt).unwrap_or_default()
 }
 
 /// Mehrere Werte mit gleichem Zeitstempel speichern: (Name, Wert, Einheit).
@@ -51,7 +51,7 @@ pub fn add(vehicle: &str, km: Option<u32>, werte: &[(String, f64, String)]) -> R
     }
     let p = path(vehicle);
     std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&d)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::ablage::schreiben(&p, toml::to_string(&d)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
 }
 
 /// Verläufe je Messwert (zeitlich sortiert).

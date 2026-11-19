@@ -28,7 +28,7 @@ const DATEI: &str = "profil.toml";
 /// Profil zu einer VIN laden (nur bekannte Fahrzeuge).
 pub fn load(vin: &str) -> Option<Profil> {
     let v = crate::vehicle::find_by_vin(vin)?;
-    let text = std::fs::read_to_string(v.dir().join(DATEI)).ok()?;
+    let text = crate::ablage::lesen(v.dir().join(DATEI)).ok()?;
     toml::from_str(&text).ok()
 }
 
@@ -45,7 +45,7 @@ pub fn save(vin: &str, p: &Profil) -> bool {
         None => p.clone(),
     };
     let Ok(text) = toml::to_string(&p) else { return false };
-    std::fs::write(v.dir().join(DATEI), text).is_ok()
+    crate::ablage::schreiben(v.dir().join(DATEI), text).is_ok()
 }
 
 /// Zwei Profile vereinen (alle Steuergeräte aus beiden).

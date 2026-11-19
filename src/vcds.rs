@@ -390,7 +390,7 @@ pub fn importieren(pfad: &std::path::Path) -> Result<Ergebnis> {
         }
     }
     let scan = als_scan(&p, &v.key);
-    let schon_da = crate::history::history_dir(&v.key).join(format!("{}.toml", scan.timestamp)).exists();
+    let schon_da = crate::ablage::existiert(crate::history::history_dir(&v.key).join(format!("{}.toml", scan.timestamp)));
     if !schon_da {
         crate::history::save(&scan)?;
     }

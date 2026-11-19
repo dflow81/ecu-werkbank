@@ -16,8 +16,23 @@ use std::sync::Mutex;
 
 static VERBINDUNG: Mutex<Option<(PathBuf, Db)>> = Mutex::new(None);
 
+thread_local! {
+    /// Hält dieser Thread gerade die Verbindung? (Schutz vor Selbst-Blockade)
+    static IM_ZUGRIFF: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// `f` mit der Datenbank des aktuellen Datenordners ausführen.
+/// Ein Zugriff aus `f` heraus (verschachtelt) gibt einen Fehler statt zu hängen.
 pub fn mit_db<T>(f: impl FnOnce(&Db) -> Result<T>) -> Result<T> {
+    if IM_ZUGRIFF.with(|z| z.get()) {
+        anyhow::bail!("interner Fehler: verschachtelter Zugriff auf die Fahrzeug-Datenbank");
+    }
+    struct Frei;
+    impl Drop for Frei {
+        fn drop(&mut self) {
+            IM_ZUGRIFF.with(|z| z.set(false));
+        }
+    }
     let pfad = standard_pfad();
     let mut g = VERBINDUNG.lock().unwrap_or_else(|e| e.into_inner());
     if g.as_ref().map(|(p, _)| p != &pfad).unwrap_or(true) {
@@ -26,6 +41,8 @@ pub fn mit_db<T>(f: impl FnOnce(&Db) -> Result<T>) -> Result<T> {
         *g = Some((pfad, db));
     }
     let (_, db) = g.as_ref().expect("gerade geöffnet");
+    IM_ZUGRIFF.with(|z| z.set(true));
+    let _frei = Frei;
     f(db)
 }
 
@@ -92,6 +109,46 @@ pub fn setzen(bereich: &str, liste: &[(String, String)]) -> Result<()> {
         tx.commit()?;
         Ok(())
     })
+}
+
+/// Eigene Texte als die früheren TOML-Dateien nach `ordner` schreiben (für Sicherungen).
+pub fn ausgeben(ordner: &std::path::Path) -> Result<usize> {
+    let mut n = 0;
+    for bereich in ["fehler", "messwert", "codier", "kennung", "wert"] {
+        let m = alle(bereich);
+        if m.is_empty() {
+            continue;
+        }
+        let name = alte_datei(bereich).expect("bekannt");
+        std::fs::create_dir_all(ordner)?;
+        std::fs::write(ordner.join(name), toml::to_string(&m)?)?;
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// Bereich zu einem Dateinamen der früheren Speicherung („fehlertexte.toml“ → „fehler“).
+pub fn bereich_zur_datei(name: &str) -> Option<&'static str> {
+    ["fehler", "messwert", "codier", "kennung", "wert"].into_iter().find(|b| alte_datei(b) == Some(name))
+}
+
+/// Eine frühere Text-Datei (z. B. aus einer Sicherung) einspielen. Vorhandene
+/// Texte bleiben, außer `ueberschreiben`. Gibt (eingespielt, übersprungen) zurück.
+pub fn datei_einspielen(bereich: &str, text: &str, ueberschreiben: bool) -> Result<(usize, usize)> {
+    let neu: BTreeMap<String, String> = toml::from_str(text)?;
+    let da = alle(bereich);
+    let (mut ein, mut ueber) = (0, 0);
+    let mut liste = Vec::new();
+    for (k, t) in neu {
+        if da.contains_key(&k) && !ueberschreiben {
+            ueber += 1;
+        } else {
+            liste.push((k, t));
+            ein += 1;
+        }
+    }
+    setzen(bereich, &liste)?;
+    Ok((ein, ueber))
 }
 
 #[cfg(test)]

@@ -117,8 +117,7 @@ pub fn verfuegbar() -> Vec<(String, String)> {
         v.push((c.to_string(), name_aus(t).unwrap_or_else(|| c.to_string())));
     }
     if let Ok(rd) = std::fs::read_dir(crate::history::data_dir().join("sprachen")) {
-        for e in rd.flatten() {
-            let p = e.path();
+        for p in rd.flatten().map(|e| e.path()) {
             if p.extension().and_then(|x| x.to_str()) != Some("toml") {
                 continue;
             }

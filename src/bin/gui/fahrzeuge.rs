@@ -106,10 +106,9 @@ impl App {
             self.erk_an = !self.erk_an;
             let f = ecu_werkbank::history::data_dir().join("erkennung-aus");
             if self.erk_an {
-                let _ = std::fs::remove_file(f);
+                let _ = ecu_werkbank::ablage::entfernen(f);
             } else {
-                let _ = std::fs::create_dir_all(ecu_werkbank::history::data_dir());
-                let _ = std::fs::write(f, "");
+                let _ = ecu_werkbank::ablage::schreiben(f, "");
                 self.erk_fund = None;
             }
         }
@@ -119,8 +118,7 @@ impl App {
         self.active_vehicle = key;
         self.code_bk = None; // Codier-Helfer lädt die Sicherung des neuen Fahrzeugs
         let f = ecu_werkbank::history::data_dir().join("aktives-fahrzeug");
-        let _ = std::fs::create_dir_all(ecu_werkbank::history::data_dir());
-        let _ = std::fs::write(f, self.active_vehicle.clone().unwrap_or_default());
+        let _ = ecu_werkbank::ablage::schreiben(f, self.active_vehicle.clone().unwrap_or_default());
         // Labeldateien passen zu den Steuergeräten des Fahrzeugs
         self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
         if let Some(k) = &self.active_vehicle {
@@ -161,7 +159,7 @@ impl App {
             return;
         };
         let path = dir.join(ecu_werkbank::vehicle::stamped("scope", "pdf"));
-        match std::fs::write(&path, ecu_werkbank::chart::to_pdf("Messwert-Aufzeichnung", &meta, &cols)) {
+        match ecu_werkbank::ablage::schreiben(&path, ecu_werkbank::chart::to_pdf("Messwert-Aufzeichnung", &meta, &cols)) {
             Ok(()) => {
                 self.status = tr!("Scope-PDF gespeichert: {a} ({b} Kurve(n))", a = path.display(), b = cols.len());
                 self.pdf_last = Some(path);
@@ -529,7 +527,7 @@ impl App {
             return;
         }
         let pfad = v.sub("berichte").unwrap_or_else(|_| v.dir()).join("wartung.ics");
-        match std::fs::write(&pfad, ecu_werkbank::kalender::ics(&v, &t)) {
+        match ecu_werkbank::ablage::schreiben(&pfad, ecu_werkbank::kalender::ics(&v, &t)) {
             Ok(()) => {
                 self.status = tr!("{a} Termine gespeichert: {b} — Datei aufs Handy schicken oder im Kalender importieren.", a = t.len(), b = pfad.display());
                 if let Some(ordner) = pfad.parent() {
@@ -606,7 +604,7 @@ impl App {
                 if let Some(v) = vehicle::load(&key) {
                     let res = v.sub("berichte").and_then(|d| {
                         let p = d.join(vehicle::stamped("fahrzeugakte", "pdf"));
-                        std::fs::write(&p, ecu_werkbank::akte::to_pdf(&v, &self.db))?;
+                        ecu_werkbank::ablage::schreiben(&p, ecu_werkbank::akte::to_pdf(&v, &self.db))?;
                         Ok(p)
                     });
                     match res {
@@ -622,7 +620,7 @@ impl App {
                 if let Some(v) = vehicle::load(&key) {
                     let name = tr!("ecu-werkbank-{a}-{b}.zip", a = vehicle::plate_key(&v.kennzeichen).if_empty(&v.key), b = vehicle::today().replace('.', "-"));
                     if let Some(out) = rfd::FileDialog::new().set_file_name(&name).add_filter("ZIP", &["zip"]).save_file() {
-                        self.status = match ecu_werkbank::zip::zip_dir(&v.dir(), &out, &v.key) {
+                        self.status = match ecu_werkbank::ablage::ordner_zippen(&v.dir(), &out, &v.key) {
                             Ok(n) => tr!("{n} Datei(en) gesichert: {a}", n = n, a = out.display()),
                             Err(e) => tr!("ZIP: {e}", e = format!("{:#}", e)),
                         };

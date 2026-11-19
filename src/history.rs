@@ -71,7 +71,7 @@ pub fn save(r: &ScanReport) -> Result<PathBuf> {
     std::fs::create_dir_all(&dir).with_context(|| format!("Ordner anlegen: {}", dir.display()))?;
     let path = dir.join(format!("{}.toml", r.timestamp));
     let text = toml::to_string(r).context("Scan in TOML umwandeln")?;
-    std::fs::write(&path, text).with_context(|| format!("Historie schreiben: {}", path.display()))?;
+    crate::ablage::schreiben(&path, text).with_context(|| format!("Historie schreiben: {}", path.display()))?;
     let _ = crate::trend::add(&key_of(r), r.km, &[("Fehler gesamt".into(), r.total_dtcs() as f64, String::new())]);
     Ok(path)
 }
@@ -107,22 +107,19 @@ pub fn other_vehicle_repairs(exclude_key: &str, code: &str) -> Vec<String> {
 pub fn set_repair_note(path: &Path, note: &str) -> Result<()> {
     let mut r = load(path)?;
     r.reparatur = note.trim().to_string();
-    std::fs::write(path, toml::to_string(&r)?).with_context(|| format!("Schreiben: {}", path.display()))
+    crate::ablage::schreiben(path, toml::to_string(&r)?).with_context(|| format!("Schreiben: {}", path.display()))
 }
 
 pub fn load(path: &Path) -> Result<ScanReport> {
-    let text = std::fs::read_to_string(path).with_context(|| format!("Lesen: {}", path.display()))?;
+    let text = crate::ablage::lesen(path).with_context(|| format!("Lesen: {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("Kein gültiger Scan: {}", path.display()))
 }
 
 /// Alle gespeicherten Scans eines Fahrzeugs, älteste zuerst.
 pub fn list(vehicle_key: &str) -> Vec<(PathBuf, ScanReport)> {
     let dir = history_dir(vehicle_key);
-    let mut v: Vec<(PathBuf, ScanReport)> = std::fs::read_dir(&dir)
+    let mut v: Vec<(PathBuf, ScanReport)> = crate::ablage::liste(&dir)
         .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("toml"))
         .filter_map(|p| load(&p).ok().map(|r| (p, r)))
         .collect();

@@ -104,7 +104,7 @@ impl App {
             nf_progress: String::new(),
             nf_pdf: None,
             fm_confirm: None,
-            erk_an: !ecu_werkbank::history::data_dir().join("erkennung-aus").exists(),
+            erk_an: !ecu_werkbank::ablage::existiert(ecu_werkbank::history::data_dir().join("erkennung-aus")),
             erk_job: None,
             erk_zuletzt: None,
             erk_zaehler: None,
@@ -586,7 +586,7 @@ impl App {
                 None => (Stufe::Warnung, tr!("kein Adapter").to_string(), tr!("'{iface}' nicht gefunden — Adapter anstecken. Klick: Verbindungs-Assistent", iface = iface)),
             }
         } else {
-            let up = std::fs::read_to_string(format!("/sys/class/net/{iface}/flags"))
+            let up = ecu_werkbank::ablage::lesen(format!("/sys/class/net/{iface}/flags"))
                 .ok()
                 .and_then(|f| u32::from_str_radix(f.trim().trim_start_matches("0x"), 16).ok())
                 .is_some_and(|f| f & 1 != 0);
@@ -655,7 +655,7 @@ impl App {
             match ecu_werkbank::vehicle::load(&key).and_then(|v| v.sub("berichte").ok()) {
                 Some(dir) => {
                     let p = dir.join(ecu_werkbank::vehicle::stamped("verbauliste", "txt"));
-                    match std::fs::write(&p, &txt) {
+                    match ecu_werkbank::ablage::schreiben(&p, &txt) {
                         Ok(()) => {
                             self.status = tr!("Verbauliste gespeichert: {a}", a = p.display());
                             let _ = std::process::Command::new(OEFFNER).arg(&dir).spawn();
