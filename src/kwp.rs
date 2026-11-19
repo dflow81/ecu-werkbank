@@ -360,6 +360,12 @@ impl BlockValue {
         if self.formula == 0xA1 {
             return format!("{:08b} {:08b}", self.a, self.b);
         }
+        // Textnummer (F25): eigener Text aus der Wertetext-Tabelle des Nutzers
+        if self.formula == 0x25 {
+            if let Some(t) = crate::wertetexte::text(self.formula, self.a, self.b) {
+                return t;
+            }
+        }
         // zwei Zeichen Text
         if self.formula == 0x11 {
             return [self.a, self.b].iter().map(|&c| if (0x20..0x7F).contains(&c) { c as char } else { '·' }).collect();

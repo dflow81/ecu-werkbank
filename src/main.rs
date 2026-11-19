@@ -956,6 +956,30 @@ enum Command {
         #[arg(long)]
         aufraeumen: bool,
     },
+    /// Eigene Texte für Messwerte mit Textnummer (F25) aus einem Block-Export des eigenen
+    /// Werkstattgeräts lernen (bleiben nur auf diesem Rechner)
+    WertetexteLernen {
+        /// CSV-Export der Messwertblöcke (Werkstattgerät, gleiches Steuergerät)
+        #[arg(long)]
+        blockmap: PathBuf,
+        /// eigene Ausgabe von kwp-blockscan (Textdatei) …
+        #[arg(long)]
+        scan: Option<PathBuf>,
+        /// … oder jetzt am Auto lesen: TP-2.0-Adresse (hex)
+        #[arg(long, value_parser = parse_tp20)]
+        address: Option<u16>,
+        /// nur zeigen, nicht speichern
+        #[arg(long)]
+        nur_zeigen: bool,
+    },
+    /// Eigene Messwert-Texte zeigen oder setzen, z. B. --code F25:02FD --text normal
+    Wertetext {
+        #[arg(long)]
+        code: Option<String>,
+        /// leer = löschen
+        #[arg(long)]
+        text: Option<String>,
+    },
     /// Skript (Rhai) ausführen — nur lesende Funktionen am Auto (siehe beispiele/*.rhai)
     Skript {
         datei: PathBuf,
@@ -1388,6 +1412,62 @@ fn main() -> Result<()> {
         Command::Fahrzeuge => fahrzeuge(),
         Command::Software => software(&be, &db, cli.fahrzeug.as_deref()),
         Command::Nachruestung { name, phase, notiz } => nachruestung(&be, &db, &name, &phase, &notiz, cli.fahrzeug.as_deref()),
+        Command::WertetexteLernen { blockmap, scan, address, nur_zeigen } => {
+            use ecu_werkbank::wertetexte;
+            let csv = std::fs::read(&blockmap).with_context(|| tr!("{a} lesen", a = blockmap.display()))?;
+            let anzeige = wertetexte::anzeige_aus_csv(&csv);
+            let roh = match (scan, address) {
+                (Some(p), _) => wertetexte::roh_aus_blockscan(&std::fs::read_to_string(&p).with_context(|| tr!("{a} lesen", a = p.display()))?),
+                (None, Some(a)) => {
+                    println!("{}", tr!("Lese alle Messwertblöcke von {a} (nur lesen) …", a = format!("{a:02X}")));
+                    ecu_werkbank::kwp::blockscan(&be, a as u8, 1, 255, |_| {})?
+                        .iter()
+                        .flat_map(|(b, v)| v.iter().enumerate().map(move |(i, w)| (*b, i as u8 + 1, w.formula, w.a, w.b)).collect::<Vec<_>>())
+                        .collect()
+                }
+                (None, None) => anyhow::bail!(tr!("--scan <datei> oder --address <adresse> angeben")),
+            };
+            let g = wertetexte::lernen(&roh, &anzeige);
+            for (k, t) in &g.eindeutig {
+                println!("  {k}  →  {t}");
+            }
+            for (k, t) in &g.widerspruch {
+                println!("{}", tr!("  {k}  nicht eindeutig: {a} (nicht übernommen)", k = k, a = t.iter().cloned().collect::<Vec<_>>().join(" / ")));
+            }
+            if nur_zeigen {
+                println!("{}", tr!("{a} Texte gefunden, nichts gespeichert (--nur-zeigen).", a = g.eindeutig.len()));
+            } else {
+                let liste: Vec<(String, String)> = g.eindeutig.into_iter().collect();
+                wertetexte::mehrere_setzen(&liste)?;
+                println!("{}", tr!("{a} Texte gespeichert in {b} (nur auf diesem Rechner).", a = liste.len(), b = wertetexte::pfad().display()));
+            }
+            Ok(())
+        }
+        Command::Wertetext { code, text } => {
+            use ecu_werkbank::wertetexte;
+            match (code, text) {
+                (Some(c), Some(t)) => {
+                    let (f, a, b) = wertetexte::schluessel_lesen(&c).context(tr!("Code wie F25:02FD angeben"))?;
+                    let k = wertetexte::schluessel(f, a, b);
+                    wertetexte::mehrere_setzen(&[(k.clone(), t.clone())])?;
+                    println!("{}", if t.trim().is_empty() { tr!("{k} gelöscht.", k = k) } else { tr!("{k} → {t}", k = k, t = t.trim()) });
+                }
+                (Some(c), None) => {
+                    let (f, a, b) = wertetexte::schluessel_lesen(&c).context(tr!("Code wie F25:02FD angeben"))?;
+                    println!("{}  {}", wertetexte::schluessel(f, a, b), wertetexte::text(f, a, b).unwrap_or_else(|| tr!("(kein Text)")));
+                }
+                (None, _) => {
+                    let alle = wertetexte::alle();
+                    if alle.is_empty() {
+                        println!("{}", tr!("Noch keine eigenen Messwert-Texte. Lernen: ecu-werkbank wertetexte-lernen --blockmap … --scan …"));
+                    }
+                    for (k, t) in alle {
+                        println!("  {k}  {t}");
+                    }
+                }
+            }
+            Ok(())
+        }
         Command::Skript { datei } => {
             let code = std::fs::read_to_string(&datei).with_context(|| tr!("{a} lesen", a = datei.display()))?;
             let stopp = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));

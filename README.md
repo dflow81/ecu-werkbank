@@ -1068,6 +1068,21 @@ Datenpakete steht in `src/db/paket.rs`, ein Beispiel in
 `daten/community/vw/adressliste.toml`. Tippfehler im Paket werden gemeldet,
 nicht still übergangen. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
 
+### Texte für Messwerte mit Textnummer (TP 2.0)
+
+Manche Messwerte liefert das Steuergerät als Textnummer (Formel F25), ECUWerkbank zeigt
+dann „roh F25 02 FD“. Die passenden Wörter lassen sich aus einem Block-Export deines eigenen
+Werkstattgeräts am eigenen Auto lernen — abgeglichen mit dem, was ECUWerkbank selbst gelesen hat:
+
+```bash
+./target/release/ecu-werkbank kwp-blockscan --address 20 > bordnetz.txt
+./target/release/ecu-werkbank wertetexte-lernen --blockmap blockmap-09-….CSV --scan bordnetz.txt
+./target/release/ecu-werkbank wertetext --code F25:02FD --text normal     # oder von Hand
+```
+
+Übernommen wird nur, was überall gleich angezeigt wurde. Die Tabelle
+(`<Datenordner>/wertetexte.toml`) bleibt auf deinem Rechner und wird nie hochgeladen.
+
 ### Mitschnitt abspielen (nur vcan)
 
 ```bash

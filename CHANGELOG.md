@@ -24,6 +24,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
 - Datenpakete (TOML/JSON) und CSV übernehmen, alles Weitergebbare als Paket exportieren
   (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
+- **Eigene Texte für Messwerte mit Textnummer** (TP 2.0, Formel F25: „roh F25 02 FD“ → „normal“):
+  `wertetexte-lernen` gleicht den Block-Export des eigenen Werkstattgeräts mit den eigenen Rohwerten ab,
+  `wertetext` setzt einzelne von Hand. Die Tabelle bleibt nur auf diesem Rechner (`wertetexte.toml`).
 - **Armaturen frei belegbar:** je Instrument Rundinstrument, große Zahl oder Balken (Rechtsklick);
   Messwerte samt Darstellung als **Ansicht** speichern und laden (z. B. „Warmfahren“).
 - **Steuergerätebaum:** Gateway → Bus (Antrieb, Komfort, Infotainment …) → Steuergeräte, abgeglichen mit

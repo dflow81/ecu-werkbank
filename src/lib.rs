@@ -79,6 +79,7 @@ pub mod vcds;
 pub mod vehicle;
 pub mod verbauliste;
 pub mod web;
+pub mod wertetexte;
 pub mod wissen;
 pub mod zip;
 
