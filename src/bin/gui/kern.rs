@@ -209,6 +209,7 @@ impl App {
             scope_csv: None,
             scope_file: None,
             scope_gauges: tabsel == "armaturen",
+            ansicht_name: String::new(),
             scope_alarm_on: true,
             scope_alarm_text: String::new(),
             scope_alarm_until: None,

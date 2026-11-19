@@ -496,6 +496,8 @@ struct App {
     scope_csv: Option<CsvLog>,
     scope_file: Option<String>,
     scope_gauges: bool,
+    /// Name für „Als Ansicht speichern“
+    ansicht_name: String,
     scope_alarm_on: bool,
     scope_alarm_text: String,
     scope_alarm_until: Option<std::time::Instant>,
@@ -916,7 +918,11 @@ impl eframe::App for App {
                 }
             }
             "scope" | "armaturen" => {
-                self.scope_add_kwp_block_series();
+                // Bildschirmfoto: gespeicherte Ansicht (VAG_ANSICHT=Name), sonst ein Messwertblock
+                match std::env::var("VAG_ANSICHT").ok().and_then(|n| ecu_werkbank::ansichten::laden().into_iter().find(|a| a.name == n)) {
+                    Some(a) => self.scope_series = a.instrumente.iter().map(Series::aus_instrument).collect(),
+                    None => self.scope_add_kwp_block_series(),
+                }
                 self.scope_start_stop();
             }
             "pdf" => {
@@ -1422,6 +1428,8 @@ struct Series {
     soll: Option<ecu_werkbank::limits::Range>,
     soll_checked: bool,
     alarmed: bool,
+    /// Darstellung in den Armaturen
+    anzeige: ecu_werkbank::ansichten::Anzeige,
 }
 
 impl Series {
@@ -1436,7 +1444,33 @@ impl Series {
             soll: None,
             soll_checked: false,
             alarmed: false,
+            anzeige: Default::default(),
         }
+    }
+
+    /// Quelle zum Speichern in einer Ansicht (CSV-Kurven lassen sich nicht speichern).
+    fn quelle(&self) -> Option<ecu_werkbank::ansichten::Quelle> {
+        use ecu_werkbank::ansichten::Quelle;
+        Some(match &self.kind {
+            ChanKind::Obd(pid) => Quelle::Obd { pid: *pid },
+            ChanKind::Kwp { addr, block, field } => Quelle::Kwp { adresse: *addr, block: *block, feld: *field },
+            ChanKind::Did { tx, rx, did } => Quelle::Did { tx: *tx, rx: *rx, did: *did },
+            ChanKind::Can { id, signal } => Quelle::Can { id: *id, signal: signal.clone() },
+            ChanKind::File => return None,
+        })
+    }
+
+    fn aus_instrument(i: &ecu_werkbank::ansichten::Instrument) -> Self {
+        use ecu_werkbank::ansichten::Quelle;
+        let kind = match &i.quelle {
+            Quelle::Obd { pid } => ChanKind::Obd(*pid),
+            Quelle::Kwp { adresse, block, feld } => ChanKind::Kwp { addr: *adresse, block: *block, field: *feld },
+            Quelle::Did { tx, rx, did } => ChanKind::Did { tx: *tx, rx: *rx, did: *did },
+            Quelle::Can { id, signal } => ChanKind::Can { id: *id, signal: signal.clone() },
+        };
+        let mut s = Self::new(&i.name, &i.einheit, kind);
+        s.anzeige = i.anzeige;
+        s
     }
 
     fn label(&self) -> String {
@@ -1527,9 +1561,76 @@ fn notify(title: &str, body: &str) {
 }
 
 /// Rundinstrument für eine Kurve.
-fn draw_gauge(ui: &mut egui::Ui, s: &Series) {
+/// Ein Instrument in der gewählten Darstellung; Rechtsklick wechselt sie.
+fn draw_instrument(ui: &mut egui::Ui, s: &mut Series) {
+    use ecu_werkbank::ansichten::Anzeige;
+    let r = match s.anzeige {
+        Anzeige::Rund => draw_gauge(ui, s),
+        Anzeige::Zahl => draw_zahl(ui, s),
+        Anzeige::Balken => draw_balken(ui, s),
+    };
+    r.on_hover_text(tr!("Rechtsklick: Darstellung wählen")).context_menu(|ui| {
+        for a in Anzeige::ALLE {
+            if ui.selectable_label(s.anzeige == a, a.text()).clicked() {
+                s.anzeige = a;
+                ui.close_menu();
+            }
+        }
+    });
+}
+
+fn wert_text(v: Option<f64>) -> String {
+    v.map(|v| if v.abs() >= 100.0 { format!("{v:.0}") } else { format!("{v:.1}") }).unwrap_or_else(|| "—".into())
+}
+
+/// Große Zahl mit Name und Einheit.
+fn draw_zahl(ui: &mut egui::Ui, s: &Series) -> egui::Response {
+    use egui::{pos2, vec2, Color32};
+    let (rect, resp) = ui.allocate_exact_size(vec2(190.0, 110.0), egui::Sense::click());
+    let p = ui.painter_at(rect);
+    let dark = ui.visuals().dark_mode;
+    p.rect_filled(rect.shrink(3.0), 12.0, if dark { Color32::from_gray(30) } else { Color32::from_gray(238) });
+    let col = s.state().map(stufe_color).unwrap_or(if dark { Color32::from_rgb(130, 190, 255) } else { Color32::from_rgb(30, 90, 170) });
+    let txt = if dark { Color32::WHITE } else { Color32::BLACK };
+    p.text(pos2(rect.center().x, rect.top() + 16.0), egui::Align2::CENTER_CENTER, &s.name, egui::FontId::proportional(13.0), txt);
+    p.text(rect.center() + vec2(0.0, 6.0), egui::Align2::CENTER_CENTER, wert_text(s.points.back().map(|q| q[1])), egui::FontId::proportional(40.0), col);
+    p.text(pos2(rect.center().x, rect.bottom() - 14.0), egui::Align2::CENTER_CENTER, &s.unit, egui::FontId::proportional(12.0), Color32::GRAY);
+    resp
+}
+
+/// Waagerechter Balken (Bereich wie beim Rundinstrument: Sollwert oder beobachtet).
+fn draw_balken(ui: &mut egui::Ui, s: &Series) -> egui::Response {
+    use egui::{pos2, vec2, Color32, Rect};
+    let (rect, resp) = ui.allocate_exact_size(vec2(390.0, 70.0), egui::Sense::click());
+    let p = ui.painter_at(rect);
+    let dark = ui.visuals().dark_mode;
+    p.rect_filled(rect.shrink(3.0), 10.0, if dark { Color32::from_gray(30) } else { Color32::from_gray(238) });
+    let (omin, omax) = s.points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), q| (a.min(q[1]), b.max(q[1])));
+    let (lo, hi) = match s.soll.map(|r| (r.min, r.max)) {
+        Some((Some(a), Some(b))) => (a - (b - a).abs() * 0.25, b + (b - a).abs() * 0.25),
+        _ if omin.is_finite() => (omin.min(0.0), if omax > omin { omax } else { omin + 1.0 }),
+        _ => (0.0, 1.0),
+    };
+    let cur = s.points.back().map(|q| q[1]);
+    let f = cur.map(|v| ((v - lo) / (hi - lo).max(1e-9)).clamp(0.0, 1.0) as f32).unwrap_or(0.0);
+    let col = s.state().map(stufe_color).unwrap_or(if dark { Color32::from_rgb(130, 190, 255) } else { Color32::from_rgb(30, 90, 170) });
+    let txt = if dark { Color32::WHITE } else { Color32::BLACK };
+    p.text(pos2(rect.left() + 14.0, rect.top() + 16.0), egui::Align2::LEFT_CENTER, &s.name, egui::FontId::proportional(13.0), txt);
+    p.text(pos2(rect.right() - 14.0, rect.top() + 16.0), egui::Align2::RIGHT_CENTER, format!("{} {}", wert_text(cur), s.unit), egui::FontId::proportional(16.0), col);
+    let bahn = Rect::from_min_size(pos2(rect.left() + 14.0, rect.top() + 34.0), vec2(rect.width() - 28.0, 18.0));
+    p.rect_filled(bahn, 4.0, Color32::from_gray(if dark { 60 } else { 200 }));
+    if let Some(rg) = s.soll {
+        let (a, b) = rg.as_pair();
+        let x = |v: f64| bahn.left() + bahn.width() * ((v - lo) / (hi - lo).max(1e-9)).clamp(0.0, 1.0) as f32;
+        p.rect_filled(Rect::from_min_max(pos2(x(a), bahn.bottom() - 4.0), pos2(x(b), bahn.bottom())), 0.0, Color32::from_rgb(60, 150, 85));
+    }
+    p.rect_filled(Rect::from_min_size(bahn.min, vec2(bahn.width() * f, bahn.height() - 4.0)), 4.0, col);
+    resp
+}
+
+fn draw_gauge(ui: &mut egui::Ui, s: &Series) -> egui::Response {
     use egui::{pos2, vec2, Color32, Stroke};
-    let (rect, _) = ui.allocate_exact_size(vec2(190.0, 170.0), egui::Sense::hover());
+    let (rect, resp) = ui.allocate_exact_size(vec2(190.0, 170.0), egui::Sense::click());
     let p = ui.painter_at(rect);
     let dark = ui.visuals().dark_mode;
     p.rect_filled(rect.shrink(3.0), 12.0, if dark { Color32::from_gray(30) } else { Color32::from_gray(238) });
@@ -1583,6 +1684,7 @@ fn draw_gauge(ui: &mut egui::Ui, s: &Series) {
     let fmt = |v: f64| if v.abs() >= 100.0 { format!("{v:.0}") } else { format!("{v:.1}") };
     p.text(pt(ang(0.0), r + 2.0) + vec2(8.0, 12.0), egui::Align2::CENTER_CENTER, fmt(lo), egui::FontId::proportional(10.0), Color32::GRAY);
     p.text(pt(ang(1.0), r + 2.0) + vec2(-8.0, 12.0), egui::Align2::CENTER_CENTER, fmt(hi), egui::FontId::proportional(10.0), Color32::GRAY);
+    resp
 }
 
 // ---------------------------------------------------------------------------

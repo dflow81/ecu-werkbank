@@ -24,6 +24,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   erscheinen überall (GUI, Befehle) — nach den eigenen Labels, vor der eingebauten Liste.
 - Datenpakete (TOML/JSON) und CSV übernehmen, alles Weitergebbare als Paket exportieren
   (`db paket`, `db csv`, `db export`); mitgelieferte Community-Daten unter `daten/community/`.
+- **Armaturen frei belegbar:** je Instrument Rundinstrument, große Zahl oder Balken (Rechtsklick);
+  Messwerte samt Darstellung als **Ansicht** speichern und laden (z. B. „Warmfahren“).
 - **Steuergerätebaum:** Gateway → Bus (Antrieb, Komfort, Infotainment …) → Steuergeräte, abgeglichen mit
   dem letzten Scan — zeigt, was laut Gateway verbaut ist, aber nicht antwortet.
 - **29-Bit-CAN-Adressen** (ISO 15765-4, z. B. `18DA10F1`): SocketCAN, ELM327 und Simulation;

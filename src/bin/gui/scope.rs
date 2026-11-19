@@ -519,9 +519,59 @@ impl App {
         d.alarm = self.scope_alarm_text.clone();
     }
 
+    /// Gespeicherte Ansichten: Messwerte + Darstellung laden, speichern, löschen.
+    fn ui_ansichten(&mut self, ui: &mut egui::Ui) {
+        use ecu_werkbank::ansichten::{self, Ansicht, Instrument};
+        let alle = ansichten::laden();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("Ansicht:"));
+            let mut laden = None;
+            egui::ComboBox::from_id_source("ansicht_laden")
+                .selected_text(if alle.is_empty() { tr!("— noch keine —") } else { tr!("laden…") })
+                .show_ui(ui, |ui| {
+                    for a in &alle {
+                        if ui.selectable_label(false, format!("{}  ({})", a.name, a.instrumente.len())).clicked() {
+                            laden = Some(a.clone());
+                        }
+                    }
+                });
+            if let Some(a) = laden {
+                if self.scope_running {
+                    self.status = tr!("Erst die laufende Messung stoppen.");
+                } else {
+                    self.scope_series = a.instrumente.iter().map(Series::aus_instrument).collect();
+                    self.scope_file = None;
+                    self.ansicht_name = a.name.clone();
+                    self.status = tr!("Ansicht „{a}“ geladen — „Start“ drücken.", a = a.name);
+                }
+            }
+            ui.add(egui::TextEdit::singleline(&mut self.ansicht_name).desired_width(150.0).hint_text(tr!("Name, z. B. Warmfahren")));
+            let instrumente: Vec<Instrument> = self
+                .scope_series
+                .iter()
+                .filter_map(|s| s.quelle().map(|q| Instrument { name: s.name.clone(), einheit: s.unit.clone(), quelle: q, anzeige: s.anzeige }))
+                .collect();
+            let name = self.ansicht_name.trim().to_string();
+            if ui.add_enabled(!name.is_empty() && !instrumente.is_empty(), egui::Button::new(tr!("💾 Speichern"))).on_hover_text(tr!("Aktuelle Messwerte und ihre Darstellung unter diesem Namen speichern")).clicked() {
+                let n = instrumente.len();
+                self.status = match ansichten::speichern(Ansicht { name: name.clone(), instrumente }) {
+                    Ok(()) => tr!("Ansicht „{a}“ gespeichert ({n} Instrumente).", a = name, n = n),
+                    Err(e) => tr!("Ansicht: {e}", e = format!("{e:#}")),
+                };
+            }
+            if alle.iter().any(|a| a.name == name) && ui.small_button("🗑").on_hover_text(tr!("Diese Ansicht löschen")).clicked() {
+                self.status = match ansichten::entfernen(&name) {
+                    Ok(()) => tr!("Ansicht „{a}“ gelöscht.", a = name),
+                    Err(e) => tr!("Ansicht: {e}", e = format!("{e:#}")),
+                };
+            }
+        });
+    }
+
     pub(super) fn ui_scope(&mut self, ui: &mut egui::Ui) {
         self.scope_namen_auffrischen();
         ui.heading(tr!("Scope — Live-Grafik"));
+        self.ui_ansichten(ui);
         ui.horizontal_wrapped(|ui| {
             let btn = if self.scope_running { tr!("⏹ Stop") } else { tr!("▶ Start") };
             if ui.add_enabled(!self.scope_series.is_empty(), egui::Button::new(btn)).clicked() {
@@ -570,7 +620,7 @@ impl App {
                 .on_hover_text(tr!("Jede Kurve auf ihren eigenen Bereich skalieren — so lassen sich Werte mit verschiedenen Einheiten vergleichen."));
         });
         ui.horizontal_wrapped(|ui| {
-            ui.toggle_value(&mut self.scope_gauges, tr!("🕓 Armaturen")).on_hover_text(tr!("Große Rundinstrumente statt Grafik"));
+            ui.toggle_value(&mut self.scope_gauges, tr!("🕓 Armaturen")).on_hover_text(tr!("Instrumente statt Grafik — Rechtsklick auf ein Instrument wählt Rundinstrument, große Zahl oder Balken"));
             ui.checkbox(&mut self.scope_alarm_on, tr!("⚠ Warnen bei Grenzwert"))
                 .on_hover_text(tr!("Ton + Meldung bei Überschreitung des Sollwerts; zeichnet automatisch die 30 s davor und danach auf."));
             let was = self.trip_on;
@@ -750,8 +800,8 @@ impl App {
         if self.scope_gauges {
             egui::ScrollArea::vertical().id_source("gauges").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    for s in self.scope_series.iter().filter(|s| s.visible) {
-                        draw_gauge(ui, s);
+                    for s in self.scope_series.iter_mut().filter(|s| s.visible) {
+                        draw_instrument(ui, s);
                     }
                 });
             });
