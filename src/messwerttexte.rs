@@ -1,6 +1,6 @@
 //! Eigene Texte zu Messwertblöcken (TP 2.0 / KWP): Name des Blocks und jedes
 //! Felds, einmal eingetragen und danach in GUI, Terminal, Testlauf und
-//! Kurven genutzt (`<Datenordner>/messwerttexte.toml`).
+//! Kurven genutzt (Fahrzeug-Datenbank, Bereich „messwert“; früher `messwerttexte.toml`).
 //!
 //! Ohne eigenen Text zeigt ECUWerkbank eine Art aus der Umrechnungsformel
 //! (Drehzahl, Temperatur, Spannung …). Die sagt nur, *was für ein* Wert es
@@ -8,12 +8,8 @@
 
 use crate::kwp::BlockValue;
 use crate::tr;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::BTreeMap;
-
-fn path() -> std::path::PathBuf {
-    crate::history::data_dir().join("messwerttexte.toml")
-}
 
 /// Schlüssel: „01-001“ für den Block, „01-001-3“ für Feld 3 (Adresse hex, Block dezimal).
 pub fn schluessel(adresse: u8, block: u8, feld: Option<u8>) -> String {
@@ -25,39 +21,17 @@ pub fn schluessel(adresse: u8, block: u8, feld: Option<u8>) -> String {
 
 /// Alle eigenen Texte.
 pub fn alle() -> BTreeMap<String, String> {
-    std::fs::read_to_string(path()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::db::eigen::alle("messwert")
 }
 
 /// Text setzen (`feld` None = Name des Blocks); leerer Text löscht.
 pub fn setzen(adresse: u8, block: u8, feld: Option<u8>, text: &str) -> Result<()> {
-    let mut m = alle();
-    let k = schluessel(adresse, block, feld);
-    if text.trim().is_empty() {
-        m.remove(&k);
-    } else {
-        m.insert(k, text.trim().to_string());
-    }
-    let p = path();
-    std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::db::eigen::setzen("messwert", &[(schluessel(adresse, block, feld), text.to_string())])
 }
 
 /// Mehrere Texte auf einmal (Schlüssel wie [`schluessel`]); leerer Text löscht.
 pub fn mehrere_setzen(liste: &[(String, String)]) -> Result<()> {
-    if liste.is_empty() {
-        return Ok(());
-    }
-    let mut m = alle();
-    for (k, t) in liste {
-        if t.trim().is_empty() {
-            m.remove(k);
-        } else {
-            m.insert(k.clone(), t.trim().to_string());
-        }
-    }
-    let p = path();
-    std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::db::eigen::setzen("messwert", liste)
 }
 
 /// Art des Werts aus der Umrechnungsformel (nur grob).

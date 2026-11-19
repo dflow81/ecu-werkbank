@@ -12,12 +12,8 @@
 
 use crate::labels::Coding;
 use crate::tr;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::BTreeMap;
-
-fn path() -> std::path::PathBuf {
-    crate::history::data_dir().join("codiertexte.toml")
-}
 
 /// Text-Schlüssel eines TP-2.0-Steuergeräts: 0x200 + Adresse (Bordnetz 0x20 →
 /// „220“). Kollidiert nicht mit UDS-IDs (0x7xx).
@@ -35,21 +31,12 @@ pub fn schluessel(tx: u16, byte: usize, bit: Option<u8>) -> String {
 
 /// Alle eigenen Texte.
 pub fn alle() -> BTreeMap<String, String> {
-    std::fs::read_to_string(path()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::db::eigen::alle("codier")
 }
 
 /// Text setzen (`bit` None = Text zum ganzen Byte); leerer Text löscht.
 pub fn setzen(tx: u16, byte: usize, bit: Option<u8>, text: &str) -> Result<()> {
-    let mut m = alle();
-    let k = schluessel(tx, byte, bit);
-    if text.trim().is_empty() {
-        m.remove(&k);
-    } else {
-        m.insert(k, text.trim().to_string());
-    }
-    let p = path();
-    std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::db::eigen::setzen("codier", &[(schluessel(tx, byte, bit), text.to_string())])
 }
 
 /// Geänderte Bits von `alt` nach `neu`: (Byte, Bit, alt, neu).

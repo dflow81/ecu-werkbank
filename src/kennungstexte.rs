@@ -6,13 +6,9 @@
 //! Request-CAN-ID (714 = Kombi), TP-2.0-Steuergeräte als 200 + Adresse
 //! (Bordnetz 20 → 220) — wie bei den Codier-Texten.
 
-use crate::tr;
-use anyhow::{Context, Result};
-use std::collections::BTreeMap;
 
-fn path() -> std::path::PathBuf {
-    crate::history::data_dir().join("kennungstexte.toml")
-}
+use anyhow::Result;
+use std::collections::BTreeMap;
 
 /// Schlüssel-Teil für ein gesichertes Steuergerät.
 pub fn geraet(g: &crate::anpassung::Geraet) -> u16 {
@@ -28,25 +24,12 @@ pub fn schluessel(geraet: u16, did: u16) -> String {
 }
 
 pub fn alle() -> BTreeMap<String, String> {
-    std::fs::read_to_string(path()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::db::eigen::alle("kennung")
 }
 
 /// Mehrere Namen setzen; leerer Text löscht den Eintrag.
 pub fn mehrere_setzen(liste: &[(String, String)]) -> Result<()> {
-    if liste.is_empty() {
-        return Ok(());
-    }
-    let mut m = alle();
-    for (k, t) in liste {
-        if t.trim().is_empty() {
-            m.remove(k);
-        } else {
-            m.insert(k.clone(), t.trim().to_string());
-        }
-    }
-    let p = path();
-    std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::db::eigen::setzen("kennung", liste)
 }
 
 #[cfg(test)]

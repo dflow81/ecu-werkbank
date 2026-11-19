@@ -1,14 +1,14 @@
 //! Eigene Texte für Messwerte, die das Steuergerät als **Textnummer** liefert
 //! (TP 2.0, Formel 0x25: „roh F25 02 FD“ → „normal“).
 //!
-//! Die Tabelle gehört dem Nutzer: `<Datenordner>/wertetexte.toml`. Sie wird
+//! Die Tabelle gehört dem Nutzer: Fahrzeug-Datenbank, Bereich „wert“ (früher `wertetexte.toml`). Sie wird
 //! nie mit dem Programm ausgeliefert und nie hochgeladen. Füllen lässt sie sich
 //! von Hand (`wertetext`) oder durch Abgleich: was das eigene Werkstattgerät am
 //! eigenen Auto angezeigt hat (Export der Messwertblöcke als CSV) gegen die
 //! Rohwerte, die ECUWerkbank zur selben Zeit gelesen hat (`wertetexte-lernen`).
 //! Übernommen wird eine Zuordnung nur, wenn sie überall gleich ist.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::RwLock;
@@ -18,12 +18,13 @@ pub fn schluessel(formel: u8, a: u8, b: u8) -> String {
     format!("F{formel:02X}:{a:02X}{b:02X}")
 }
 
+/// Wo die Tabelle liegt (Fahrzeug-Datenbank, Bereich „wert“).
 pub fn pfad() -> PathBuf {
-    crate::history::data_dir().join("wertetexte.toml")
+    crate::db::standard_pfad()
 }
 
 fn datei_laden() -> BTreeMap<String, String> {
-    std::fs::read_to_string(pfad()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::db::eigen::alle("wert")
 }
 
 static TABELLE: RwLock<Option<BTreeMap<String, String>>> = RwLock::new(None);
@@ -50,23 +51,9 @@ pub fn alle() -> BTreeMap<String, String> {
 
 /// Texte speichern (leerer Text löscht den Eintrag) und die Anzeige auffrischen.
 pub fn mehrere_setzen(liste: &[(String, String)]) -> Result<()> {
-    let mut t = datei_laden();
-    for (k, v) in liste {
-        if v.trim().is_empty() {
-            t.remove(k);
-        } else {
-            t.insert(k.clone(), v.trim().to_string());
-        }
-    }
-    let p = pfad();
-    if let Some(d) = p.parent() {
-        std::fs::create_dir_all(d)?;
-    }
-    let mut text = String::from("# Eigene Texte für Messwerte (Textnummern). Nur auf diesem Rechner — nicht weitergeben.\n");
-    text.push_str(&toml::to_string(&t)?);
-    std::fs::write(&p, text).with_context(|| crate::tr!("{a} schreiben", a = p.display()))?;
+    crate::db::eigen::setzen("wert", liste)?;
     if let Ok(mut g) = TABELLE.write() {
-        *g = Some(t);
+        *g = Some(datei_laden());
     }
     Ok(())
 }

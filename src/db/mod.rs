@@ -15,11 +15,12 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 pub mod api;
+pub mod eigen;
 pub mod odx;
 pub mod paket;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
-const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql")];
+const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql")];
 
 /// Aktuelle Schema-Version dieses Programms.
 pub const SCHEMA_VERSION: u32 = MIGRATIONEN.len() as u32;

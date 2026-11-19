@@ -1,14 +1,10 @@
 //! Eigene Fehlertexte: Klartext zu einem Fehlercode, einmal eingetragen und
-//! danach in allen Anzeigen und Berichten genutzt (`<Datenordner>/fehlertexte.toml`).
+//! danach in allen Anzeigen und Berichten genutzt (Fahrzeug-Datenbank, Bereich „fehler“; früher `fehlertexte.toml`).
 //! Gilt vor den Label-Dateien und der eingebauten OBD-Liste.
 
 use crate::tr;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::BTreeMap;
-
-fn path() -> std::path::PathBuf {
-    crate::history::data_dir().join("fehlertexte.toml")
-}
 
 /// Code vereinheitlichen: Großbuchstaben, ohne Leerzeichen.
 pub fn norm(code: &str) -> String {
@@ -17,7 +13,7 @@ pub fn norm(code: &str) -> String {
 
 /// Alle eigenen Texte (Code → Text).
 pub fn alle() -> BTreeMap<String, String> {
-    std::fs::read_to_string(path()).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
+    crate::db::eigen::alle("fehler")
 }
 
 /// Text setzen; leerer Text löscht den Eintrag.
@@ -26,32 +22,13 @@ pub fn setzen(code: &str, text: &str) -> Result<()> {
     if code.is_empty() {
         anyhow::bail!(tr!("kein Fehlercode angegeben"));
     }
-    let mut m = alle();
-    if text.trim().is_empty() {
-        m.remove(&code);
-    } else {
-        m.insert(code, text.trim().to_string());
-    }
-    let p = path();
-    std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    crate::db::eigen::setzen("fehler", &[(code, text.to_string())])
 }
 
 /// Mehrere Texte auf einmal setzen (leere werden übersprungen).
 pub fn mehrere_setzen(liste: &[(String, String)]) -> Result<()> {
-    if liste.is_empty() {
-        return Ok(());
-    }
-    let mut m = alle();
-    for (c, t) in liste {
-        let (c, t) = (norm(c), t.trim());
-        if !c.is_empty() && !t.is_empty() {
-            m.insert(c, t.to_string());
-        }
-    }
-    let p = path();
-    std::fs::create_dir_all(p.parent().expect("hat Eltern"))?;
-    std::fs::write(&p, toml::to_string(&m)?).with_context(|| tr!("Schreiben: {a}", a = p.display()))
+    let liste: Vec<(String, String)> = liste.iter().map(|(c, t)| (norm(c), t.trim().to_string())).filter(|(c, t)| !c.is_empty() && !t.is_empty()).collect();
+    crate::db::eigen::setzen("fehler", &liste)
 }
 
 #[cfg(test)]
