@@ -3,41 +3,51 @@
 use super::*;
 
 impl App {
-    pub(super) fn label_files(&self) -> Vec<PathBuf> {
-        let mut v = Vec::new();
-        let mut stack = vec![self.labels_dir.clone()];
-        while let Some(d) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&d) else { continue };
-            for e in rd.flatten() {
-                let p = e.path();
-                if p.is_dir() {
-                    stack.push(p);
-                } else if p.extension().and_then(|x| x.to_str()) == Some("toml") {
-                    v.push(p);
-                }
-            }
-        }
-        v.sort();
-        v
+    /// Eigene Labels aus der Datenbank: (id, Anzeige „09  Bordnetz“).
+    pub(super) fn label_liste(&self) -> Vec<(i64, String)> {
+        ecu_werkbank::db::eigen::mit_db(|db| db.eigene_labels())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(id, l)| {
+                let a = l.ecu.address.map(|a| format!("{a:02X}")).unwrap_or_else(|| "—".into());
+                let n = if l.ecu.name.is_empty() { tr!("(ohne Namen)") } else { l.ecu.name.clone() };
+                (id, format!("{a}  {n}"))
+            })
+            .collect()
     }
 
+    fn ed_anzeigen(&mut self, id: Option<i64>, f: LabelFile) {
+        let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
+        self.ed_addr = h(f.ecu.address);
+        self.ed_tx = h(f.ecu.tx);
+        self.ed_rx = h(f.ecu.rx);
+        self.ed_file = f;
+        self.ed_id = Some(id);
+        self.ed_loeschen = false;
+    }
+
+    /// Eintrag aus der Datenbank öffnen.
+    pub(super) fn ed_oeffnen(&mut self, id: i64) {
+        match ecu_werkbank::db::eigen::mit_db(|db| db.eigene_labels()).map(|l| l.into_iter().find(|(i, _)| *i == id)) {
+            Ok(Some((id, f))) => self.ed_anzeigen(Some(id), f),
+            Ok(None) => self.status = tr!("Eintrag nicht mehr vorhanden."),
+            Err(e) => self.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
+        }
+    }
+
+    /// Label-Datei (z. B. hineingezogen) als neuen, noch nicht gespeicherten Eintrag öffnen.
     pub(super) fn ed_open(&mut self, path: PathBuf) {
         match LabelFile::load(&path) {
             Ok(f) => {
-                let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
-                self.ed_addr = h(f.ecu.address);
-                self.ed_tx = h(f.ecu.tx);
-                self.ed_rx = h(f.ecu.rx);
-                self.ed_file = f;
-                self.status = tr!("Geöffnet: {a}", a = path.display());
-                self.ed_path = Some(path);
+                self.ed_anzeigen(None, f);
+                self.status = tr!("{a} geöffnet — mit „Speichern“ in die Datenbank übernehmen.", a = path.display());
             }
             Err(e) => self.status = tr!("Fehler: {e}", e = format!("{:#}", e)),
         }
     }
 
     pub(super) fn ed_save(&mut self) {
-        let Some(path) = self.ed_path.clone() else { return };
+        let Some(id) = self.ed_id else { return };
         let opt = |s: &str| -> Result<Option<u16>, ()> {
             if s.trim().is_empty() { Ok(None) } else { parse_hex(s).map(Some).ok_or(()) }
         };
@@ -48,22 +58,12 @@ impl App {
         self.ed_file.ecu.address = a;
         self.ed_file.ecu.tx = t;
         self.ed_file.ecu.rx = r;
-        let text = self.ed_file.to_toml();
-        if let Err(e) = ecu_werkbank::labels::LabelDb::check_file(&text) {
-            self.status = tr!("Nicht gespeichert, Datei wäre ungültig: {e}", e = e);
-            return;
-        }
-        let res = (|| -> anyhow::Result<()> {
-            if path.exists() {
-                std::fs::copy(&path, path.with_extension("toml.bak"))?;
-            }
-            std::fs::write(&path, text)?;
-            Ok(())
-        })();
-        match res {
-            Ok(()) => {
+        let f = self.ed_file.clone();
+        match ecu_werkbank::db::eigen::mit_db(|db| db.label_speichern(id, &f)) {
+            Ok(neu) => {
+                self.ed_id = Some(Some(neu));
                 self.reload_labels();
-                self.status = tr!("Gespeichert: {a} (Sicherung: .toml.bak)", a = path.display());
+                self.status = tr!("Gespeichert (Fahrzeug-Datenbank).");
             }
             Err(e) => self.status = tr!("Speichern fehlgeschlagen: {e}", e = format!("{:#}", e)),
         }
@@ -100,93 +100,98 @@ impl App {
                 _ => (None, None),
             };
             let lf = ecu_werkbank::labels::skelett(addr, &m.name, m.ident.first().map(String::as_str), tx, rx);
-            let basis = ecu_werkbank::labels::dateiname(addr, &m.name);
-            let mut p = self.labels_dir.join(format!("{basis}.toml"));
-            let mut n = 2;
-            while p.exists() {
-                p = self.labels_dir.join(format!("{basis}-{n}.toml"));
-                n += 1;
-            }
-            if std::fs::write(&p, lf.to_toml()).is_ok() {
-                angelegt.push(p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
+            if ecu_werkbank::db::eigen::mit_db(|db| db.label_speichern(None, &lf)).is_ok() {
+                angelegt.push(format!("{addr:02X} {}", m.name));
             }
         }
         if angelegt.is_empty() {
             self.status = if ohne_adresse > 0 {
-                tr!("Nichts angelegt — alle Steuergeräte haben schon eine Datei ({a} ohne Adresse übersprungen).", a = ohne_adresse)
+                tr!("Nichts angelegt — alle Steuergeräte haben schon einen Eintrag ({a} ohne Adresse übersprungen).", a = ohne_adresse)
             } else {
-                tr!("Nichts angelegt — alle Steuergeräte aus dem Scan haben schon eine Label-Datei.")
+                tr!("Nichts angelegt — alle Steuergeräte aus dem Scan haben schon einen Eintrag.")
             };
         } else {
             self.reload_labels();
-            self.status = tr!("{a} Label-Datei(en) aus dem Scan angelegt: {b}", a = angelegt.len(), b = angelegt.join(", "));
+            self.status = tr!("{a} Einträge aus dem Scan angelegt: {b}", a = angelegt.len(), b = angelegt.join(", "));
         }
     }
 
     pub(super) fn ui_editor(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("Label-Editor"));
-        ui.label(tr!("Eigene Klartexte für Steuergeräte, Fehlercodes und Messwerte pflegen. Beim Speichern wird eine Sicherung (.toml.bak) angelegt; Kommentare in der Datei gehen dabei verloren."));
-        ui.horizontal(|ui| {
-            let current = self
-                .ed_path
-                .as_ref()
-                .and_then(|p| p.strip_prefix(&self.labels_dir).ok().map(|r| r.display().to_string()))
-                .unwrap_or_else(|| tr!("— Datei wählen —"));
+        ui.label(tr!("Eigene Klartexte für Steuergeräte, Fehlercodes und Messwerte pflegen. Gespeichert wird in der Fahrzeug-Datenbank; „Als Datei“ schreibt einen Eintrag zum Weitergeben oder Sichern."));
+        ui.horizontal_wrapped(|ui| {
+            let liste = self.label_liste();
+            let current = match self.ed_id {
+                Some(Some(id)) => liste.iter().find(|(i, _)| *i == id).map(|(_, n)| n.clone()).unwrap_or_default(),
+                Some(None) => tr!("(neu, noch nicht gespeichert)"),
+                None => tr!("— Steuergerät wählen —"),
+            };
             let mut pick = None;
             egui::ComboBox::from_id_source("edfile").selected_text(current).width(260.0).show_ui(ui, |ui| {
-                for p in self.label_files() {
-                    let name = p.strip_prefix(&self.labels_dir).unwrap_or(&p).display().to_string();
-                    if ui.selectable_label(self.ed_path.as_ref() == Some(&p), name).clicked() {
-                        pick = Some(p);
+                for (id, name) in &liste {
+                    if ui.selectable_label(self.ed_id == Some(Some(*id)), name).clicked() {
+                        pick = Some(*id);
                     }
                 }
             });
-            if let Some(p) = pick {
-                self.ed_open(p);
+            if let Some(id) = pick {
+                self.ed_oeffnen(id);
             }
-            ui.separator();
-            ui.add_sized([110.0, 20.0], egui::TextEdit::singleline(&mut self.ed_new_name).hint_text(tr!("neue-datei")));
             if ui.button(tr!("+ Neu")).clicked() {
-                let name: String = self.ed_new_name.trim().chars().filter(|c| c.is_alphanumeric() || "-_".contains(*c)).collect();
-                if name.is_empty() {
-                    self.status = tr!("Dateinamen eingeben (Buchstaben, Ziffern, - _).");
-                } else {
-                    let p = self.labels_dir.join(format!("{name}.toml"));
-                    if p.exists() {
-                        self.status = tr!("{a} gibt es schon.", a = p.display());
-                    } else {
-                        self.ed_file = LabelFile::default();
-                        self.ed_addr.clear();
-                        self.ed_tx.clear();
-                        self.ed_rx.clear();
-                        self.ed_path = Some(p);
-                        self.status = tr!("Neue Datei — ausfüllen und speichern.");
-                    }
-                }
+                self.ed_anzeigen(None, LabelFile::default());
+                self.status = tr!("Neuer Eintrag — ausfüllen und speichern.");
             }
-            ui.separator();
             if ui
                 .button(tr!("⬇ Aus letztem Scan anlegen"))
-                .on_hover_text(tr!("Legt für jedes Steuergerät aus dem letzten Scan des aktiven Fahrzeugs eine vorbefüllte Datei an (Adresse, Name, Teilenummer, CAN-IDs) — nur wo noch keine existiert. Überschreibt nichts."))
+                .on_hover_text(tr!("Legt für jedes Steuergerät aus dem letzten Scan des aktiven Fahrzeugs einen vorbefüllten Eintrag an (Adresse, Name, Teilenummer, CAN-IDs) — nur wo noch keiner existiert. Überschreibt nichts."))
                 .clicked()
             {
                 self.ed_aus_scan();
             }
         });
-        if self.ed_path.is_none() {
+        let Some(id) = self.ed_id else {
             ui.add_space(8.0);
-            ui.weak(tr!("Datei wählen oder neue anlegen."));
+            ui.weak(tr!("Steuergerät wählen oder neu anlegen. Eine Label-Datei kann auch ins Fenster gezogen werden."));
             return;
-        }
+        };
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button(tr!("💾 Speichern")).clicked() {
                 self.ed_save();
             }
             if ui.button(tr!("↺ Verwerfen")).clicked() {
-                if let Some(p) = self.ed_path.clone() {
-                    if p.exists() {
-                        self.ed_open(p);
+                match id {
+                    Some(id) => self.ed_oeffnen(id),
+                    None => self.ed_id = None,
+                }
+            }
+            if ui.button(tr!("📄 Als Datei…")).on_hover_text(tr!("Diesen Eintrag als Label-Datei (TOML) speichern — zum Weitergeben oder als Sicherung")).clicked() {
+                let name = format!("{}.toml", ecu_werkbank::labels::dateiname(self.ed_file.ecu.address.unwrap_or(0), &self.ed_file.ecu.name));
+                if let Some(p) = rfd::FileDialog::new().add_filter("TOML", &["toml"]).set_file_name(&name).save_file() {
+                    self.status = match std::fs::write(&p, self.ed_file.to_toml()) {
+                        Ok(()) => tr!("Gespeichert: {a}", a = p.display()),
+                        Err(e) => tr!("Speichern fehlgeschlagen: {e}", e = e),
+                    };
+                }
+            }
+            if let Some(id) = id {
+                if !self.ed_loeschen {
+                    if ui.button(tr!("🗑 Löschen…")).clicked() {
+                        self.ed_loeschen = true;
+                    }
+                } else {
+                    ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Diesen Eintrag wirklich löschen?"));
+                    if ui.button(tr!("Ja, löschen")).clicked() {
+                        self.status = match ecu_werkbank::db::eigen::mit_db(|db| db.label_entfernen(id)) {
+                            Ok(_) => tr!("Eintrag gelöscht."),
+                            Err(e) => tr!("Löschen fehlgeschlagen: {e}", e = format!("{:#}", e)),
+                        };
+                        self.ed_id = None;
+                        self.ed_loeschen = false;
+                        self.reload_labels();
+                    }
+                    if ui.button(tr!("Abbrechen")).clicked() {
+                        self.ed_loeschen = false;
                     }
                 }
             }

@@ -113,6 +113,11 @@ pub fn sichern(ziel: &Path, behalten: usize) -> Result<(PathBuf, usize)> {
         bail!(tr!("Der Sicherungsordner darf nicht im Datenordner liegen — bitte z. B. einen USB-Stick oder Cloud-Ordner wählen."));
     }
     std::fs::create_dir_all(&daten)?;
+    // Fahrzeug-Datenbank: offene Änderungen in die Hauptdatei schreiben, damit die
+    // Kopie im ZIP für sich allein stimmig ist (sonst stünde ein Teil nur in *-wal)
+    if crate::db::standard_pfad().exists() {
+        crate::db::eigen::mit_db(|db| db.festschreiben()).context(tr!("Fahrzeug-Datenbank für die Sicherung vorbereiten"))?;
+    }
     let labels = crate::labels::nutzer_dir();
     let mut ordner: Vec<(&Path, &str)> = vec![(&daten, DATEN)];
     if labels.is_dir() {

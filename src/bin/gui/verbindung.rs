@@ -584,20 +584,17 @@ impl App {
                 ui.add_sized([50.0, 20.0], egui::TextEdit::singleline(&mut self.learn_addr));
                 ui.label(tr!("Name:"));
                 ui.add_sized([180.0, 20.0], egui::TextEdit::singleline(&mut self.learn_name));
-                if ui.button(tr!("💾 Als Label-Datei speichern")).clicked() {
+                if ui.button(tr!("💾 Als Label speichern")).clicked() {
                     let addr = parse_hex(&self.learn_addr).unwrap_or(0x01);
                     let text = ecu_werkbank::learn::als_label_datei(&self.learn, addr, &self.learn_name);
-                    match ecu_werkbank::labels::LabelDb::check_file(&text) {
-                        Ok(()) => {
-                            let p = self.labels_dir.join(ecu_werkbank::vehicle::stamped("gelernt", "toml"));
-                            match std::fs::write(&p, text) {
-                                Ok(()) => {
-                                    self.reload_labels();
-                                    self.status = tr!("Gespeichert: {a} — im Label-Editor Namen/Einheiten/Grenzen prüfen.", a = p.display());
-                                }
-                                Err(e) => self.status = format!("{e}"),
+                    match toml::from_str::<ecu_werkbank::labels::LabelFile>(&text) {
+                        Ok(lf) => match ecu_werkbank::db::eigen::mit_db(|db| db.label_speichern(None, &lf)) {
+                            Ok(_) => {
+                                self.reload_labels();
+                                self.status = tr!("Gespeichert (Fahrzeug-Datenbank) — im Label-Editor Namen/Einheiten/Grenzen prüfen.");
                             }
-                        }
+                            Err(e) => self.status = format!("{e:#}"),
+                        },
                         Err(e) => self.status = tr!("Vorschlag ungültig: {e}", e = e),
                     }
                 }

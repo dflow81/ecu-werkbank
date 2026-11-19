@@ -2578,11 +2578,11 @@ fn discover(iface: &str, seconds: u64) -> Result<()> {
 
 fn show_labels(dir: &std::path::Path, db: &LabelDb) -> Result<()> {
     let (ecus, dtcs, meas, coding) = db.len();
-    println!("{}", tr!("Label-Ordner: {a}", a = dir.display()));
+    println!("{}", tr!("Eigene Labels: Fahrzeug-Datenbank {a} (Label-Ordner {b} wurde einmal übernommen)", a = ecu_werkbank::db::standard_pfad().display(), b = dir.display()));
     println!("{}", tr!("Geladen: {ecus} Steuergerät(e), {dtcs} DTC-Text(e), {meas} Messwert(e), \
          {coding} Anpassung/Codierung.", ecus = ecus, dtcs = dtcs, meas = meas, coding = coding));
     if ecus + dtcs + meas + coding == 0 {
-        println!("{}", tr!("\nNoch keine Labels. Lege z. B. labels/beispiel.toml an (siehe README)."));
+        println!("{}", tr!("\nNoch keine Labels. In der GUI: Werkzeuge → Label-Editor (oder eine Label-Datei ins Fenster ziehen)."));
     }
     Ok(())
 }

@@ -1116,14 +1116,21 @@ Hinweis Golf 6: Am OBD-Stecker kommt durch das Gateway meist nur Diagnose-Verkeh
 sich auf der passenden Seite. Eine Datensicherung (`.zip`) wird dabei nicht
 zurückgespielt, das geht nur bewusst über „Fahrzeuge & Wartung“.
 
-## Eigene Label-Dateien (dein Inhalt)
+## Eigene Labels (dein Inhalt)
 
-Lege `*.toml`-Dateien in den Ordner `labels/` (eine pro Steuergerät). Format und
-Beispiel siehe [`labels/beispiel.toml`](labels/beispiel.toml) und das Modul
-[`src/labels.rs`](src/labels.rs). Für über 300 genormte Codes (P0xxx, P2xxx, U0xxx) sind **deutsche Grundtexte
-eingebaut** (eigene Formulierungen, `src/dtc_db.rs`); deine Label-Texte haben
-immer Vorrang. Bequemer im GUI-Reiter **„Label-Editor“** (Steuergerät, Fehlertexte, Messwerte;
-legt beim Speichern eine `.toml.bak`-Sicherung an). Damit bekommen DTCs Klartextnamen:
+Seit 0.4 liegen eigene Labels und alle eigenen Texte (Fehlertexte, Namen für
+Messwerte, Codier-Bits, Anpassungen, Messwert-Texte) **in der Fahrzeug-Datenbank**
+(`<Datenordner>/fahrzeugdaten.sqlite`). Bearbeitet wird im GUI-Reiter
+**„Label-Editor“**; eine Label-Datei (`*.toml`, Format wie
+[`labels/beispiel.toml`](labels/beispiel.toml)) kann man ins Fenster ziehen und dort
+übernehmen, „Als Datei…“ schreibt einen Eintrag zum Weitergeben.
+
+**Umstieg:** Beim ersten Start übernimmt ECUWerkbank den bisherigen Label-Ordner und
+die Text-Dateien einmal in die Datenbank. Die Label-Dateien bleiben unverändert liegen,
+die Text-Dateien heißen danach `*.toml.uebernommen` — beides als Sicherung, gelesen
+wird ab dann nur noch die Datenbank. Für über 300 genormte Codes (P0xxx, P2xxx, U0xxx)
+sind **deutsche Grundtexte eingebaut** (eigene Formulierungen, `src/dtc_db.rs`); deine
+Texte haben immer Vorrang. Damit bekommen DTCs Klartextnamen:
 
 ```bash
 ./target/release/ecu-werkbank labels                      # zeigt geladene Labels

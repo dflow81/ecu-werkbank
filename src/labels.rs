@@ -25,12 +25,12 @@
 //! ```
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
 /// Kopf einer Label-Datei.
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EcuHeader {
     /// Fehlt, wenn die Adresse (noch) nicht eingetragen ist.
     #[serde(default)]
@@ -51,13 +51,13 @@ pub struct EcuHeader {
     pub coding_did: Option<u16>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct DtcLabel {
     pub code: String,
     pub description: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 #[allow(dead_code)] // Felder werden mit den Messwertblöcken ausgewertet
 pub struct Measuring {
     pub id: u16,
@@ -91,14 +91,14 @@ fn looks_like_vcds(text: &str) -> bool {
     })
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 #[allow(dead_code)] // name wird bei der Anpassung ausgegeben
 pub struct Adaptation {
     pub channel: u16,
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 #[allow(dead_code)] // byte/bit/name werden beim Codieren ausgewertet
 pub struct Coding {
     pub byte: u16,
@@ -124,7 +124,7 @@ pub struct Coding {
 /// max = 105.0
 /// name = "Kühlmittel warm"
 /// ```
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Serialize)]
 pub struct Sollwert {
     pub quelle: String,
     pub id: u16,
@@ -139,7 +139,7 @@ pub struct Sollwert {
 }
 
 /// Eine komplette Label-Datei (zum Bearbeiten im Label-Editor).
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct LabelFile {
     pub ecu: EcuHeader,
     #[serde(default)]
@@ -335,8 +335,16 @@ impl LabelDb {
     /// Fehlt es, ist die DB leer (das Tool funktioniert dann ohne Klartext weiter).
     /// Eine `.txt`, die kein gültiges Label-TOML ist (z. B. VCDS-Rohtext), wird
     /// übersprungen — es wird nichts daraus übernommen.
+    ///
+    /// Seit Weg A (19.11.2026): Gelesen wird aus der Fahrzeug-Datenbank; der
+    /// Ordner wird beim ersten Mal übernommen (siehe [`crate::db::labels`]).
+    /// Ist die Datenbank nicht nutzbar, werden die Dateien direkt gelesen.
     pub fn load_dir(dir: &Path) -> Result<Self> {
-        let mut db = Self::load_dir_files(dir)?;
+        let files = crate::db::labels::laden(dir).unwrap_or_else(|e| {
+            eprintln!("{}", crate::tr!("Warnung: Fahrzeug-Datenbank nicht nutzbar ({e}) — lese die Label-Dateien direkt.", e = format!("{e:#}")));
+            dateien_lesen(dir)
+        });
+        let mut db = Self::aus_dateien(files);
         // eigene Fehlertexte gewinnen
         for (code, text) in crate::fehlertexte::alle() {
             db.dtcs.insert(code, text);
@@ -356,50 +364,10 @@ impl LabelDb {
         }
     }
 
-    fn load_dir_files(dir: &Path) -> Result<Self> {
+    /// Einträge zusammenführen (aus Dateien oder aus der Datenbank).
+    pub fn aus_dateien(files: Vec<LabelFile>) -> Self {
         let mut db = LabelDb::default();
-        if !dir.is_dir() {
-            return Ok(db); // kein Label-Ordner -> leere DB
-        }
-        let mut paths = Vec::new();
-        let mut stack = vec![dir.to_path_buf()];
-        while let Some(d) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&d) else { continue };
-            for entry in rd.flatten() {
-                let p = entry.path();
-                if p.is_dir() {
-                    stack.push(p);
-                } else {
-                    paths.push(p);
-                }
-            }
-        }
-        // Feste Reihenfolge: eigene Dateien (oberste Ebene) vor Importen,
-        // damit bei gleichen Einträgen dein Text gewinnt.
-        paths.sort_by_key(|p| (p.components().count(), p.clone()));
-        for path in paths {
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_ascii_lowercase());
-            if !matches!(ext.as_deref(), Some("toml") | Some("txt")) {
-                continue;
-            }
-            let text = std::fs::read_to_string(&path)
-                .with_context(|| crate::tr!("Label-Datei lesen: {a}", a = path.display()))?;
-            // Kaputte/leere/kein-TOML Dateien überspringen, nicht das Tool crashen.
-            let lf: LabelFile = match toml::from_str(&text) {
-                Ok(lf) => lf,
-                Err(e) => {
-                    let hint = if looks_like_vcds(&text) {
-                        crate::trs!("  (sieht nach einer fremden Labeldatei aus — ECUWerkbank liest nur eigene Label-Dateien im eigenen Format, siehe beispiel.toml)")
-                    } else {
-                        ""
-                    };
-                    eprintln!("{}", crate::tr!("Warnung: überspringe {a} ({e}){hint}", a = path.display(), e = e, hint = hint));
-                    continue;
-                }
-            };
+        for lf in files {
             db.files += 1;
             let Some(addr) = lf.ecu.address else {
                 db.without_address += 1;
@@ -447,7 +415,7 @@ impl LabelDb {
                 db.coding.entry(addr).or_insert(lf.coding);
             }
         }
-        Ok(db)
+        db
     }
 
     #[allow(dead_code)] // wird mit Messwertblöcken / scan genutzt
@@ -560,6 +528,60 @@ impl LabelDb {
             self.adaptation.len() + self.coding.values().map(|v| v.len()).sum::<usize>(),
         )
     }
+}
+
+/// Label-Dateien eines Ordners (mit Unterordnern) lesen; kaputte werden mit
+/// Warnung übersprungen. Nur noch für die einmalige Übernahme in die
+/// Datenbank und für Prüfungen.
+pub fn dateien_lesen(dir: &Path) -> Vec<LabelFile> {
+    let mut out = Vec::new();
+    if !dir.is_dir() {
+        return out; // kein Label-Ordner
+    }
+        let mut paths = Vec::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            for entry in rd.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    paths.push(p);
+                }
+            }
+        }
+        // Feste Reihenfolge: eigene Dateien (oberste Ebene) vor Importen,
+        // damit bei gleichen Einträgen dein Text gewinnt.
+        paths.sort_by_key(|p| (p.components().count(), p.clone()));
+        for path in paths {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase());
+            if !matches!(ext.as_deref(), Some("toml") | Some("txt")) {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                eprintln!("{}", crate::tr!("Warnung: Label-Datei nicht lesbar: {a}", a = path.display()));
+                continue;
+            };
+            // Kaputte/leere/kein-TOML Dateien überspringen, nicht das Tool crashen.
+            let lf: LabelFile = match toml::from_str(&text) {
+                Ok(lf) => lf,
+                Err(e) => {
+                    let hint = if looks_like_vcds(&text) {
+                        crate::trs!("  (sieht nach einer fremden Labeldatei aus — ECUWerkbank liest nur eigene Label-Dateien im eigenen Format, siehe beispiel.toml)")
+                    } else {
+                        ""
+                    };
+                    eprintln!("{}", crate::tr!("Warnung: überspringe {a} ({e}){hint}", a = path.display(), e = e, hint = hint));
+                    continue;
+                }
+            };
+            out.push(lf);
+        }
+    out
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 pub mod api;
 pub mod eigen;
+pub mod labels;
 pub mod odx;
 pub mod paket;
 
@@ -195,6 +196,12 @@ impl Db {
             tx.pragma_update(None, "user_version", v)?;
             tx.commit()?;
         }
+        Ok(())
+    }
+
+    /// Alle Änderungen aus dem Schreibprotokoll (WAL) in die Hauptdatei übernehmen.
+    pub fn festschreiben(&self) -> Result<()> {
+        self.con.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
         Ok(())
     }
 

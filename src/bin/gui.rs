@@ -701,12 +701,13 @@ struct App {
     bk_confirm: Option<usize>,
 
     // Label-Editor
-    ed_path: Option<PathBuf>,
+    /// Offener Eintrag im Label-Editor: None = keiner, Some(None) = neu, Some(Some(id)) = gespeichert
+    ed_id: Option<Option<i64>>,
+    ed_loeschen: bool,
     ed_file: LabelFile,
     ed_addr: String,
     ed_tx: String,
     ed_rx: String,
-    ed_new_name: String,
     tp_last_read: std::time::Instant,
     tp_lines: Vec<String>,
     tp_block_values: Vec<(String, Option<Stufe>)>,
@@ -913,8 +914,8 @@ impl eframe::App for App {
             }
             "editor-scan" => {
                 self.ed_aus_scan();
-                if let Some(p) = self.label_files().into_iter().find(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("20-"))) {
-                    self.ed_open(p);
+                if let Some((id, _)) = self.label_liste().into_iter().find(|(_, n)| n.starts_with("20 ")) {
+                    self.ed_oeffnen(id);
                 }
             }
             "scope" | "armaturen" => {

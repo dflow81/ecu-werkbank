@@ -18,7 +18,7 @@ use crate::limits::Stufe;
 use crate::transport::{Backend, Transport};
 use crate::uds::Uds;
 use anyhow::{bail, Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Sollverlauf über die Zeit.
@@ -110,7 +110,7 @@ pub fn bewerten(ist: f64, ziel: f64, toleranz: f64) -> (Richtung, Stufe) {
 /// rueckmeldung_pid = 0x0C   # OBD-PID für den Istwert (Drehzahl)
 /// max_dauer_s = 300
 /// ```
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Stellfunktion {
     pub name: String,
     pub art: String,

@@ -13,7 +13,7 @@ Schreibt die Herkunft dazu.
 
 | Was | Wo | Format | Befehl/GUI |
 |---|---|---|---|
-| Steuergeräte-Labels (Messwerte, Codier-Bits, Kennungen) | `~/.config/…/labels/<adresse>-<name>.toml` | TOML, Beispiel `labels/beispiel.toml` | Werkzeuge → Label-Editor |
+| Steuergeräte-Labels (Messwerte, Codier-Bits, Kennungen) | Fahrzeug-Datenbank (Quelle „Eigene Labels“) | TOML zum Austausch, Beispiel `labels/beispiel.toml` (ins Fenster ziehen) | Werkzeuge → Label-Editor |
 | Namen für Messwertblöcke (TP 2.0) | Datenordner | TOML | `messwerttext`, Werkzeuge → Eigene Namen |
 | Namen für Codier-Bits | Datenordner | TOML | `codiertext`, Seite Codierung |
 | Namen für Anpassungs-Kennungen | Datenordner | TOML | Sicherung → Anpassungen |

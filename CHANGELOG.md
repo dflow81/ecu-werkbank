@@ -2,6 +2,17 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
+## Unveröffentlicht
+
+### Geändert
+- **Die Fahrzeug-Datenbank ist jetzt der einzige Speicher für eigenes Wissen:** eigene Labels
+  (Label-Editor), Fehlertexte, Namen für Messwerte, Codier-Bits und Anpassungen sowie
+  Messwert-Texte. Beim ersten Start werden Label-Ordner und Text-Dateien einmal übernommen;
+  die Dateien bleiben als Sicherung liegen (`*.toml.uebernommen`), gelesen wird nur noch die Datenbank.
+- Label-Editor: Einträge statt Dateien; „Als Datei…“ zum Weitergeben, „Löschen…“ mit Rückfrage;
+  hineingezogene Label-Dateien werden mit „Speichern“ übernommen.
+- Datensicherung schreibt die Datenbank vorher fest (stimmige Kopie im ZIP).
+
 ## 0.3.0 — 19.11.2026
 
 ### Neu

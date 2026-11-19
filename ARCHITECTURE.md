@@ -119,7 +119,7 @@ Hintergrund nicht dazwischenfunkt).
 - **Datenordner** (`~/.local/share/ecu-werkbank`, über `VAG_DATA_DIR` änderbar):
   ein Ordner je Fahrzeug (VIN) mit Scans, Berichten, Codier- und Anpassungs-Sicherungen,
   Trends, Profil. Der Umzug vom alten Namen `vag-diag` passiert einmal automatisch.
-- **Labels** (`~/.config/…/labels`): eigene TOML-Dateien je Steuergerät. Nie fremde Label-Dateien.
+- **Eigene Labels und Texte**: in der Fahrzeug-Datenbank (Quelle „Eigene Labels“, Tabelle `eigener_text`). Der frühere Label-Ordner (`~/.config/…/labels`) und die Text-Dateien werden einmal übernommen (`db::labels`, `db::eigen`) und danach nicht mehr gelesen. Nie fremde Label-Dateien.
 - **Fahrzeug-Datenbank** (`<Datenordner>/fahrzeugdaten.sqlite`): Schema in `src/db/schema_NNN.sql`, Migration beim Öffnen mit Kopie vorher; jede Zeile mit Quelle und Lizenz. Siehe ROADMAP „Plan: Fahrzeug-Datenbank“.
 - **Sprachen**: `lang/<code>.toml` eingebaut, eigene im Datenordner unter `sprachen/`.
 
