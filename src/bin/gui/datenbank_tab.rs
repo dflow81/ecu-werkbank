@@ -3,6 +3,18 @@
 
 use super::*;
 use ecu_werkbank::db::{self, eigen::mit_db};
+use ecu_werkbank::db::import::Art;
+use ecu_werkbank::db::inhalt::{CanBotschaft, Inhalt};
+use ecu_werkbank::db::paket::{PaketAnpassung, PaketCodierung, PaketDid, PaketFehler, PaketSteuergeraet};
+
+type Vorschau = Vec<(PathBuf, Result<(Art, String, Inhalt), String>)>;
+
+/// Was gerade bearbeitet wird.
+enum Bearbeitung {
+    Sg { id: i64, s: PaketSteuergeraet, adresse: String, tx: String, rx: String, loeschen: bool },
+    Fehler { quelle: i64, liste: Vec<PaketFehler> },
+    Can(CanBotschaft),
+}
 
 pub(super) struct DatenbankSeite {
     hersteller: String,
@@ -14,6 +26,13 @@ pub(super) struct DatenbankSeite {
     adresse: String,
     gelernt: Option<ecu_werkbank::wertetexte::Gelernt>,
     meldungen: Vec<String>,
+    /// Vorschau vor dem Übernehmen
+    vorschau: Option<Vorschau>,
+    /// gewählte Quelle zum Ansehen/Bearbeiten und ihr Inhalt
+    quelle: Option<i64>,
+    inhalt: Option<Inhalt>,
+    filter: String,
+    bearbeitung: Option<Bearbeitung>,
 }
 
 impl Default for DatenbankSeite {
@@ -28,13 +47,37 @@ impl Default for DatenbankSeite {
             adresse: "20".into(),
             gelernt: None,
             meldungen: Vec::new(),
+            vorschau: None,
+            quelle: None,
+            inhalt: None,
+            filter: String::new(),
+            bearbeitung: None,
         }
     }
 }
 
 impl App {
-    /// Dateien übernehmen (im Hintergrund, große DBC/ODX brauchen etwas).
+    /// Dateien prüfen: Vorschau in einer leeren Datenbank im Speicher (eigene Daten bleiben unberührt).
     pub(super) fn db_dateien_importieren(&mut self, dateien: Vec<PathBuf>) {
+        if dateien.is_empty() {
+            return;
+        }
+        let (h, l) = (self.dbs.hersteller.clone(), self.dbs.lizenz.clone());
+        self.tab = Tab::Datenbank;
+        self.im_hintergrund(tr!("Vorschau erstellen"), move || {
+            let v: Vorschau = dateien.into_iter().map(|p| {
+                let r = db::import::vorschau(&p, &h, &l).map_err(|e| format!("{e:#}"));
+                (p, r)
+            }).collect();
+            Box::new(move |app: &mut App| {
+                app.status = tr!("Vorschau fertig — prüfen und „Übernehmen“ drücken.");
+                app.dbs.vorschau = Some(v);
+            })
+        });
+    }
+
+    /// Dateien wirklich übernehmen (nach der Vorschau).
+    fn db_dateien_uebernehmen(&mut self, dateien: Vec<PathBuf>) {
         if dateien.is_empty() {
             return;
         }
@@ -53,6 +96,7 @@ impl App {
             Box::new(move |app: &mut App| {
                 app.status = zeilen.last().cloned().unwrap_or_default();
                 app.dbs.meldungen = zeilen;
+                app.dbs.inhalt = None;
                 app.reload_labels();
                 app.tab = Tab::Datenbank;
             })
@@ -61,6 +105,10 @@ impl App {
 
     pub(super) fn ui_datenbank(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("Fahrzeug-Datenbank"));
+        if self.dbs.vorschau.is_some() {
+            self.ui_db_vorschau(ui);
+            return;
+        }
         ui.label(tr!("Hier liegt dein ganzes Fahrzeugwissen: eigene Labels und Texte, übernommene Datenpakete, CAN-Datenbanken. Jede Quelle mit Herkunft und Lizenz — und lässt sich als Ganzes wieder entfernen."));
         let statistik = mit_db(|d| d.statistik()).unwrap_or_default();
         let quellen = mit_db(|d| d.quellen()).unwrap_or_default();
@@ -121,6 +169,11 @@ impl App {
             };
             self.reload_labels();
         }
+
+        // --- Inhalt ansehen und bearbeiten
+        ui.add_space(8.0);
+        ui.separator();
+        self.ui_db_inhalt(ui, &quellen);
 
         // --- Import
         ui.add_space(8.0);
@@ -247,6 +300,440 @@ impl App {
             }
             (Err(e), _) => self.status = tr!("Block-Export lesen: {e}", e = e),
             (_, Err(e)) => self.status = tr!("Rohwerte: {e}", e = format!("{e:#}")),
+        }
+    }
+}
+
+/// Inhalt einer Quelle als Baum anzeigen (nur lesen) — für die Vorschau.
+fn inhalt_baum(ui: &mut egui::Ui, i: &Inhalt, schluessel: &str) {
+    let lokal = !db::darf_weitergeben(i.quelle.art, &i.quelle.lizenz);
+    ui.label(tr!(
+        "Wird eingetragen als Quelle „{a}“ (Art {b}, Lizenz {c}){d}",
+        a = i.quelle.name,
+        b = i.quelle.art.text(),
+        c = if i.quelle.lizenz.is_empty() { "–".to_string() } else { i.quelle.lizenz.clone() },
+        d = if lokal { tr!(" — bleibt nur bei dir") } else { String::new() }
+    ));
+    for (id, h, s) in &i.steuergeraete {
+        let a = s.adresse.map(|a| format!("{a:02X}")).unwrap_or_else(|| "—".into());
+        egui::CollapsingHeader::new(tr!("{h} › Adresse {a} › {n}  ({f} Fehler, {d} Kennungen, {c} Codier-Bits, {p} Anpassungen)", h = h, a = a, n = s.name, f = s.fehler.len(), d = s.dids.len(), c = s.codierung.len(), p = s.anpassung.len()))
+            .id_source((schluessel, "sg", id))
+            .show(ui, |ui| {
+                if !s.protokoll.is_empty() || s.tx.is_some() {
+                    ui.weak(tr!("Protokoll {p}, Anfrage {t}, Antwort {r}, Gruppe {g}", p = s.protokoll, t = s.tx.map(|x| format!("{x:#05x}")).unwrap_or_else(|| "–".into()), r = s.rx.map(|x| format!("{x:#05x}")).unwrap_or_else(|| "–".into()), g = s.gruppe));
+                }
+                for f in &s.fehler {
+                    ui.monospace(tr!("Fehler  {c}  {t}", c = f.code, t = f.text));
+                }
+                for d in &s.dids {
+                    ui.monospace(tr!("Kennung {a}  {n} [{e}] ×{f} +{o}", a = format!("{:#06X}", d.did), n = d.name, e = d.einheit, f = d.faktor, o = d.offset));
+                }
+                for c in &s.codierung {
+                    let bit = c.bit.map(|b| format!(" Bit {b}")).unwrap_or_default();
+                    ui.monospace(tr!("Codierung Byte {b}{bit}  {n}", b = c.byte, bit = bit, n = c.name));
+                }
+                for a in &s.anpassung {
+                    ui.monospace(tr!("Anpassung Kanal {k}  {n}", k = a.kanal, n = a.name));
+                }
+            });
+    }
+    if !i.fehler.is_empty() {
+        egui::CollapsingHeader::new(tr!("Allgemeine Fehlertexte ({a})", a = i.fehler.len())).id_source((schluessel, "fehler")).show(ui, |ui| {
+            for f in i.fehler.iter().take(500) {
+                ui.monospace(format!("{}  {}", f.code, f.text));
+            }
+        });
+    }
+    if !i.can.is_empty() {
+        egui::CollapsingHeader::new(tr!("CAN-Botschaften ({a})", a = i.can.len())).id_source((schluessel, "can")).show(ui, |ui| {
+            for b in i.can.iter().take(300) {
+                ui.collapsing(format!("{:03X}  {}  ({} Signale)", b.can_id, b.name, b.signale.len()), |ui| {
+                    for g in &b.signale {
+                        ui.monospace(tr!("{n}: Bit {s}, Länge {l}, ×{f} +{o} {e}", n = g.name, s = g.start, l = g.laenge, f = g.faktor, o = g.offset, e = g.einheit));
+                    }
+                });
+            }
+        });
+    }
+}
+
+fn hex_opt(s: &str) -> Result<Option<u16>, ()> {
+    if s.trim().is_empty() {
+        Ok(None)
+    } else {
+        parse_hex(s).map(Some).ok_or(())
+    }
+}
+
+impl App {
+    /// Bildschirmfoto: erste Quelle außer den eigenen Labels öffnen, erstes Steuergerät bearbeiten.
+    pub(super) fn db_demo_inhalt(&mut self) {
+        let q = mit_db(|d| d.quellen()).unwrap_or_default().into_iter().find(|q| q.name != db::labels::QUELLE);
+        if let Some(q) = q {
+            self.dbs.quelle = Some(q.id);
+            if let Ok(i) = mit_db(|d| d.inhalt(q.id)) {
+                if let Some((id, _, s)) = i.steuergeraete.first().cloned() {
+                    let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
+                    self.dbs.bearbeitung = Some(Bearbeitung::Sg { id, adresse: h(s.adresse), tx: h(s.tx), rx: h(s.rx), s, loeschen: false });
+                }
+                self.dbs.inhalt = Some(i);
+            }
+        }
+    }
+
+    /// Vorschau vor dem Übernehmen.
+    fn ui_db_vorschau(&mut self, ui: &mut egui::Ui) {
+        let Some(v) = &self.dbs.vorschau else { return };
+        ui.strong(tr!("Vorschau — so würden die Daten eingetragen. Noch ist nichts übernommen."));
+        ui.weak(tr!("Bitte prüfen: Hersteller, Adresse und Name der Steuergeräte, Zuordnung der Fehler und Kennungen."));
+        let mut gut = Vec::new();
+        egui::ScrollArea::vertical().id_source("db_vorschau").max_height(420.0).show(ui, |ui| {
+            for (n, (p, r)) in v.iter().enumerate() {
+                ui.add_space(4.0);
+                let name = p.file_name().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
+                match r {
+                    Ok((art, text, inhalt)) => {
+                        ui.strong(format!("📄 {name} — {}: {text}", art.text()));
+                        inhalt_baum(ui, inhalt, &format!("v{n}"));
+                        gut.push(p.clone());
+                    }
+                    Err(e) => {
+                        ui.colored_label(stufe_color(Stufe::Warnung), format!("✗ {name}: {e}"));
+                    }
+                }
+            }
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.add_enabled(!gut.is_empty(), egui::Button::new(tr!("✅ Übernehmen ({a} Datei(en))", a = gut.len()))).clicked() {
+                self.dbs.vorschau = None;
+                self.db_dateien_uebernehmen(gut.clone());
+            }
+            if ui.button(tr!("✖ Verwerfen")).clicked() {
+                self.dbs.vorschau = None;
+                self.status = tr!("Nichts übernommen.");
+            }
+        });
+    }
+
+    /// Inhalt einer Quelle ansehen und bearbeiten.
+    fn ui_db_inhalt(&mut self, ui: &mut egui::Ui, quellen: &[db::Quelle]) {
+        ui.strong(tr!("Inhalt ansehen und bearbeiten"));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("Quelle:"));
+            let aktuell = self.dbs.quelle.and_then(|id| quellen.iter().find(|q| q.id == id)).map(|q| format!("{} ({})", q.name, q.art.text())).unwrap_or_else(|| tr!("— wählen —"));
+            let mut wahl = None;
+            egui::ComboBox::from_id_source("db_quelle").selected_text(aktuell).width(260.0).show_ui(ui, |ui| {
+                for q in quellen {
+                    if ui.selectable_label(self.dbs.quelle == Some(q.id), format!("{} ({})", q.name, q.art.text())).clicked() {
+                        wahl = Some(q.id);
+                    }
+                }
+            });
+            if let Some(id) = wahl {
+                self.dbs.quelle = Some(id);
+                self.dbs.inhalt = None;
+                self.dbs.bearbeitung = None;
+            }
+            ui.label(tr!("Suchen:"));
+            ui.add(egui::TextEdit::singleline(&mut self.dbs.filter).desired_width(120.0).hint_text(tr!("Name, Code, ID")));
+        });
+        let Some(qid) = self.dbs.quelle else { return };
+        if self.dbs.inhalt.as_ref().map(|i| i.quelle.id) != Some(qid) {
+            match mit_db(|d| d.inhalt(qid)) {
+                Ok(i) => self.dbs.inhalt = Some(i),
+                Err(e) => {
+                    self.status = format!("{e:#}");
+                    self.dbs.quelle = None;
+                    return;
+                }
+            }
+        }
+        let Some(inhalt) = self.dbs.inhalt.clone() else { return };
+        let ist_labels = inhalt.quelle.name == db::labels::QUELLE && inhalt.quelle.art == db::QuellArt::User;
+        ui.weak(inhalt.zusammenfassung());
+        if ist_labels {
+            ui.weak(tr!("Eigene Labels bearbeitest du im Label-Editor (dort auch Sollwerte und Stellfunktionen)."));
+        }
+        let f = self.dbs.filter.to_lowercase();
+        let passt = |t: &str| f.is_empty() || t.to_lowercase().contains(&f);
+        ui.columns(2, |sp| {
+            // links: Liste
+            egui::ScrollArea::vertical().id_source("db_liste").max_height(380.0).show(&mut sp[0], |ui| {
+                for (id, _, s) in &inhalt.steuergeraete {
+                    let t = format!("{}  {}", s.adresse.map(|a| format!("{a:02X}")).unwrap_or_else(|| "—".into()), s.name);
+                    if !passt(&t) && !s.fehler.iter().any(|x| passt(&x.code) || passt(&x.text)) {
+                        continue;
+                    }
+                    let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Sg { id: i, .. }) if i == id);
+                    if ui.selectable_label(aktiv, format!("🔧 {t}")).clicked() {
+                        if ist_labels {
+                            self.tab = Tab::Editor;
+                            if let Some((lid, _)) = self.label_liste().into_iter().find(|(lid, _)| lid == id) {
+                                self.ed_oeffnen(lid);
+                            }
+                        } else {
+                            let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
+                            self.dbs.bearbeitung = Some(Bearbeitung::Sg { id: *id, adresse: h(s.adresse), tx: h(s.tx), rx: h(s.rx), s: s.clone(), loeschen: false });
+                        }
+                    }
+                }
+                if !inhalt.fehler.is_empty() || !ist_labels && inhalt.steuergeraete.is_empty() && inhalt.can.is_empty() {
+                    let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Fehler { .. }));
+                    if ui.selectable_label(aktiv, tr!("⚠ Allgemeine Fehlertexte ({a})", a = inhalt.fehler.len())).clicked() {
+                        self.dbs.bearbeitung = Some(Bearbeitung::Fehler { quelle: qid, liste: inhalt.fehler.clone() });
+                    }
+                }
+                for b in &inhalt.can {
+                    let t = format!("{:03X}  {}", b.can_id, b.name);
+                    if !passt(&t) && !b.signale.iter().any(|g| passt(&g.name)) {
+                        continue;
+                    }
+                    let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Can(c)) if c.id == b.id);
+                    if ui.selectable_label(aktiv, format!("📶 {t}")).clicked() {
+                        self.dbs.bearbeitung = Some(Bearbeitung::Can(b.clone()));
+                    }
+                }
+            });
+            // rechts: Bearbeiten
+            egui::ScrollArea::vertical().id_source("db_bearbeiten").max_height(380.0).show(&mut sp[1], |ui| self.ui_db_bearbeiten(ui));
+        });
+    }
+
+    fn ui_db_bearbeiten(&mut self, ui: &mut egui::Ui) {
+        let mut speichern = false;
+        let mut verwerfen = false;
+        let mut loeschen = false;
+        match &mut self.dbs.bearbeitung {
+            None => {
+                ui.weak(tr!("Links einen Eintrag wählen."));
+            }
+            Some(Bearbeitung::Sg { s, adresse, tx, rx, loeschen: frage, .. }) => {
+                egui::Grid::new("db_sg_kopf").num_columns(2).show(ui, |ui| {
+                    ui.label(tr!("Name"));
+                    ui.text_edit_singleline(&mut s.name);
+                    ui.end_row();
+                    ui.label(tr!("Adresse"));
+                    ui.add(egui::TextEdit::singleline(adresse).desired_width(60.0).hint_text("0x09"));
+                    ui.end_row();
+                    ui.label(tr!("Protokoll"));
+                    ui.add(egui::TextEdit::singleline(&mut s.protokoll).desired_width(80.0).hint_text("UDS / TP20"));
+                    ui.end_row();
+                    ui.label(tr!("Anfrage / Antwort"));
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(tx).desired_width(60.0).hint_text("0x70E"));
+                        ui.add(egui::TextEdit::singleline(rx).desired_width(60.0).hint_text("0x778"));
+                    });
+                    ui.end_row();
+                    ui.label(tr!("Gruppe"));
+                    ui.text_edit_singleline(&mut s.gruppe);
+                    ui.end_row();
+                    ui.label(tr!("Teilenummer"));
+                    ui.text_edit_singleline(&mut s.teilenummer);
+                    ui.end_row();
+                });
+                ui.add_space(4.0);
+                ui.strong(tr!("Fehler ({a})", a = s.fehler.len()));
+                let mut weg = None;
+                for (i, f) in s.fehler.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut f.code).desired_width(70.0));
+                        ui.add(egui::TextEdit::singleline(&mut f.text).desired_width(220.0));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    s.fehler.remove(i);
+                }
+                if ui.small_button(tr!("+ Fehler")).clicked() {
+                    s.fehler.push(PaketFehler::default());
+                }
+                ui.add_space(4.0);
+                ui.strong(tr!("Kennungen / Messwerte ({a})", a = s.dids.len()));
+                let mut weg = None;
+                for (i, d) in s.dids.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut d.did).hexadecimal(4, false, true));
+                        ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(140.0));
+                        ui.add(egui::TextEdit::singleline(&mut d.einheit).desired_width(50.0));
+                        ui.add(egui::DragValue::new(&mut d.faktor).speed(0.01).prefix("×"));
+                        ui.add(egui::DragValue::new(&mut d.offset).speed(0.1).prefix("+"));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    s.dids.remove(i);
+                }
+                if ui.small_button(tr!("+ Kennung")).clicked() {
+                    s.dids.push(PaketDid { did: 0, name: String::new(), einheit: String::new(), faktor: 1.0, offset: 0.0 });
+                }
+                ui.add_space(4.0);
+                ui.strong(tr!("Codier-Bits ({a})", a = s.codierung.len()));
+                let mut weg = None;
+                for (i, c) in s.codierung.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut c.byte).prefix(tr!("Byte ")));
+                        let mut b = c.bit.map(|x| x.to_string()).unwrap_or_default();
+                        if ui.add(egui::TextEdit::singleline(&mut b).desired_width(24.0).hint_text("Bit")).changed() {
+                            c.bit = b.trim().parse().ok().filter(|x: &u8| *x < 8);
+                        }
+                        ui.add(egui::TextEdit::singleline(&mut c.name).desired_width(150.0));
+                        let mut ben = c.benoetigt.join(",");
+                        if ui.add(egui::TextEdit::singleline(&mut ben).desired_width(60.0).hint_text(tr!("braucht"))).changed() {
+                            c.benoetigt = ben.split(',').map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect();
+                        }
+                        let mut aus = c.schliesst_aus.join(",");
+                        if ui.add(egui::TextEdit::singleline(&mut aus).desired_width(60.0).hint_text(tr!("nicht mit"))).changed() {
+                            c.schliesst_aus = aus.split(',').map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect();
+                        }
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    s.codierung.remove(i);
+                }
+                if ui.small_button(tr!("+ Codier-Bit")).clicked() {
+                    s.codierung.push(PaketCodierung { byte: 0, bit: Some(0), name: String::new(), benoetigt: Vec::new(), schliesst_aus: Vec::new() });
+                }
+                ui.add_space(4.0);
+                ui.strong(tr!("Anpassungskanäle ({a})", a = s.anpassung.len()));
+                let mut weg = None;
+                for (i, a) in s.anpassung.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut a.kanal).prefix(tr!("Kanal ")));
+                        ui.add(egui::TextEdit::singleline(&mut a.name).desired_width(200.0));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    s.anpassung.remove(i);
+                }
+                if ui.small_button(tr!("+ Anpassungskanal")).clicked() {
+                    s.anpassung.push(PaketAnpassung { kanal: 1, name: String::new() });
+                }
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    speichern = ui.button(tr!("💾 Speichern")).clicked();
+                    verwerfen = ui.button(tr!("↺ Verwerfen")).clicked();
+                    if !*frage {
+                        if ui.button(tr!("🗑 Steuergerät löschen…")).clicked() {
+                            *frage = true;
+                        }
+                    } else {
+                        ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Wirklich löschen?"));
+                        loeschen = ui.button(tr!("Ja, löschen")).clicked();
+                        if ui.button(tr!("Abbrechen")).clicked() {
+                            *frage = false;
+                        }
+                    }
+                });
+            }
+            Some(Bearbeitung::Fehler { liste, .. }) => {
+                ui.strong(tr!("Allgemeine Fehlertexte ({a})", a = liste.len()));
+                let mut weg = None;
+                for (i, f) in liste.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut f.code).desired_width(70.0));
+                        ui.add(egui::TextEdit::singleline(&mut f.text).desired_width(240.0));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    liste.remove(i);
+                }
+                if ui.small_button(tr!("+ Fehlertext")).clicked() {
+                    liste.push(PaketFehler::default());
+                }
+                ui.horizontal(|ui| {
+                    speichern = ui.button(tr!("💾 Speichern")).clicked();
+                    verwerfen = ui.button(tr!("↺ Verwerfen")).clicked();
+                });
+            }
+            Some(Bearbeitung::Can(b)) => {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{:03X}", b.can_id));
+                    ui.text_edit_singleline(&mut b.name);
+                    ui.add(egui::DragValue::new(&mut b.dlc).range(0..=64).prefix("DLC "));
+                });
+                ui.strong(tr!("Signale ({a})", a = b.signale.len()));
+                let mut weg = None;
+                for (i, g) in b.signale.iter_mut().enumerate() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut g.name).desired_width(130.0));
+                        ui.add(egui::DragValue::new(&mut g.start).prefix(tr!("Bit ")));
+                        ui.add(egui::DragValue::new(&mut g.laenge).range(1..=64).prefix(tr!("Länge ")));
+                        ui.checkbox(&mut g.intel, "Intel");
+                        ui.checkbox(&mut g.vorzeichen, "±");
+                        ui.add(egui::DragValue::new(&mut g.faktor).speed(0.001).prefix("×"));
+                        ui.add(egui::DragValue::new(&mut g.offset).speed(0.1).prefix("+"));
+                        ui.add(egui::TextEdit::singleline(&mut g.einheit).desired_width(50.0));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    b.signale.remove(i);
+                }
+                ui.horizontal(|ui| {
+                    speichern = ui.button(tr!("💾 Speichern")).clicked();
+                    verwerfen = ui.button(tr!("↺ Verwerfen")).clicked();
+                });
+            }
+        }
+        if verwerfen {
+            self.dbs.bearbeitung = None;
+        }
+        if loeschen {
+            if let Some(Bearbeitung::Sg { id, .. }) = &self.dbs.bearbeitung {
+                let id = *id;
+                self.status = match mit_db(|d| d.sg_entfernen(id)) {
+                    Ok(_) => tr!("Steuergerät gelöscht."),
+                    Err(e) => format!("{e:#}"),
+                };
+                self.dbs.bearbeitung = None;
+                self.dbs.inhalt = None;
+                self.reload_labels();
+            }
+        }
+        if speichern {
+            let r = match &mut self.dbs.bearbeitung {
+                Some(Bearbeitung::Sg { id, s, adresse, tx, rx, .. }) => match (hex_opt(adresse), hex_opt(tx), hex_opt(rx)) {
+                    (Ok(a), Ok(t), Ok(r)) => {
+                        s.adresse = a;
+                        s.tx = t;
+                        s.rx = r;
+                        let (id, s) = (*id, s.clone());
+                        mit_db(|d| d.sg_speichern(id, &s))
+                    }
+                    _ => Err(anyhow::anyhow!(tr!("Adresse/Anfrage/Antwort ungültig (hex, z. B. 0x09)."))),
+                },
+                Some(Bearbeitung::Fehler { quelle, liste }) => {
+                    let (q, l) = (*quelle, liste.clone());
+                    mit_db(|d| d.fehler_allgemein_speichern(q, &l))
+                }
+                Some(Bearbeitung::Can(b)) => {
+                    let b = b.clone();
+                    mit_db(|d| d.can_speichern(&b))
+                }
+                None => Ok(()),
+            };
+            self.status = match r {
+                Ok(()) => tr!("Gespeichert (Fahrzeug-Datenbank)."),
+                Err(e) => tr!("Speichern fehlgeschlagen: {e}", e = format!("{e:#}")),
+            };
+            self.dbs.inhalt = None;
+            self.reload_labels();
         }
     }
 }

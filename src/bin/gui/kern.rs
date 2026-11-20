@@ -18,7 +18,7 @@ impl App {
             "mitschnitt" => (Tab::Mitschnitt, false),
             "canmonitor" | "canmonitor-grafik" => (Tab::CanMonitor, false),
             "skripte" => (Tab::Skripte, false),
-            "datenbank" => (Tab::Datenbank, false),
+            "datenbank" | "datenbank-vorschau" | "datenbank-inhalt" => (Tab::Datenbank, false),
             "editor" => (Tab::Editor, false),
             "fahrzeuge" => (Tab::Fahrzeuge, false),
             "batterie" => (Tab::Batterie, false),

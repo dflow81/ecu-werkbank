@@ -87,6 +87,16 @@ pub fn datei(db: &Db, pfad: &Path, hersteller: &str, lizenz: &str) -> Result<(Ar
     Ok((art, text))
 }
 
+/// Vorschau: Die Datei wird in eine leere Datenbank im Speicher übernommen und
+/// das Ergebnis zurückgegeben — so sieht man genau, was wohin käme, bevor die
+/// eigene Datenbank angefasst wird.
+pub fn vorschau(pfad: &Path, hersteller: &str, lizenz: &str) -> Result<(Art, String, super::inhalt::Inhalt)> {
+    let probe = Db::im_speicher()?;
+    let (art, text) = datei(&probe, pfad, hersteller, lizenz)?;
+    let q = probe.quellen()?.into_iter().map(|q| q.id).max().ok_or_else(|| anyhow::anyhow!(crate::tr!("nichts übernommen")))?;
+    Ok((art, text, probe.inhalt(q)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,6 +130,11 @@ mod tests {
         assert_eq!(db.fehlertext("P0420").unwrap().as_deref(), Some("Kat"));
         assert_eq!(db.fehlertext("P0171").unwrap().as_deref(), Some("System zu mager"));
         assert_eq!(db.eigene_labels().unwrap().len(), 1);
+        // Vorschau ändert die eigene Datenbank nicht und zeigt dasselbe
+        let (art, _, i) = vorschau(&paket, "", "").unwrap();
+        assert_eq!(art, Art::Datenpaket);
+        assert_eq!(i.steuergeraete[0].2.name, "Bordnetz");
+        assert_eq!(i.steuergeraete[0].1, "Volkswagen");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

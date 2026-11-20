@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 pub mod api;
 pub mod eigen;
 pub mod import;
+pub mod inhalt;
 pub mod labels;
 pub mod odx;
 pub mod paket;

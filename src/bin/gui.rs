@@ -826,6 +826,13 @@ impl eframe::App for App {
             "diagnose" => self.run_mode06(),
             "verbindung" => self.verbindung_pruefen(),
             "skripte" => self.sk_demo_start(),
+            // Bildschirmfotos der Datenbank-Seite: VAG_IMPORT=<Datei> zeigt die Vorschau
+            "datenbank-vorschau" => {
+                if let Ok(p) = std::env::var("VAG_IMPORT") {
+                    self.db_dateien_importieren(vec![PathBuf::from(p)]);
+                }
+            }
+            "datenbank-inhalt" => self.db_demo_inhalt(),
             t @ ("canmonitor" | "canmonitor-grafik") => {
                 if let Ok(l) = ecu_werkbank::canmonitor::Lauf::starten(ecu_werkbank::canmonitor::Quelle::Demo) {
                     l.demo_aktion.store(true, std::sync::atomic::Ordering::Relaxed);

@@ -20,6 +20,12 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   importieren (Art wird erkannt: DBC, Datenpaket, Label-Datei, CSV, ODX/PDX), mitgelieferte Daten
   aktualisieren, Messwert-Texte lernen (Block-Export + Lesung am Auto oder gespeichert), Export.
   Datenpakete und ODX/PDX lassen sich auch ins Fenster ziehen. Im Terminal: `db import --datei …`.
+- **Vorschau vor dem Import:** Die Datei wird erst in eine leere Datenbank im Speicher übernommen
+  und angezeigt (Quelle, Lizenz, Hersteller › Adresse › Steuergerät mit Fehlern, Kennungen,
+  Codier-Bits, Anpassungen, CAN-Botschaften). Erst „Übernehmen“ schreibt in die eigene Datenbank.
+- **Inhalt ansehen und bearbeiten** (wie im Label-Editor): Quelle wählen, suchen, Steuergerät,
+  allgemeine Fehlertexte oder CAN-Botschaft öffnen und ändern, löschen. Eigene Labels öffnen sich
+  im Label-Editor.
 - `db csv` liest auch Dateien im Windows-Zeichensatz und überspringt Kommentarzeilen (`;`);
   Exporte eines Werkstattprogramms (Messwertblöcke, Anpassungskanäle) werden erkannt und erklärt
   statt falsch eingelesen.
