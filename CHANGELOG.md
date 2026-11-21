@@ -29,6 +29,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - `db csv` liest auch Dateien im Windows-Zeichensatz und überspringt Kommentarzeilen (`;`);
   Exporte eines Werkstattprogramms (Messwertblöcke, Anpassungskanäle) werden erkannt und erklärt
   statt falsch eingelesen.
+- CSV darf **Fehlertexte und Messwerte gemischt** enthalten: Kopfzeilen (`code;text`,
+  `did;name;…`) schalten um, ohne Kopfzeile wird jede Zeile einzeln erkannt.
+  Beispiele: `beispiele/datenpaket-alles.toml` (alles in einem Paket) und `beispiele/gemischt.csv`.
 - Datensicherung und „Fahrzeug als ZIP“ schreiben alles weiter als lesbare Dateien (auch eigene
   Texte und Labels); Einspielen holt es zurück in die Datenbank. Alte Sicherungen lassen sich
   weiter einspielen.

@@ -26,6 +26,7 @@ Scan-*.txt
 *.pdf
 !/docs/handbuch/ecu-werkbank-Handbuch.pdf
 *.csv
+!beispiele/*.csv
 
 # Editor / System
 .vscode/

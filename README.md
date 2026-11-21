@@ -1055,7 +1055,7 @@ Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
 ./target/release/ecu-werkbank db dbc --datei vw_pq.dbc --lizenz MIT --hersteller Volkswagen
 ./target/release/ecu-werkbank db import --datei irgendwas.dbc   # Art wird erkannt (DBC, Paket, Label, CSV, ODX)
 ./target/release/ecu-werkbank db paket --datei meine-daten.toml   # Datenpaket (TOML/JSON)
-./target/release/ecu-werkbank db csv --datei fehler.csv           # code;text  oder  did;name;einheit;faktor;offset
+./target/release/ecu-werkbank db csv --datei fehler.csv           # code;text  und/oder  did;name;einheit;faktor;offset
 ./target/release/ecu-werkbank db export --ziel beitrag.toml --lizenz CC0-1.0
 ./target/release/ecu-werkbank db odx --datei gekauft.pdx --hersteller Volkswagen   # ODX/PDX, bleibt lokal
 ./target/release/ecu-werkbank db quellen               # was ist drin, woher, welche Lizenz
@@ -1066,8 +1066,12 @@ Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
 In der GUI: **Werkzeuge → Fahrzeug-Datenbank** (oder Datei ins Fenster ziehen).
 Daten ohne Lizenzangabe und selbst gekaufte Herstellerdaten bleiben immer nur
 bei dir; `db export` lässt sie weg und sagt, was fehlt. Das Format der
-Datenpakete steht in `src/db/paket.rs`, ein Beispiel in
-`daten/community/vw/adressliste.toml`. Tippfehler im Paket werden gemeldet,
+Datenpakete steht in `src/db/paket.rs`; ein Beispiel mit allem, was
+hineinpasst (Steuergeräte, Fehlertexte, Messwerte, Codier-Bits, Anpassungen),
+ist [beispiele/datenpaket-alles.toml](beispiele/datenpaket-alles.toml).
+Eine CSV darf Fehlertexte und Messwerte gemischt enthalten; Kopfzeilen
+(`code;text`, `did;name;…`) schalten um, ohne Kopfzeile wird jede Zeile
+einzeln erkannt — siehe [beispiele/gemischt.csv](beispiele/gemischt.csv). Tippfehler im Paket werden gemeldet,
 nicht still übergangen. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
 
 ### Texte für Messwerte mit Textnummer (TP 2.0)

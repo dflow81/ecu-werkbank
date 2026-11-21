@@ -1,0 +1,12 @@
+; Beispiel: Fehlertexte und Messwerte in einer CSV-Datei (ausgedachte Einträge)
+; Zeilen mit ; oder # vorne sind Kommentare.
+; Eine Kopfzeile (code;text bzw. did;name;...) schaltet um, was danach kommt.
+code;text
+P0171;System zu mager (Bank 1)
+P0420;Katalysator Bank 1: Wirkungsgrad zu gering
+00532;Versorgungsspannung
+
+did;name;einheit;faktor;offset
+0xF40C;Motordrehzahl;U/min;0,25;0
+0xF405;Kühlmitteltemperatur;°C;1;-40
+0x1234;Batteriespannung;V

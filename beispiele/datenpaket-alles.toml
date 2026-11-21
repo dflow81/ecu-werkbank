@@ -1,0 +1,76 @@
+# Beispiel-Datenpaket für ECUWerkbank: zeigt alles, was ein Datenpaket
+# enthalten kann. Die Einträge sind ausgedachte Beispiele, keine echten
+# Herstellerdaten.
+#
+# Übernehmen:  GUI → Werkzeuge → Fahrzeug-Datenbank → Import (mit Vorschau)
+#              oder  ecu-werkbank db import beispiele/datenpaket-alles.toml
+#
+# Wichtig bei TOML: Ein Schlüssel gehört immer zur letzten Überschrift
+# ([...] oder [[...]]) darüber. Deshalb stehen die allgemeinen Fehlertexte
+# unten als eigene [[fehler]]-Blöcke.
+#
+# Ein zweites Mal übernehmen ersetzt die alte Fassung (gleicher Name unter [quelle]).
+
+# ── Woher die Daten kommen ──────────────────────────────────────────────
+[quelle]
+name = "Meine Sammlung"          # Pflicht
+version = "1"                    # frei wählbar
+lizenz = "CC0-1.0"               # leer = bleibt nur bei dir, wird nie exportiert
+herkunft = "selbst am Auto ermittelt"
+
+# ── Hersteller ──────────────────────────────────────────────────────────
+[[hersteller]]
+name = "Volkswagen"
+wmi = ["WVW", "WV1", "WV2"]      # erste 3 Zeichen der Fahrgestellnummer
+
+# ── Ein Steuergerät mit allem ───────────────────────────────────────────
+[[hersteller.steuergeraet]]
+adresse = 0x09                   # Diagnoseadresse (hex 0x.. oder dezimal)
+name = "Bordnetz"
+gruppe = "Karosserie & Komfort"  # Gruppe in der Steuergeräte-Liste
+protokoll = "TP20"               # UDS | TP20 | KWP1281 | OBD
+tx = 0x70E                       # CAN-Kennung zum Steuergerät (nur UDS nötig)
+rx = 0x778                       # CAN-Kennung der Antwort
+teilenummer = "1K0937049"        # Teilenummer, wenn die Daten nur dazu passen
+
+# Fehlertexte dieses Steuergeräts
+fehler = [
+    { code = "01314", text = "Motorsteuergerät: keine Kommunikation" },
+    { code = "00532", text = "Versorgungsspannung" },
+]
+
+# Messwerte (DIDs): angezeigt wird  Rohwert × faktor + offset
+dids = [
+    { did = 0xF40C, name = "Motordrehzahl", einheit = "U/min", faktor = 0.25 },
+    { did = 0xF405, name = "Kühlmitteltemperatur", einheit = "°C", offset = -40 },
+    { did = 0x1234, name = "Batteriespannung", einheit = "V", faktor = 0.1 },
+]
+
+# Codierung: Byte und Bit (Bit weglassen = ganzes Byte)
+# benoetigt / schliesst_aus: andere Bits als "Byte.Bit"
+codierung = [
+    { byte = 0, bit = 1, name = "Tagfahrlicht" },
+    { byte = 0, bit = 2, name = "Tagfahrlicht über Nebelscheinwerfer", benoetigt = ["0.1"] },
+    { byte = 0, bit = 3, name = "Tagfahrlicht über Abblendlicht", schliesst_aus = ["0.2"] },
+    { byte = 4, name = "Ländervariante" },
+]
+
+# Anpassungskanäle
+anpassung = [
+    { kanal = 23, name = "Komfortblinken Anzahl" },
+    { kanal = 60, name = "Coming Home Dauer" },
+]
+
+# ── Ein zweites Steuergerät, nur mit dem Nötigsten ──────────────────────
+[[hersteller.steuergeraet]]
+adresse = 0x17
+name = "Kombiinstrument"
+
+# ── Fehlertexte ohne festes Steuergerät (z. B. genormte P-Codes) ────────
+[[fehler]]
+code = "P0171"
+text = "System zu mager (Bank 1)"
+
+[[fehler]]
+code = "P0420"
+text = "Katalysator Bank 1: Wirkungsgrad zu gering"

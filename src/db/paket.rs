@@ -221,8 +221,9 @@ impl Db {
         Ok(erg)
     }
 
-    /// CSV mit Fehlertexten (`code;text`) oder DIDs (`did;name;einheit;faktor;offset`)
-    /// als Quelle „USER“ übernehmen. Trennzeichen `;` oder `,`; erste Zeile darf eine Kopfzeile sein.
+    /// CSV mit Fehlertexten (`code;text`) und/oder DIDs (`did;name;einheit;faktor;offset`)
+    /// als Quelle „USER“ übernehmen. Trennzeichen `;` oder `,`; Kopfzeilen dürfen
+    /// mitten in der Datei stehen und schalten zwischen Fehlern und DIDs um.
     pub fn csv_importieren(&self, pfad: &Path, lizenz: &str) -> Result<ImportErgebnis> {
         let roh = std::fs::read(pfad).with_context(|| crate::tr!("{a} lesen", a = pfad.display()))?;
         // UTF-8, sonst Windows-1252/Latin-1 (so schreiben viele Werkstattprogramme)
@@ -240,23 +241,55 @@ impl Db {
         if kopf.starts_with("Kanal,") {
             bail!(crate::tr!("Das ist ein Export der Anpassungskanäle eines Werkstattprogramms. Er enthält nur Kanalnummern und die Werte deines Autos, keine Namen — zum Vergleichen, nicht zum Übernehmen."));
         }
-        let trenner = if text.lines().next().is_some_and(|z| z.contains(';')) { ';' } else { ',' };
-        let zeilen: Vec<Vec<String>> = text
+        // Trennzeichen nach der ersten echten Zeile (Kommentarzeilen mit ; zählen nicht)
+        let trenner = if kopf.contains(';') { ';' } else { ',' };
+        let zeilen: Vec<(usize, Vec<String>)> = text
             .lines()
-            .filter(|z| !z.trim().is_empty() && !z.trim_start().starts_with('#') && !z.trim_start().starts_with(';'))
-            .map(|z| z.split(trenner).map(|f| f.trim().trim_matches('"').to_string()).collect())
+            .enumerate()
+            .filter(|(_, z)| !z.trim().is_empty() && !z.trim_start().starts_with('#') && !z.trim_start().starts_with(';'))
+            .map(|(n, z)| (n + 1, z.split(trenner).map(|f| f.trim().trim_matches('"').to_string()).collect()))
             .collect();
-        let Some(erste) = zeilen.first() else { bail!(crate::tr!("CSV ist leer")) };
-        let kopf = erste.first().is_some_and(|f| matches!(f.to_ascii_lowercase().as_str(), "code" | "did" | "fehler"));
-        let daten = &zeilen[usize::from(kopf)..];
-        let did_art = daten.first().is_some_and(|z| z.len() >= 3 || z.first().is_some_and(|f| f.starts_with("0x")));
+        if zeilen.is_empty() {
+            bail!(crate::tr!("CSV ist leer"));
+        }
+        // Fehlertexte und Messwerte dürfen gemischt in einer Datei stehen.
+        // Eine Kopfzeile (`code;text` bzw. `did;name;…`) legt fest, was danach
+        // kommt; ohne Kopfzeile wird jede Zeile einzeln erkannt.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Abschnitt {
+            Offen,
+            Fehler,
+            Did,
+        }
+        let mut abschnitt = Abschnitt::Offen;
         let tx = self.con.unchecked_transaction()?;
         let q = self.quelle_anlegen(QuellArt::User, name, "", lizenz, name)?;
         let mut erg = ImportErgebnis { quelle_id: q, ..Default::default() };
-        for (i, z) in daten.iter().enumerate() {
+        for (nr, z) in &zeilen {
             let feld = |n: usize| z.get(n).map(String::as_str).unwrap_or("");
-            if did_art {
-                let did = parse_zahl(feld(0)).with_context(|| crate::tr!("Zeile {a}: DID", a = i + 1 + usize::from(kopf)))?;
+            match feld(0).to_ascii_lowercase().as_str() {
+                "code" | "fehler" => {
+                    abschnitt = Abschnitt::Fehler;
+                    continue;
+                }
+                "did" | "messwert" => {
+                    abschnitt = Abschnitt::Did;
+                    continue;
+                }
+                _ => {}
+            }
+            let ist_did = match abschnitt {
+                Abschnitt::Fehler => false,
+                Abschnitt::Did => true,
+                // 0x… ist immer eine DID; eine reine Zahl mit 3 und mehr Spalten auch.
+                // Sonst Fehlercode (P0420, 00532 …).
+                Abschnitt::Offen => {
+                    let f0 = feld(0);
+                    f0.to_ascii_lowercase().starts_with("0x") || (z.iter().filter(|f| !f.is_empty()).count() >= 3 && parse_zahl(f0).is_ok())
+                }
+            };
+            if ist_did {
+                let did = parse_zahl(feld(0)).with_context(|| crate::tr!("Zeile {a}: DID", a = nr))?;
                 let zahl = |n: usize, std: f64| feld(n).replace(',', ".").parse().unwrap_or(std);
                 tx.execute(
                     "INSERT INTO did (did, name, unit, factor, \"offset\", source_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -455,6 +488,28 @@ dids = [{ did = 0xF40C, name = "Drehzahl", einheit = "U/min", faktor = 0.25 }]
         assert!(format!("{f:#}").contains("Anpassungskanäle"));
         let f = db.csv_text_importieren(";SW:x\nBlock,Feld 1,Datentyp,\n1,ein,,\n", "blockmap.csv", "").unwrap_err();
         assert!(format!("{f:#}").contains("wertetexte-lernen"));
+    }
+
+    #[test]
+    fn beispiel_dateien_lassen_sich_uebernehmen() {
+        let db = Db::im_speicher().unwrap();
+        let p = Datenpaket::aus_text(include_str!("../../beispiele/datenpaket-alles.toml"), false).unwrap();
+        let e = db.paket_importieren(&p, QuellArt::User).unwrap();
+        assert_eq!((e.steuergeraete, e.fehler, e.messwerte, e.codierung, e.anpassung), (2, 4, 3, 4, 2));
+        let e = db.csv_text_importieren(include_str!("../../beispiele/gemischt.csv"), "gemischt.csv", "").unwrap();
+        assert_eq!((e.fehler, e.messwerte), (3, 3));
+    }
+
+    #[test]
+    fn csv_gemischt() {
+        let db = Db::im_speicher().unwrap();
+        // ohne Kopfzeile: jede Zeile einzeln erkannt
+        let e = db.csv_text_importieren("P0420;Kat\n0xF40C;Drehzahl;U/min;0,25\n00532;Versorgungsspannung\n4660;Spannung;V\n", "m.csv", "").unwrap();
+        assert_eq!((e.fehler, e.messwerte), (2, 2));
+        assert_eq!(db.fehlertext("00532").unwrap().as_deref(), Some("Versorgungsspannung"));
+        // mit Abschnitten; ;-Kommentar vorne verfälscht das Trennzeichen nicht
+        let e = db.csv_text_importieren(";Liste\ncode,text\nP0171,zu mager\ndid,name,einheit\n0x1234,Druck,bar\nfehler,text\nP0300,Aussetzer\n", "a.csv", "").unwrap();
+        assert_eq!((e.fehler, e.messwerte), (2, 1));
     }
 
     #[test]
