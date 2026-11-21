@@ -732,6 +732,10 @@ struct App {
     /// Anpassung (TP 2.0): Kanäle als Eingabe, Ergebniszeilen, aufklappen
     an_kanaele: String,
     an_result: Vec<String>,
+    /// Wissen aus der Fahrzeug-Datenbank zum gewählten TP-2.0-Steuergerät (Adresse, Wissen)
+    an_wissen: Option<(u8, Option<ecu_werkbank::db::teile::SgWissen>)>,
+    /// Codier-Bits aus der Fahrzeug-Datenbank zur Teilenummer (Teilenummer, Bits)
+    code_wissen: Option<(String, Vec<ecu_werkbank::labels::Coding>)>,
     an_zeigen: bool,
     /// Anpassung schreiben: Kanal, neuer Wert, Bestätigung
     an_kanal: String,

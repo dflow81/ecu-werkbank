@@ -259,7 +259,8 @@ impl Db {
                     )?;
                     erg.codierung += 1;
                 }
-                for a in &s.anpassung {
+                // „Kanal 4“ & Co. sagen nichts — nicht übernehmen
+                for a in s.anpassung.iter().filter(|a| !super::teile::ist_platzhalter(&a.name)) {
                     tx.execute("INSERT INTO adaptation (ecu_id, channel, name, source_id) VALUES (?1, ?2, ?3, ?4)", params![ecu, a.kanal, a.name, q])?;
                     erg.anpassung += 1;
                 }

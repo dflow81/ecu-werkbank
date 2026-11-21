@@ -81,6 +81,13 @@ enum DbAktion {
     Status,
     /// Alle Quellen mit Art, Lizenz und Anzahl Einträge
     Quellen,
+    /// Aufräumen: Anpassungskanäle ohne echten Namen („Kanal 4“) löschen
+    Aufraeumen,
+    /// Was die Datenbank zu einer Teilenummer weiß (Anpassung, Codierung, Messwerte, Fehler)
+    Teil {
+        /// z. B. 5K0937086 oder "1K0 907 379 CD"
+        teilenummer: String,
+    },
     /// Normdaten und die mitgelieferten Community-Daten übernehmen/aktualisieren
     Eingebaut,
     /// Beliebige Datei übernehmen — die Art wird erkannt (DBC, Datenpaket, Label, CSV, ODX/PDX)
@@ -108,7 +115,7 @@ enum DbAktion {
         #[arg(long)]
         hersteller: String,
     },
-    /// CSV übernehmen: Fehlertexte (code;text) oder DIDs (did;name;einheit;faktor;offset)
+    /// CSV übernehmen: Fehlertexte (code;text), DIDs (did;name;einheit;faktor;offset), Fehlerarten — auch gemischt
     Csv {
         #[arg(long)]
         datei: PathBuf,

@@ -633,7 +633,10 @@ impl App {
         };
         let tx = self.code_text_key();
         let tx_key = tx.unwrap_or(u16::MAX);
-        let labels: Vec<ecu_werkbank::labels::Coding> = self.code_ecu.and_then(|a| self.db.coding(a)).map(|c| c.to_vec()).unwrap_or_default();
+        let mut labels: Vec<ecu_werkbank::labels::Coding> = self.code_ecu.and_then(|a| self.db.coding(a)).map(|c| c.to_vec()).unwrap_or_default();
+        if labels.is_empty() {
+            labels = self.code_bits_aus_datenbank();
+        }
         // Namen vorab (eigener Text, sonst Label): je Byte (Byte-Text, 8 Bit-Texte)
         let namen: Vec<(Option<String>, Vec<Option<String>>)> = (0..bytes.len())
             .map(|i| (self.code_texte.name(tx_key, &labels, i, None), (0..8u8).map(|b| self.code_texte.name(tx_key, &labels, i, Some(b))).collect()))
@@ -1021,5 +1024,33 @@ impl App {
             None => None,
         };
         Some((a, b, f))
+    }
+}
+
+impl App {
+    /// Codier-Bits aus der Fahrzeug-Datenbank über die Teilenummer des
+    /// Steuergeräts (TP 2.0: Suchlauf/Software-Sicherung; UDS: Software-Sicherung
+    /// über die Anfrage-ID). Wird je Teilenummer nur einmal nachgeschlagen.
+    fn code_bits_aus_datenbank(&mut self) -> Vec<ecu_werkbank::labels::Coding> {
+        let teil = match self.code_tp20 {
+            Some(a) => self.tp_teilenummer(a),
+            None => {
+                let tx = u16::from_str_radix(self.code_tx.trim().trim_start_matches("0x"), 16).ok();
+                self.active_vehicle.as_deref().zip(tx).and_then(|(v, tx)| ecu_werkbank::swinfo::teilenummer_fuer(v, tx))
+            }
+        };
+        let Some(teil) = teil else { return Vec::new() };
+        if self.code_wissen.as_ref().map(|(t, _)| t != &teil).unwrap_or(true) {
+            let bits = ecu_werkbank::db::teile::wissen_falls_vorhanden(&teil)
+                .map(|w| {
+                    w.codierung
+                        .into_iter()
+                        .map(|c| ecu_werkbank::labels::Coding { byte: c.byte, bit: c.bit, name: c.name, benoetigt: c.benoetigt, schliesst_aus: c.schliesst_aus })
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.code_wissen = Some((teil, bits));
+        }
+        self.code_wissen.as_ref().map(|(_, b)| b.clone()).unwrap_or_default()
     }
 }

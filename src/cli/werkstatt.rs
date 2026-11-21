@@ -426,11 +426,18 @@ pub(super) fn gateway_verbauliste(be: &Backend) -> Result<()> {
 /// Anpassungskanäle eines TP-2.0-Steuergeräts anzeigen (nur lesen).
 pub(super) fn kwp_anpassung(be: &Backend, address: u8, kanaele: &[u8]) -> Result<()> {
     println!("{}", tr!("Anpassung Steuergerät {a} (nur lesen) …", a = format!("{address:02X}")));
+    // Kanal-Namen aus der Fahrzeug-Datenbank über die Teilenummer
+    let teil = load_active().and_then(|v| ecu_werkbank::swinfo::teilenummer_fuer(&v, u16::from(address))).or_else(|| kwp::teilenummer_lesen(be, address));
+    let wissen = teil.as_deref().and_then(ecu_werkbank::db::teile::wissen_falls_vorhanden);
+    if let Some(w) = &wissen {
+        println!("{}", tr!("  Namen aus der Fahrzeug-Datenbank ({a})", a = w.teilenummer));
+    }
     for r in kwp::anpassung_lesen(be, address, kanaele)? {
         match r {
             Ok(k) => {
                 let felder: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
-                println!("{}", tr!("  Kanal {a}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), b = k.wert, c = felder.join("  |  ")));
+                let name = wissen.as_ref().and_then(|w| w.kanal(u16::from(k.kanal))).map(|n| format!(" ({n})")).unwrap_or_default();
+                println!("{}", tr!("  Kanal {a}{n}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), n = name, b = k.wert, c = felder.join("  |  ")));
             }
             Err(e) => println!("  {e}"),
         }

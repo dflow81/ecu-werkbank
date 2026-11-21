@@ -513,6 +513,17 @@ impl App {
         });
     }
 
+    /// Teilenummer eines TP-2.0-Steuergeräts: aus dem letzten Suchlauf, sonst
+    /// aus der Software-Sicherung des aktiven Fahrzeugs.
+    pub(super) fn tp_teilenummer(&self, addr: u8) -> Option<String> {
+        self.tp_found
+            .iter()
+            .find(|f| f.address == addr)
+            .map(|f| ecu_werkbank::verbauliste::teilenummer(&f.ident))
+            .filter(|t| !t.is_empty())
+            .or_else(|| self.active_vehicle.as_deref().and_then(|v| ecu_werkbank::swinfo::teilenummer_fuer(v, u16::from(addr))))
+    }
+
     /// Anpassung (Funktion 10) am gewählten TP-2.0-Steuergerät lesen (nur lesen).
     pub(super) fn ui_anpassung_tp20(&mut self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
@@ -524,28 +535,51 @@ impl App {
                 ui.weak(tr!("Oben eine Steuergerät-Adresse eingeben."));
                 return;
             };
+            // Namen der Kanäle aus der Fahrzeug-Datenbank (über die Teilenummer)
+            if self.an_wissen.as_ref().map(|(a, _)| *a) != Some(addr) {
+                let w = self.tp_teilenummer(addr).and_then(|t| ecu_werkbank::db::teile::wissen_falls_vorhanden(&t));
+                self.an_wissen = Some((addr, w));
+            }
+            let wissen = self.an_wissen.as_ref().and_then(|(_, w)| w.clone());
+            if let Some(w) = wissen.as_ref().filter(|w| !w.anpassung.is_empty()) {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(tr!("Bekannte Kanäle für {a}:", a = w.teilenummer));
+                    let liste: Vec<String> = w.anpassung.keys().map(u16::to_string).collect();
+                    ui.monospace(liste.join(", "));
+                    if ui.small_button(tr!("alle eintragen")).clicked() {
+                        self.an_kanaele = liste.join(",");
+                    }
+                });
+            }
             ui.horizontal_wrapped(|ui| {
                 ui.label(tr!("Kanäle (dezimal, mit Komma):"));
                 ui.add(egui::TextEdit::singleline(&mut self.an_kanaele).desired_width(160.0).hint_text("1,3,17"));
                 if ui.add_enabled(self.backend().supports_tp20(), egui::Button::new(tr!("📖 Lesen ({a})", a = format!("{addr:02X}")))).clicked() {
                     let kanaele: Vec<u8> = self.an_kanaele.split(',').filter_map(|t| t.trim().parse().ok()).collect();
                     let be = self.backend();
+                    let teil = self.tp_teilenummer(addr);
                     self.im_hintergrund(tr!("Anpassung lesen"), move || {
-                        let zeilen = match kwp::anpassung_lesen(&be, addr, &kanaele) {
-                            Ok(l) => l
-                                .into_iter()
-                                .map(|r| match r {
-                                    Ok(k) => {
-                                        let f: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
-                                        tr!("Kanal {a}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), b = k.wert, c = f.join("  |  "))
-                                    }
-                                    Err(e) => e,
-                                })
-                                .collect(),
-                            Err(e) => vec![format!("{e:#}")],
-                        };
+                        // Teilenummer unbekannt (noch kein Suchlauf): Kennung kurz lesen
+                        let teil = teil.or_else(|| kwp::teilenummer_lesen(&be, addr));
+                        let wissen = teil.as_deref().and_then(ecu_werkbank::db::teile::wissen_falls_vorhanden);
+                        let mut zeilen = Vec::new();
+                        if let Some(w) = &wissen {
+                            zeilen.push(tr!("Namen aus der Fahrzeug-Datenbank ({a})", a = w.teilenummer));
+                        }
+                        match kwp::anpassung_lesen(&be, addr, &kanaele) {
+                            Ok(l) => zeilen.extend(l.into_iter().map(|r| match r {
+                                Ok(k) => {
+                                    let f: Vec<String> = k.felder.iter().filter(|v| !v.is_leer()).map(|v| v.display()).collect();
+                                    let name = wissen.as_ref().and_then(|w| w.kanal(u16::from(k.kanal))).map(|n| format!(" ({n})")).unwrap_or_default();
+                                    tr!("Kanal {a}{n}: Wert {b}   [{c}]", a = format!("{:03}", k.kanal), n = name, b = k.wert, c = f.join("  |  "))
+                                }
+                                Err(e) => e,
+                            })),
+                            Err(e) => zeilen.push(format!("{e:#}")),
+                        }
                         Box::new(move |app: &mut App| {
                             app.an_result = zeilen;
+                            app.an_wissen = Some((addr, wissen));
                             app.status = tr!("Anpassung gelesen.");
                         })
                     });

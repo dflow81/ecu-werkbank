@@ -22,6 +22,29 @@ pub(super) fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std:
                 println!("{}", tr!("\nNoch leer. Start:  ecu-werkbank db eingebaut   (dann z. B. db labels, db dbc --datei …)"));
             }
         }
+        DbAktion::Aufraeumen => {
+            let n = db.platzhalter_entfernen()?;
+            println!("{}", tr!("{a} Anpassungskanäle ohne echten Namen gelöscht.", a = n));
+        }
+        DbAktion::Teil { teilenummer } => match db.wissen_zur_teilenummer(&teilenummer)? {
+            None => println!("{}", tr!("Zu {a} steht nichts in der Datenbank.", a = teilenummer)),
+            Some(w) => {
+                println!("{}  {}", w.zusammenfassung(), w.name);
+                for (k, n) in &w.anpassung {
+                    println!("{}", tr!("  Anpassung Kanal {a}: {b}", a = format!("{k:03}"), b = n));
+                }
+                for c in &w.codierung {
+                    let wo = c.bit.map(|b| format!("{}.{}", c.byte, b)).unwrap_or_else(|| c.byte.to_string());
+                    println!("{}", tr!("  Codierung {a}: {b}", a = wo, b = c.name));
+                }
+                for d in &w.dids {
+                    println!("{}", tr!("  Messwert {a}: {b} {c}", a = format!("{:#06x}", d.did), b = d.name, c = d.einheit));
+                }
+                for f in &w.fehler {
+                    println!("{}", tr!("  Fehler {a}: {b}", a = f.code, b = f.text));
+                }
+            }
+        },
         DbAktion::Quellen => {
             let q = db.quellen()?;
             if q.is_empty() {

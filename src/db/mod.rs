@@ -21,6 +21,7 @@ pub mod inhalt;
 pub mod labels;
 pub mod odx;
 pub mod paket;
+pub mod teile;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
 const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql"), include_str!("schema_004.sql"), include_str!("schema_005.sql")];

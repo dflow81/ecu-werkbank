@@ -381,6 +381,8 @@ impl App {
             sg_zeigen: false,
             an_kanaele: "1".into(),
             an_result: Vec::new(),
+            an_wissen: None,
+            code_wissen: None,
             an_zeigen: false,
             an_kanal: String::new(),
             an_wert: String::new(),
@@ -459,6 +461,8 @@ impl App {
     pub(super) fn reload_labels(&mut self) {
         self.db = LabelDb::load_dir(&self.labels_dir).unwrap_or_default();
         ecu_werkbank::dtc_db::fehlerarten_neu_laden();
+        self.an_wissen = None;
+        self.code_wissen = None;
     }
 
     /// Die 8 OBD-Motor-Adressen nach UDS-Antwort abfragen (im Hintergrund).

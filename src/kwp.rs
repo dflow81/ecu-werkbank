@@ -912,6 +912,13 @@ pub fn anpass_ergebnis(r: &[u8]) -> Option<(u16, Vec<BlockValue>)> {
 
 /// Anpassungskanäle eines TP-2.0-Steuergeräts lesen (nur lesen), so wie ein
 /// Werkstatt-Diagnosegerät es tut: Routine 0x0103 starten (31 B8 01 03),
+/// Teilenummer eines TP-2.0-Steuergeräts aus seiner Kennung lesen (nur lesen).
+pub fn teilenummer_lesen(be: &crate::transport::Backend, adresse: u8) -> Option<String> {
+    let mut ch = open_session(be, adresse).ok()?;
+    let d = Kwp::new(&mut ch).read_ecu_id(ECU_ID_VAG).ok()?;
+    Some(crate::verbauliste::teilenummer(&ident_strings(&d))).filter(|t| !t.is_empty())
+}
+
 /// Kanal wählen (31 B9 01 03 Kanal), Ergebnis holen (31 BA 01 03), Routine
 /// beenden (32 B8 01 03). Es wird nichts gespeichert oder geändert.
 pub fn anpassung_lesen(be: &crate::transport::Backend, adresse: u8, kanaele: &[u8]) -> Result<Vec<std::result::Result<AnpassKanal, String>>> {

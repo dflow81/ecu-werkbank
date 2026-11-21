@@ -34,6 +34,8 @@ pub(super) struct DatenbankSeite {
     inhalt: Option<Inhalt>,
     filter: String,
     bearbeitung: Option<Bearbeitung>,
+    teil_suche: String,
+    teil_ergebnis: Vec<String>,
 }
 
 impl Default for DatenbankSeite {
@@ -53,6 +55,8 @@ impl Default for DatenbankSeite {
             inhalt: None,
             filter: String::new(),
             bearbeitung: None,
+            teil_suche: String::new(),
+            teil_ergebnis: Vec::new(),
         }
     }
 }
@@ -201,7 +205,42 @@ impl App {
                     Err(e) => tr!("Fehler: {e}", e = format!("{e:#}")),
                 };
             }
+            if ui.button(tr!("🧹 Aufräumen")).on_hover_text(tr!("Anpassungskanäle ohne echten Namen („Kanal 4“) löschen — die Nummer zeigt das Programm ohnehin")).clicked() {
+                self.status = match mit_db(|d| d.platzhalter_entfernen()) {
+                    Ok(n) => tr!("{a} Anpassungskanäle ohne echten Namen gelöscht.", a = n),
+                    Err(e) => tr!("Fehler: {e}", e = format!("{e:#}")),
+                };
+                self.dbs.inhalt = None;
+                self.reload_labels();
+            }
         });
+        // --- Nachschlagen nach Teilenummer (so findet das Programm die Namen am Auto)
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("🔎 Teilenummer:"));
+            let r = ui.add(egui::TextEdit::singleline(&mut self.dbs.teil_suche).desired_width(140.0).hint_text("5K0937086"));
+            if ui.button(tr!("Nachschlagen")).clicked() || r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let t = self.dbs.teil_suche.clone();
+                self.dbs.teil_ergebnis = match mit_db(|d| d.wissen_zur_teilenummer(&t)) {
+                    Ok(None) => vec![tr!("Zu {a} steht nichts in der Datenbank.", a = t)],
+                    Ok(Some(w)) => {
+                        let mut z = vec![format!("{}  {}", w.zusammenfassung(), w.name)];
+                        z.extend(w.anpassung.iter().map(|(k, n)| tr!("  Anpassung Kanal {a}: {b}", a = format!("{k:03}"), b = n)));
+                        z.extend(w.codierung.iter().map(|c| tr!("  Codierung {a}: {b}", a = c.bit.map(|b| format!("{}.{}", c.byte, b)).unwrap_or_else(|| c.byte.to_string()), b = c.name)));
+                        z.extend(w.dids.iter().map(|d| tr!("  Messwert {a}: {b} {c}", a = format!("{:#06x}", d.did), b = d.name, c = d.einheit)));
+                        z.extend(w.fehler.iter().map(|f| tr!("  Fehler {a}: {b}", a = f.code, b = f.text)));
+                        z
+                    }
+                    Err(e) => vec![format!("{e:#}")],
+                };
+            }
+        });
+        if !self.dbs.teil_ergebnis.is_empty() {
+            egui::ScrollArea::vertical().id_source("teil_ergebnis").max_height(160.0).show(ui, |ui| {
+                for z in &self.dbs.teil_ergebnis {
+                    ui.monospace(z);
+                }
+            });
+        }
         for z in &self.dbs.meldungen {
             ui.monospace(z);
         }

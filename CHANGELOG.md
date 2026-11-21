@@ -5,6 +5,16 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Geändert
+- **Datenbank-Wissen wird am Auto genutzt — über die Teilenummer:** Beim Lesen von
+  Anpassungskanälen (TP 2.0, GUI und `kwp-anpassung`) stehen die Kanal-Namen aus allen
+  Quellen der Fahrzeug-Datenbank dabei, z. B. „Kanal 007 (Abschaltung Standheizung): Wert …“;
+  dazu „Bekannte Kanäle … alle eintragen“. Die Codier-Ansicht nimmt Codier-Bits aus der
+  Datenbank, wenn kein Label passt. Gesucht wird nach der Teilenummer aus der Kennung
+  (genau gleich vor „ohne Index-Buchstaben“ vor „gleiche Grundnummer“), weil die
+  TP-2.0-Adressen nicht die gewohnten Diagnoseadressen sind.
+- Fahrzeug-Datenbank: **Teilenummer nachschlagen** (GUI und `db teil 5K0937086`) und
+  **🧹 Aufräumen** (`db aufraeumen`): löscht Anpassungskanäle ohne echten Namen („Kanal 4“);
+  solche Platzhalter werden beim Import gar nicht erst übernommen.
 - **Die Fahrzeug-Datenbank ist jetzt der einzige Speicher für eigenes Wissen:** eigene Labels
   (Label-Editor), Fehlertexte, Namen für Messwerte, Codier-Bits und Anpassungen sowie
   Messwert-Texte. Beim ersten Start werden Label-Ordner und Text-Dateien einmal übernommen;

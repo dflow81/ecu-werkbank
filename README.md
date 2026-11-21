@@ -1059,6 +1059,8 @@ Herkunft gespeichert und lässt sich als Ganzes wieder entfernen.
 ./target/release/ecu-werkbank db export --ziel beitrag.toml --lizenz CC0-1.0
 ./target/release/ecu-werkbank db odx --datei gekauft.pdx --hersteller Volkswagen   # ODX/PDX, bleibt lokal
 ./target/release/ecu-werkbank db quellen               # was ist drin, woher, welche Lizenz
+./target/release/ecu-werkbank db teil 5K0937086        # was ist zu dieser Teilenummer bekannt
+./target/release/ecu-werkbank db aufraeumen            # Anpassungskanäle ohne Namen („Kanal 4“) löschen
 ./target/release/ecu-werkbank db entfernen --id 3      # Vorschau; mit --ja wirklich
 ./target/release/ecu-werkbank db sichern --ziel kopie.sqlite
 ```
