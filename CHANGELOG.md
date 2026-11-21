@@ -32,6 +32,11 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - CSV darf **Fehlertexte und Messwerte gemischt** enthalten: Kopfzeilen (`code;text`,
   `did;name;…`) schalten um, ohne Kopfzeile wird jede Zeile einzeln erkannt.
   Beispiele: `beispiele/datenpaket-alles.toml` (alles in einem Paket) und `beispiele/gemischt.csv`.
+- **Fehlerart bei TP 2.0 mit Text:** statt nur „Fehlerart 14“ steht jetzt z. B.
+  „Fehlerart 14: Bauteil defekt“ (eingebaut für die Nummern, die an Golf 6 und Polo 6R
+  vorkamen). Eigene Fehlerarten lassen sich in der Fahrzeug-Datenbank anlegen
+  (Datenpaket `[[fehlerart]]`, CSV-Abschnitt `fehlerart;text;protokoll`, Editor unter
+  „Inhalt ansehen und bearbeiten“) — für TP20, UDS und KW1281; eigene haben Vorrang.
 - Datensicherung und „Fahrzeug als ZIP“ schreiben alles weiter als lesbare Dateien (auch eigene
   Texte und Labels); Einspielen holt es zurück in die Datenbank. Alte Sicherungen lassen sich
   weiter einspielen.

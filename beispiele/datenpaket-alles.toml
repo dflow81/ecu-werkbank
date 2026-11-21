@@ -7,9 +7,12 @@
 #
 # Wichtig bei TOML: Ein Schlüssel gehört immer zur letzten Überschrift
 # ([...] oder [[...]]) darüber. Deshalb stehen die allgemeinen Fehlertexte
-# unten als eigene [[fehler]]-Blöcke.
+# unten als eigene [[fehler]]- und [[fehlerart]]-Blöcke.
 #
 # Ein zweites Mal übernehmen ersetzt die alte Fassung (gleicher Name unter [quelle]).
+#
+# Löscht man die Quelle wieder (Fahrzeug-Datenbank → Quellen → 🗑), gelten
+# wieder die eingebauten Texte.
 
 # ── Woher die Daten kommen ──────────────────────────────────────────────
 [quelle]
@@ -74,3 +77,27 @@ text = "System zu mager (Bank 1)"
 [[fehler]]
 code = "P0420"
 text = "Katalysator Bank 1: Wirkungsgrad zu gering"
+
+# ── Fehlerarten: WAS mit dem Bauteil los ist ────────────────────────────
+# Ein Fehler besteht aus Fehlerort (welches Bauteil, oben unter „fehler“)
+# und Fehlerart (z. B. „defekt“). Die Nummern hängen vom Protokoll ab:
+#   TP20   = ältere Steuergeräte (Golf 6, Polo 6R): Nummer 0–15 aus dem Statusbyte
+#   UDS    = neuere Steuergeräte: 3. Byte des Fehlers (z. B. „B1054 13“ → 0x13)
+#   KW1281 = sehr alte Autos über K-Line (eigene Nummern, noch nicht genutzt)
+# Viele Fehlerarten kennt das Programm schon. Eigene Einträge haben Vorrang,
+# z. B. um eine fehlende Nummer zu ergänzen oder einen Text anders zu fassen.
+
+[[fehlerart]]
+protokoll = "TP20"
+nr = 3
+text = "Beispieltext für Fehlerart 3"
+
+[[fehlerart]]
+protokoll = "TP20"
+nr = 14
+text = "Bauteil defekt (austauschen)"
+
+[[fehlerart]]
+protokoll = "UDS"
+nr = 0x13
+text = "Leitung unterbrochen"

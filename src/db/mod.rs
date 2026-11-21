@@ -23,7 +23,7 @@ pub mod odx;
 pub mod paket;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
-const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql"), include_str!("schema_004.sql")];
+const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql"), include_str!("schema_004.sql"), include_str!("schema_005.sql")];
 
 /// Aktuelle Schema-Version dieses Programms.
 pub const SCHEMA_VERSION: u32 = MIGRATIONEN.len() as u32;
@@ -105,6 +105,7 @@ pub struct ImportErgebnis {
     pub anpassung: usize,
     pub botschaften: usize,
     pub signale: usize,
+    pub fehlerarten: usize,
 }
 
 impl ImportErgebnis {
@@ -118,6 +119,7 @@ impl ImportErgebnis {
             (self.anpassung, crate::trs!("Anpassungskanäle")),
             (self.botschaften, crate::trs!("CAN-Botschaften")),
             (self.signale, crate::trs!("CAN-Signale")),
+            (self.fehlerarten, crate::trs!("Fehlerarten")),
         ] {
             if n > 0 {
                 t.push(format!("{n} {was}"));
@@ -319,6 +321,13 @@ impl Db {
         Ok(v)
     }
 
+    /// Alle Fehlerarten: (Protokoll, Nummer) → Text; spätere Quellen gewinnen.
+    pub fn alle_fehlerarten(&self) -> Result<std::collections::HashMap<(String, u16), String>> {
+        let mut st = self.con.prepare("SELECT protocol, nr, text FROM fault_type WHERE text <> '' ORDER BY source_id, id")?;
+        let v = st.query_map([], |r| Ok(((r.get::<_, String>(0)?.to_ascii_uppercase(), r.get(1)?), r.get(2)?)))?.collect::<rusqlite::Result<_>>()?;
+        Ok(v)
+    }
+
     /// Alle CAN-Botschaften eines Herstellers (oder ohne Hersteller) als DBC-Struktur,
     /// z. B. für den CAN-Monitor oder die Live-Grafik.
     pub fn dbc(&self, hersteller: Option<i64>) -> Result<crate::dbc::Dbc> {
@@ -462,6 +471,16 @@ pub fn fehlertexte_falls_vorhanden() -> Vec<(String, String)> {
         return Vec::new();
     }
     Db::nur_lesen(&p).and_then(|db| db.alle_fehlertexte()).unwrap_or_default()
+}
+
+/// Eigene Fehlerarten aus der Nutzer-Datenbank: (Protokoll, Nummer) → Text.
+/// Öffnet nur lesend und legt nichts an; spätere Quellen gewinnen.
+pub fn fehlerarten_falls_vorhanden() -> std::collections::HashMap<(String, u16), String> {
+    let p = standard_pfad();
+    if !p.exists() {
+        return Default::default();
+    }
+    Db::nur_lesen(&p).and_then(|db| db.alle_fehlerarten()).unwrap_or_default()
 }
 
 /// Wertetexte als `0=aus;1=an` (ohne JSON-Abhängigkeit; `;` und `=` im Text werden ersetzt).

@@ -130,11 +130,50 @@ pub fn fehlerart_text(ftb: u8) -> Option<&'static str> {
 }
 
 /// Fehlerart für Anzeigen: „Fehlerart 13: Unterbrechung“ (ohne Text nur die Nummer).
+/// Eigene Texte aus der Fahrzeug-Datenbank (Protokoll UDS) haben Vorrang.
 pub fn fehlerart_kurz(ftb: u8) -> Option<String> {
-    (ftb != 0).then(|| match fehlerart_text(ftb) {
+    (ftb != 0).then(|| match eigene_fehlerart("UDS", ftb.into()).or_else(|| fehlerart_text(ftb).map(str::to_string)) {
         Some(t) => format!("Fehlerart {ftb:02X}: {t}"),
         None => format!("Fehlerart {ftb:02X}"),
     })
+}
+
+/// Fehlerart bei TP 2.0 / KWP2000 (untere 4 Bit des Statusbytes, 0–15).
+/// Die Nummern sind bei VAG-Steuergeräten einheitlich; Bedeutung in eigenen
+/// Worten, abgeglichen mit Scans eigener Autos (Golf 6, Polo 6R). Nummern,
+/// deren Bedeutung nicht sicher ist, bleiben ohne Text.
+pub fn tp20_fehlerart_text(nr: u8) -> Option<&'static str> {
+    Some(match nr {
+        1 => "Wert über der oberen Grenze",
+        2 => "Wert unter der unteren Grenze",
+        4 => "kein Signal / keine Verbindung",
+        5 => "Grundeinstellung oder Anpassung fehlt bzw. falsch",
+        7 => "Kurzschluss gegen Masse",
+        8 => "Signal unplausibel",
+        10 => "Leitung unterbrochen oder Kurzschluss gegen Plus",
+        12 => "elektrischer Fehler im Stromkreis",
+        13 => "Fehlerspeicher (auch anderer Steuergeräte) auslesen",
+        14 => "Bauteil defekt",
+        _ => return None,
+    })
+}
+
+/// TP-2.0-Fehlerart mit Text: eigene Einträge (Fahrzeug-Datenbank) vor den eingebauten.
+pub fn tp20_fehlerart(nr: u8) -> Option<String> {
+    eigene_fehlerart("TP20", nr.into()).or_else(|| tp20_fehlerart_text(nr).map(str::to_string))
+}
+
+static EIGENE_FEHLERARTEN: std::sync::Mutex<Option<std::collections::HashMap<(String, u16), String>>> = std::sync::Mutex::new(None);
+
+/// Eigene Fehlerart aus der Fahrzeug-Datenbank (einmal geladen, dann im Speicher).
+pub fn eigene_fehlerart(protokoll: &str, nr: u16) -> Option<String> {
+    let mut g = EIGENE_FEHLERARTEN.lock().unwrap_or_else(|e| e.into_inner());
+    g.get_or_insert_with(crate::db::fehlerarten_falls_vorhanden).get(&(protokoll.to_ascii_uppercase(), nr)).cloned()
+}
+
+/// Nach Änderungen an der Datenbank aufrufen, damit neue Fehlerarten gelten.
+pub fn fehlerarten_neu_laden() {
+    *EIGENE_FEHLERARTEN.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 /// Anzahl der direkt hinterlegten Codes (ohne Regel-Gruppen).
@@ -597,6 +636,8 @@ mod tests {
         assert_eq!(fehlerart_kurz(0), None);
         assert_eq!(fehlerart_kurz(0x13).as_deref(), Some("Fehlerart 13: Unterbrechung"));
         assert_eq!(fehlerart_kurz(0xF0).as_deref(), Some("Fehlerart F0"));
+        assert_eq!(tp20_fehlerart_text(14), Some("Bauteil defekt"));
+        assert_eq!(tp20_fehlerart_text(3), None);
     }
 
     #[test]

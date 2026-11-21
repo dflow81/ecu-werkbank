@@ -16,7 +16,14 @@
 //! adresse = 0x09
 //! name = "Bordnetz"
 //! fehler = [{ code = "B1234", text = "…" }]
+//!
+//! [[fehlerart]]
+//! protokoll = "TP20"    # TP20 | UDS | KW1281
+//! nr = 14
+//! text = "Bauteil defekt"
 //! ```
+//!
+//! Vollständiges Beispiel: `beispiele/datenpaket-alles.toml`.
 //!
 //! Export nimmt nur Quellen, die [`super::darf_weitergeben`] erlaubt.
 
@@ -35,6 +42,43 @@ pub struct Datenpaket {
     /// Fehlertexte ohne festes Steuergerät (z. B. genormte P-Codes)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fehler: Vec<PaketFehler>,
+    /// Fehlerarten („defekt“, „Kurzschluss nach Plus“ …) je Protokoll
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fehlerart: Vec<PaketFehlerart>,
+}
+
+/// Eine Fehlerart. `protokoll`: TP20 (Nummer 0–15 aus dem Statusbyte),
+/// UDS (3. Byte des Fehlers) oder KW1281 (alte K-Line-Steuergeräte).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PaketFehlerart {
+    pub protokoll: String,
+    pub nr: u16,
+    pub text: String,
+}
+
+/// Erlaubte Protokolle für Fehlerarten.
+pub const FEHLERART_PROTOKOLLE: &[&str] = &["TP20", "UDS", "KW1281"];
+
+fn fehlerart_pruefen(f: &PaketFehlerart) -> Result<String> {
+    let p = f.protokoll.trim().to_ascii_uppercase();
+    if !FEHLERART_PROTOKOLLE.contains(&p.as_str()) {
+        bail!(crate::tr!("Fehlerart {a}: Protokoll „{b}“ unbekannt (erlaubt: TP20, UDS, KW1281)", a = f.nr, b = f.protokoll));
+    }
+    if p == "TP20" && f.nr > 15 {
+        bail!(crate::tr!("Fehlerart {a}: bei TP20 gibt es nur die Nummern 0 bis 15", a = f.nr));
+    }
+    if p == "UDS" && f.nr > 255 {
+        bail!(crate::tr!("Fehlerart {a}: bei UDS gibt es nur die Nummern 0 bis 255", a = f.nr));
+    }
+    Ok(p)
+}
+
+/// Fehlerart in die Datenbank schreiben (prüft Protokoll und Nummer).
+pub(crate) fn fehlerart_eintragen(con: &rusqlite::Connection, f: &PaketFehlerart, quelle: i64) -> Result<()> {
+    let p = fehlerart_pruefen(f)?;
+    con.execute("INSERT INTO fault_type (protocol, nr, text, source_id) VALUES (?1, ?2, ?3, ?4)", params![p, f.nr, f.text.trim(), quelle])?;
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -182,6 +226,10 @@ impl Db {
             tx.execute("INSERT INTO dtc (dtc_code, title, source_id) VALUES (?1, ?2, ?3)", params![norm_code(&f.code), f.text, q])?;
             erg.fehler += 1;
         }
+        for f in &p.fehlerart {
+            fehlerart_eintragen(&tx, f, q)?;
+            erg.fehlerarten += 1;
+        }
         for h in &p.hersteller {
             let wmi: Vec<&str> = h.wmi.iter().map(String::as_str).collect();
             let hid = self.hersteller(&h.name, &wmi, Some(q))?;
@@ -260,6 +308,7 @@ impl Db {
             Offen,
             Fehler,
             Did,
+            Fehlerart,
         }
         let mut abschnitt = Abschnitt::Offen;
         let tx = self.con.unchecked_transaction()?;
@@ -276,10 +325,23 @@ impl Db {
                     abschnitt = Abschnitt::Did;
                     continue;
                 }
+                "fehlerart" => {
+                    abschnitt = Abschnitt::Fehlerart;
+                    continue;
+                }
                 _ => {}
             }
+            if abschnitt == Abschnitt::Fehlerart {
+                // nr;text;protokoll (Protokoll weggelassen = TP20)
+                let art = parse_zahl(feld(0)).with_context(|| crate::tr!("Zeile {a}: Nummer der Fehlerart", a = nr))?;
+                let protokoll = if feld(2).is_empty() { "TP20" } else { feld(2) };
+                let f = PaketFehlerart { protokoll: protokoll.into(), nr: art, text: feld(1).into() };
+                fehlerart_eintragen(&tx, &f, q).with_context(|| crate::tr!("Zeile {a}", a = nr))?;
+                erg.fehlerarten += 1;
+                continue;
+            }
             let ist_did = match abschnitt {
-                Abschnitt::Fehler => false,
+                Abschnitt::Fehler | Abschnitt::Fehlerart => false,
                 Abschnitt::Did => true,
                 // 0x… ist immer eine DID; eine reine Zahl mit 3 und mehr Spalten auch.
                 // Sonst Fehlercode (P0420, 00532 …).
@@ -360,6 +422,13 @@ impl Db {
             let (code, text, q) = r?;
             if erlaubt.contains(&q) {
                 p.fehler.push(PaketFehler { code, text });
+            }
+        }
+        let mut fa = self.con.prepare("SELECT protocol, nr, text, source_id FROM fault_type ORDER BY protocol, nr, id")?;
+        for r in fa.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u16>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?)))? {
+            let (protokoll, nr, text, q) = r?;
+            if erlaubt.contains(&q) {
+                p.fehlerart.push(PaketFehlerart { protokoll, nr, text });
             }
         }
         Ok((p, weggelassen))
@@ -495,9 +564,29 @@ dids = [{ did = 0xF40C, name = "Drehzahl", einheit = "U/min", faktor = 0.25 }]
         let db = Db::im_speicher().unwrap();
         let p = Datenpaket::aus_text(include_str!("../../beispiele/datenpaket-alles.toml"), false).unwrap();
         let e = db.paket_importieren(&p, QuellArt::User).unwrap();
-        assert_eq!((e.steuergeraete, e.fehler, e.messwerte, e.codierung, e.anpassung), (2, 4, 3, 4, 2));
+        assert_eq!((e.steuergeraete, e.fehler, e.messwerte, e.codierung, e.anpassung, e.fehlerarten), (2, 4, 3, 4, 2, 3));
         let e = db.csv_text_importieren(include_str!("../../beispiele/gemischt.csv"), "gemischt.csv", "").unwrap();
-        assert_eq!((e.fehler, e.messwerte), (3, 3));
+        assert_eq!((e.fehler, e.messwerte, e.fehlerarten), (3, 3, 2));
+        // Export enthält die Fehlerarten wieder
+        let (p, _) = db.paket_exportieren("x", "CC0-1.0").unwrap();
+        assert!(p.fehlerart.iter().any(|f| f.protokoll == "UDS" && f.nr == 0x13));
+    }
+
+    #[test]
+    fn fehlerarten_spaetere_quelle_gewinnt_und_falsche_werden_gemeldet() {
+        let db = Db::im_speicher().unwrap();
+        let p = |t: &str| Datenpaket::aus_text(&format!("[quelle]\nname = \"{t}\"\n[[fehlerart]]\nprotokoll = \"tp20\"\nnr = 14\ntext = \"{t}\"\n"), false).unwrap();
+        db.paket_importieren(&p("A"), QuellArt::User).unwrap();
+        db.paket_importieren(&p("B"), QuellArt::User).unwrap();
+        let alle = db.alle_fehlerarten().unwrap();
+        assert_eq!(alle.get(&("TP20".to_string(), 14)).map(String::as_str), Some("B"));
+        let falsch = Datenpaket::aus_text("[quelle]\nname = \"X\"\n[[fehlerart]]\nprotokoll = \"TP20\"\nnr = 16\ntext = \"x\"\n", false).unwrap();
+        assert!(db.paket_importieren(&falsch, QuellArt::User).is_err());
+        let falsch = Datenpaket::aus_text("[quelle]\nname = \"Y\"\n[[fehlerart]]\nprotokoll = \"CAN\"\nnr = 1\ntext = \"x\"\n", false).unwrap();
+        assert!(db.paket_importieren(&falsch, QuellArt::User).is_err());
+        // CSV ohne Protokoll = TP20
+        let e = db.csv_text_importieren("fehlerart;text\n12;Stromkreis\n", "f.csv", "").unwrap();
+        assert_eq!(e.fehlerarten, 1);
     }
 
     #[test]

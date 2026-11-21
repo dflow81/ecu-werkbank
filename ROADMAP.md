@@ -49,7 +49,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 30 | Fahrzeug-Konfiguration als Ganzes vergleichen (vorher/nachher, zwei Autos) | E-Sys | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `konfig-vergleich` (CLI); GUI fehlt noch |
 | 31 | DoIP (Diagnose über Ethernet, neuere VW/BMW) | ODIS, ISTA+, E-Sys | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
 | 32 | 29-Bit-CAN-IDs und CAN FD | Xentry, Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 29 Bit: ISO-TP (SocketCAN), ELM327 (ATSP7), Simulation, Marken-Suche; CAN FD fehlt; am echten 29-Bit-Auto noch nicht geprüft |
-| 33 | K-Line (KWP1281/KWP2000 vor ~2004) | VCDS | mittel | hoch | mittel | niedrig | 2.0 | ⏳ braucht anderen Adapter |
+| 33 | K-Line (KWP1281/KWP2000 vor ~2004) | VCDS | mittel | hoch | mittel | niedrig | 2.0 | ⏳ braucht anderen Adapter. Fehlerarten bei KW1281 haben eigene Nummern (z. B. 37 = defekt statt 14 bei TP 2.0); die Datenbank kennt dafür schon das Protokoll `KW1281` — Texte in eigenen Worten anlegen, keine fremden Listen abschreiben |
 | 34 | J2534 Pass-Thru-Adapter (Windows) | ODIS, Xentry | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
 | 35 | Weitere Marken: Basis-Diagnose Opel/Ford/Mercedes/BMW über UDS + OBD | Autel | hoch | hoch | mittel | mittel | 2.0 | 🟡 `fremd.rs` findet Steuergeräte mit 11 und 29 Bit (ISO 15765-4) |
 | 36 | ECU-Sicherung (Speicher auslesen, wo erlaubt) | Autel, Flash-Tools | mittel | mittel | mittel | mittel | 2.0 | ⏳ Baustein `read_memory` |

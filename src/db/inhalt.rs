@@ -3,7 +3,7 @@
 //! allgemeine Fehlertexte; CAN-Botschaften mit Signalen). Dient auch der
 //! Vorschau vor einem Import ([`super::import::vorschau`]).
 
-use super::paket::{PaketAnpassung, PaketCodierung, PaketDid, PaketFehler, PaketSteuergeraet};
+use super::paket::{PaketAnpassung, PaketCodierung, PaketDid, PaketFehler, PaketFehlerart, PaketSteuergeraet};
 use super::{Db, Quelle};
 use anyhow::{bail, Result};
 use rusqlite::{params, OptionalExtension};
@@ -26,6 +26,8 @@ pub struct Inhalt {
     pub steuergeraete: Vec<(i64, String, PaketSteuergeraet)>,
     /// Fehlertexte ohne festes Steuergerät
     pub fehler: Vec<PaketFehler>,
+    /// Fehlerarten („defekt“ …) je Protokoll
+    pub fehlerarten: Vec<PaketFehlerart>,
     pub can: Vec<CanBotschaft>,
 }
 
@@ -43,6 +45,7 @@ impl Inhalt {
             (d, crate::tr!("Kennungen/Messwerte")),
             (c, crate::tr!("Codier-Einträge")),
             (a, crate::tr!("Anpassungskanäle")),
+            (self.fehlerarten.len(), crate::tr!("Fehlerarten")),
             (self.can.len(), crate::tr!("CAN-Botschaften")),
             (sig, crate::tr!("CAN-Signale")),
         ];
@@ -139,6 +142,17 @@ impl Db {
         Ok(())
     }
 
+    /// Fehlerarten einer Quelle ersetzen.
+    pub fn fehlerarten_speichern(&self, quelle: i64, liste: &[PaketFehlerart]) -> Result<()> {
+        let tx = self.con.unchecked_transaction()?;
+        tx.execute("DELETE FROM fault_type WHERE source_id = ?1", params![quelle])?;
+        for f in liste {
+            super::paket::fehlerart_eintragen(&tx, f, quelle)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Name einer CAN-Botschaft und ihre Signale ändern (Signale werden ersetzt).
     pub fn can_speichern(&self, b: &CanBotschaft) -> Result<()> {
         let tx = self.con.unchecked_transaction()?;
@@ -175,6 +189,8 @@ impl Db {
         }
         let mut st = self.con.prepare("SELECT dtc_code, title FROM dtc WHERE ecu_id IS NULL AND source_id = ?1 ORDER BY dtc_code")?;
         let fehler = st.query_map(params![quelle], |r| Ok(PaketFehler { code: r.get(0)?, text: r.get(1)? }))?.collect::<rusqlite::Result<_>>()?;
+        let mut st = self.con.prepare("SELECT protocol, nr, text FROM fault_type WHERE source_id = ?1 ORDER BY protocol, nr, id")?;
+        let fehlerarten = st.query_map(params![quelle], |r| Ok(PaketFehlerart { protokoll: r.get(0)?, nr: r.get(1)?, text: r.get(2)? }))?.collect::<rusqlite::Result<_>>()?;
         let mut st = self.con.prepare("SELECT id, can_id, name, dlc FROM can_message WHERE source_id = ?1 ORDER BY can_id")?;
         let kopf: Vec<(i64, u32, String, u8)> = st.query_map(params![quelle], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<rusqlite::Result<_>>()?;
         let mut sig = self.con.prepare(
@@ -201,7 +217,7 @@ impl Db {
                 .collect::<rusqlite::Result<_>>()?;
             can.push(CanBotschaft { id, can_id, name, dlc, signale });
         }
-        Ok(Inhalt { quelle: q, steuergeraete, fehler, can })
+        Ok(Inhalt { quelle: q, steuergeraete, fehler, fehlerarten, can })
     }
 }
 

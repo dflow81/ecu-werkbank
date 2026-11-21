@@ -5,7 +5,7 @@ use super::*;
 use ecu_werkbank::db::{self, eigen::mit_db};
 use ecu_werkbank::db::import::Art;
 use ecu_werkbank::db::inhalt::{CanBotschaft, Inhalt};
-use ecu_werkbank::db::paket::{PaketAnpassung, PaketCodierung, PaketDid, PaketFehler, PaketSteuergeraet};
+use ecu_werkbank::db::paket::{PaketAnpassung, PaketCodierung, PaketDid, PaketFehler, PaketFehlerart, PaketSteuergeraet, FEHLERART_PROTOKOLLE};
 
 type Vorschau = Vec<(PathBuf, Result<(Art, String, Inhalt), String>)>;
 
@@ -13,6 +13,7 @@ type Vorschau = Vec<(PathBuf, Result<(Art, String, Inhalt), String>)>;
 enum Bearbeitung {
     Sg { id: i64, s: PaketSteuergeraet, adresse: String, tx: String, rx: String, loeschen: bool },
     Fehler { quelle: i64, liste: Vec<PaketFehler> },
+    Fehlerarten { quelle: i64, liste: Vec<PaketFehlerart> },
     Can(CanBotschaft),
 }
 
@@ -344,6 +345,13 @@ fn inhalt_baum(ui: &mut egui::Ui, i: &Inhalt, schluessel: &str) {
             }
         });
     }
+    if !i.fehlerarten.is_empty() {
+        egui::CollapsingHeader::new(tr!("Fehlerarten ({a})", a = i.fehlerarten.len())).id_source((schluessel, "fehlerart")).show(ui, |ui| {
+            for f in &i.fehlerarten {
+                ui.monospace(format!("{:<6} {:>3}  {}", f.protokoll, f.nr, f.text));
+            }
+        });
+    }
     if !i.can.is_empty() {
         egui::CollapsingHeader::new(tr!("CAN-Botschaften ({a})", a = i.can.len())).id_source((schluessel, "can")).show(ui, |ui| {
             for b in i.can.iter().take(300) {
@@ -482,6 +490,12 @@ impl App {
                     let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Fehler { .. }));
                     if ui.selectable_label(aktiv, tr!("⚠ Allgemeine Fehlertexte ({a})", a = inhalt.fehler.len())).clicked() {
                         self.dbs.bearbeitung = Some(Bearbeitung::Fehler { quelle: qid, liste: inhalt.fehler.clone() });
+                    }
+                }
+                if !ist_labels && (!inhalt.fehlerarten.is_empty() || inhalt.steuergeraete.is_empty() && inhalt.can.is_empty()) {
+                    let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Fehlerarten { .. }));
+                    if ui.selectable_label(aktiv, tr!("🔧 Fehlerarten ({a})", a = inhalt.fehlerarten.len())).clicked() {
+                        self.dbs.bearbeitung = Some(Bearbeitung::Fehlerarten { quelle: qid, liste: inhalt.fehlerarten.clone() });
                     }
                 }
                 for b in &inhalt.can {
@@ -659,6 +673,35 @@ impl App {
                     verwerfen = ui.button(tr!("↺ Verwerfen")).clicked();
                 });
             }
+            Some(Bearbeitung::Fehlerarten { liste, .. }) => {
+                ui.strong(tr!("Fehlerarten ({a})", a = liste.len()));
+                ui.weak(tr!("TP20: Nummer 0–15 aus dem Statusbyte (ältere Steuergeräte); UDS: 3. Byte des Fehlers; KW1281: alte K-Line-Steuergeräte. Eigene Texte haben Vorrang vor den eingebauten."));
+                let mut weg = None;
+                for (i, f) in liste.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_source(("fa_prot", i)).width(70.0).selected_text(f.protokoll.clone()).show_ui(ui, |ui| {
+                            for p in FEHLERART_PROTOKOLLE {
+                                ui.selectable_value(&mut f.protokoll, p.to_string(), *p);
+                            }
+                        });
+                        ui.add(egui::DragValue::new(&mut f.nr).range(0..=255).prefix(tr!("Nr. ")));
+                        ui.add(egui::TextEdit::singleline(&mut f.text).desired_width(240.0));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    liste.remove(i);
+                }
+                if ui.small_button(tr!("+ Fehlerart")).clicked() {
+                    liste.push(PaketFehlerart { protokoll: "TP20".into(), ..Default::default() });
+                }
+                ui.horizontal(|ui| {
+                    speichern = ui.button(tr!("💾 Speichern")).clicked();
+                    verwerfen = ui.button(tr!("↺ Verwerfen")).clicked();
+                });
+            }
             Some(Bearbeitung::Can(b)) => {
                 ui.horizontal(|ui| {
                     ui.label(format!("{:03X}", b.can_id));
@@ -721,6 +764,10 @@ impl App {
                 Some(Bearbeitung::Fehler { quelle, liste }) => {
                     let (q, l) = (*quelle, liste.clone());
                     mit_db(|d| d.fehler_allgemein_speichern(q, &l))
+                }
+                Some(Bearbeitung::Fehlerarten { quelle, liste }) => {
+                    let (q, l) = (*quelle, liste.clone());
+                    mit_db(|d| d.fehlerarten_speichern(q, &l))
                 }
                 Some(Bearbeitung::Can(b)) => {
                     let b = b.clone();

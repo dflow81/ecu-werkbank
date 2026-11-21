@@ -147,6 +147,7 @@ pub fn lesen(pfad: &std::path::Path, hersteller: &str) -> Result<(Datenpaket, su
         quelle: PaketQuelle { name: dateiname, version: String::new(), lizenz: crate::tr!("eigene Lizenz des Nutzers — nicht weitergeben"), herkunft: pfad.display().to_string() },
         hersteller: vec![PaketHersteller { name: hersteller.to_string(), wmi: Vec::new(), steuergeraete }],
         fehler: Vec::new(),
+        fehlerart: Vec::new(),
     };
     Ok((p, if pdx { super::QuellArt::Pdx } else { super::QuellArt::Odx }))
 }

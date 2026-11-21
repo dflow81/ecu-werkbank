@@ -227,7 +227,10 @@ impl KwpDtc {
         }
         let art = s & 0x0F;
         if art != 0 {
-            t += &tr!(", Fehlerart {art}", art = art);
+            match crate::dtc_db::tp20_fehlerart(art) {
+                Some(txt) => t += &tr!(", Fehlerart {art}: {txt}", art = art, txt = txt),
+                None => t += &tr!(", Fehlerart {art}", art = art),
+            }
         }
         format!("{t} ({s:#04x})")
     }
@@ -1360,12 +1363,12 @@ mod tests {
     #[test]
     fn kwp_status_im_klartext() {
         let d = |s| KwpDtc { code: 1627, status: s }.status_text();
-        assert_eq!(d(0x2E), "sporadisch (gespeichert, gerade nicht vorhanden), Fehlerart 14 (0x2e)");
-        assert_eq!(d(0x6C), "aktuell vorhanden, Fehlerart 12 (0x6c)");
+        assert_eq!(d(0x2E), "sporadisch (gespeichert, gerade nicht vorhanden), Fehlerart 14: Bauteil defekt (0x2e)");
+        assert_eq!(d(0x6C), "aktuell vorhanden, Fehlerart 12: elektrischer Fehler im Stromkreis (0x6c)");
         assert_eq!(d(0x20), "sporadisch (gespeichert, gerade nicht vorhanden) (0x20)");
         assert_eq!(d(0xE3), "aktuell vorhanden, Warnlampe an, Fehlerart 3 (0xe3)");
         // Golf 6, Tür Beifahrer 00929: Werkstatt-Diagnosegerät zeigt „008 … sporadisch“
-        assert_eq!(d(0x38), "sporadisch (gespeichert, gerade nicht vorhanden), Fehlerart 8 (0x38)");
+        assert_eq!(d(0x38), "sporadisch (gespeichert, gerade nicht vorhanden), Fehlerart 8: Signal unplausibel (0x38)");
     }
 
     #[test]

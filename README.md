@@ -1071,7 +1071,13 @@ hineinpasst (Steuergeräte, Fehlertexte, Messwerte, Codier-Bits, Anpassungen),
 ist [beispiele/datenpaket-alles.toml](beispiele/datenpaket-alles.toml).
 Eine CSV darf Fehlertexte und Messwerte gemischt enthalten; Kopfzeilen
 (`code;text`, `did;name;…`) schalten um, ohne Kopfzeile wird jede Zeile
-einzeln erkannt — siehe [beispiele/gemischt.csv](beispiele/gemischt.csv). Tippfehler im Paket werden gemeldet,
+einzeln erkannt — siehe [beispiele/gemischt.csv](beispiele/gemischt.csv).
+
+**Fehlerort und Fehlerart:** Ein Fehler besteht aus dem Bauteil (z. B. „01627 Geber
+Einparkhilfe“) und der Fehlerart (z. B. „14 defekt“). Bei TP 2.0 ist die Fehlerart eine
+Nummer 0–15 im Statusbyte, bei UDS das 3. Byte des Fehlers. Die bekannten Nummern sind
+eingebaut; fehlende oder anders gewünschte Texte trägt man als `[[fehlerart]]` im
+Datenpaket ein (eigene haben Vorrang). Tippfehler im Paket werden gemeldet,
 nicht still übergangen. Plan und Aufbau: [ROADMAP.md](ROADMAP.md), „Plan: Fahrzeug-Datenbank“.
 
 ### Texte für Messwerte mit Textnummer (TP 2.0)
