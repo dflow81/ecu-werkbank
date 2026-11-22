@@ -12,6 +12,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   Datenbank, wenn kein Label passt. Gesucht wird nach der Teilenummer aus der Kennung
   (genau gleich vor „ohne Index-Buchstaben“ vor „gleiche Grundnummer“), weil die
   TP-2.0-Adressen nicht die gewohnten Diagnoseadressen sind.
+- Steuergerätebaum aus der Gateway-Verbauliste: Bus 06 heißt „Kombi-CAN“, Bus 14 „Gateway selbst“;
+  UDS-Steuergeräte (Airbag, Klima, Kombi, Radio …) gelten nicht mehr fälschlich als
+  „im letzten Scan nicht gefunden“ — am Golf 6 geprüft 22.11.2026.
 - `kwp-coding` (Terminal) schlüsselt die Codierung mit Bit-Namen aus der Fahrzeug-Datenbank auf
   (über die Teilenummer). Die Teilenummer wird auch bei Steuergeräten gefunden, die ihre
   Kennung nur über 0x22 liefern (Golf-6-Bordnetz) — am Auto geprüft 22.11.2026.

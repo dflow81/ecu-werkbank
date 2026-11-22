@@ -168,13 +168,17 @@ pub struct BusAst {
 }
 
 /// Name der Bus-Kennung aus der Gateway-Verbauliste. Am Golf 6 beobachtet
-/// (Verbauliste mit der Lage der Steuergeräte verglichen, 15.11.2026);
+/// (Verbauliste mit der Lage der Steuergeräte verglichen, 15.11. und 22.11.2026);
 /// unbekannte Kennungen erscheinen als „Bus xx“.
 pub fn bus_name(bus: u8) -> String {
     match bus {
         0x00 => crate::tr!("Antriebs-CAN"),
         0x02 => crate::tr!("Komfort-CAN"),
         0x04 => crate::tr!("Infotainment-CAN"),
+        // Golf 6, 22.11.2026: dort hängen nur Kombi (17) und Wegfahrsperre (25)
+        0x06 => crate::tr!("Kombi-CAN"),
+        // Golf 6, 22.11.2026: nur das Gateway selbst
+        0x14 => crate::tr!("Gateway selbst"),
         b => crate::tr!("Bus {a}", a = format!("{b:02X}")),
     }
 }
@@ -186,10 +190,22 @@ pub fn baum(gateway: &[crate::kwp::VerbauEintrag], scan: Option<&ScanReport>) ->
     let mut aeste: BTreeMap<u8, Vec<BaumGeraet>> = BTreeMap::new();
     for e in gateway.iter().filter(|e| e.verbaut()) {
         let treffer = scan.and_then(|r| {
-            r.modules.iter().find(|m| {
-                let a = m.address;
-                (m.protocol == "TP 2.0" && e.tp20 != 0 && a == Some(u16::from(e.tp20))) || (m.protocol != "TP 2.0" && a == Some(u16::from(e.adresse)))
-            })
+            r.modules
+                .iter()
+                .find(|m| {
+                    let a = m.address;
+                    (m.protocol == "TP 2.0" && e.tp20 != 0 && a == Some(u16::from(e.tp20))) || (m.protocol != "TP 2.0" && a == Some(u16::from(e.adresse)))
+                })
+                // UDS-Geräte stehen im Scan nur mit CAN-Kennung (ohne Diagnoseadresse):
+                // dann über den Namen („Airbag“, „Radio/Navigation“ ↔ Radio 56 und Navigation 37)
+                .or_else(|| {
+                    let soll = crate::systems::name(u16::from(e.adresse)).to_lowercase();
+                    (!soll.is_empty()).then_some(())?;
+                    r.modules.iter().find(|m| m.protocol != "TP 2.0" && m.address.is_none() && !m.name.is_empty() && {
+                        let n = m.name.to_lowercase();
+                        n.contains(&soll) || soll.contains(&n) || n.split('/').any(|t| !t.is_empty() && soll.contains(t.trim()))
+                    })
+                })
         });
         let name = treffer
             .map(|m| m.name.clone())
@@ -262,6 +278,11 @@ mod tests {
         assert!(t.contains("56 Radio  —  i.O. · im letzten Scan nicht gefunden"), "{t}");
         assert!(t.contains("09 Bordnetz  —  Fehler gespeichert"), "{t}");
         assert_eq!(bus_name(0x07), "Bus 07");
+        assert_eq!(bus_name(0x06), "Kombi-CAN");
+        // UDS ohne Diagnoseadresse: über den Namen gefunden (Golf 6, 22.11.2026)
+        r.modules.push(ModuleReport { protocol: "UDS".into(), address: None, name: "Radio/Navigation".into(), dtcs: Some(vec![]), ..Default::default() });
+        let b = baum(&gw, Some(&r));
+        assert_eq!(b[2].geraete[0].im_scan, Some(Some(0)), "Radio 56 über den Namen");
     }
     use crate::report::{DtcEntry, ModuleReport};
 
