@@ -10,7 +10,7 @@ impl App {
         let tabsel = std::env::var("VAG_TAB").unwrap_or_default();
         let (tab, _vorbelegen) = match tabsel.as_str() {
             "messwerte" => (Tab::Scope, true),
-            "scope" | "armaturen" => (Tab::Scope, false),
+            "scope" | "armaturen" | "handy" => (Tab::Scope, false),
             "codierung" => (Tab::Codierung, false),
             "service" => (Tab::Service, false),
             "tp20" | "blockscan" => (Tab::Tp20, false),
@@ -65,7 +65,7 @@ impl App {
             (None, String::new())
         };
         let demo_ecu = if tabsel == "module" { Some(0x09u16) } else { None };
-        let scope_on = tabsel == "scope" || tabsel == "armaturen";
+        let scope_on = tabsel == "scope" || tabsel == "armaturen" || tabsel == "handy";
         // Für Demo-Aufnahmen (Scope/Armaturen): schwankende Werte, damit sich etwas bewegt.
         if scope_on {
             let _ = ecu_werkbank::sim::apply_spec(

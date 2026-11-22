@@ -840,7 +840,12 @@ impl App {
         self.ui_fehlergeruest(ui);
         ui.add_space(14.0);
         ui.separator();
-        egui::CollapsingHeader::new(tr!("📚 Grundeinstellungen & Werkstattfunktionen (Referenz)")).id_source("grund_lexikon").show(ui, |ui| self.ui_grund_lexikon(ui));
+        // Bildschirmfoto VAG_TAB=lexikon: gleich aufgeklappt
+        let offen = std::env::var("VAG_TAB").is_ok_and(|t| t == "lexikon");
+        egui::CollapsingHeader::new(tr!("📚 Grundeinstellungen & Werkstattfunktionen (Referenz)"))
+            .id_source("grund_lexikon")
+            .default_open(offen)
+            .show(ui, |ui| self.ui_grund_lexikon(ui));
     }
 
     /// Alle möglichen Fehlercodes aus dem Auto lesen und Texte direkt eintragen.

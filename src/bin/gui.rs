@@ -921,6 +921,16 @@ impl eframe::App for App {
                 self.labels_aus_scan();
                 self.labels_quelle_zeigen();
             }
+            "handy" => {
+                // Bildschirmfoto: Live-Grafik mit eingeschalteter Handy-Anzeige und QR-Code
+                self.scope_add_kwp_block_series();
+                self.scope_start_stop();
+                if let Ok(srv) = ecu_werkbank::web::serve(0, self.web_data.clone()) {
+                    self.web_server = Some(srv);
+                    self.web_qr = true;
+                    self.web_update();
+                }
+            }
             "scope" | "armaturen" => {
                 // Bildschirmfoto: gespeicherte Ansicht (VAG_ANSICHT=Name), sonst ein Messwertblock
                 match std::env::var("VAG_ANSICHT").ok().and_then(|n| ecu_werkbank::ansichten::laden().into_iter().find(|a| a.name == n)) {

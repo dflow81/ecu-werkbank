@@ -41,7 +41,8 @@ from reportlab.platypus.tableofcontents import TableOfContents
 HIER = Path(__file__).resolve().parent
 BILDER = HIER / "bilder"
 AUSGABE = HIER / "ecu-werkbank-Handbuch.pdf"
-STAND = "17.11.2026"
+STAND = "22.11.2026"
+VERSION = "0.4.0"
 
 FONTS = Path("/usr/share/fonts/truetype/dejavu")
 pdfmetrics.registerFont(TTFont("DV", str(FONTS / "DejaVuSans.ttf")))
@@ -159,6 +160,9 @@ def bild(name, unterschrift, hoehe_mm=150, ausschnitt=None):
         pfad = teil
     from PIL import Image as PILImage
     w, h = PILImage.open(pfad).size
+    # ganze Fenster-Fotos (seit 0.4.0) nicht zu klein drucken
+    if not ausschnitt and w >= 900:
+        hoehe_mm = max(hoehe_mm, 105)
     hoehe = hoehe_mm * mm
     breite = hoehe * w / h
     if breite > 170 * mm:
@@ -178,7 +182,7 @@ story += [Spacer(1, 60 * mm), Paragraph("ECUWerkbank", S["titel"]), Spacer(1, 6 
           Paragraph("Handbuch", S["unter"]), Spacer(1, 3 * mm),
           Paragraph("Diagnose &amp; Codierung für deutsche Autos — unter Linux", S["unter"]),
           Spacer(1, 70 * mm),
-          Paragraph(f"Stand {STAND} · geprüft an einem Golf 6 (2010, 1.4 TSI)", S["unter"]),
+          Paragraph(f"Version {VERSION} · Stand {STAND} · geprüft an einem Golf 6 (2010, 1.4 TSI)", S["unter"]),
           PageBreak()]
 
 # ---------------------------------------------------------------- Inhalt
@@ -323,8 +327,8 @@ tabelle(["Angabe", "Bedeutung"], [
 h2("Woher kommen die Fehlertexte?")
 p("ECUWerkbank braucht dafür <b>keine Label-Dateien</b>. Es sucht in dieser Reihenfolge:")
 schritte(
-    "<b>Eigene Fehlertexte</b> — was du selbst eingetragen hast (Werkzeuge → Fehlerbilder → „Eigene Fehlertexte“).",
-    "<b>Label-Dateien</b> — nur wenn du welche angelegt hast (freiwillig, Kapitel 12).",
+    "<b>Eigene Fehlertexte</b> — was du selbst eingetragen hast (Fahrzeug-Datenbank → „Eigene Texte“).",
+    "<b>Fahrzeug-Datenbank</b> — eigene Labels und importierte Datenpakete (freiwillig, Kapitel 12).",
     "<b>Eingebaute Liste</b> der genormten OBD-Codes (Pxxxx) mit deutschen Texten.",
 )
 p("Beim Motor rechnet ECUWerkbank die 5-stellige Herstellernummer in den OBD-Code um. Beim Golf 6 ist zum Beispiel "
@@ -356,8 +360,7 @@ p("Ohne Beschriftung zeigt ECUWerkbank nur die <b>Art</b> eines Werts, mit „~�
 p("Oft gebrauchte Blöcke merkst du dir mit dem <b>Stern</b> (☆ → ★) neben dem Blocknamen. Sie stehen dann als "
   "Leiste <b>★ Favoriten</b> über dem Block; ein Klick öffnet und liest den Block sofort. Entfernen mit ✖ oder "
   "nochmal dem Stern.")
-bild("favoriten", "Messwertblock 2 des Motors mit eigenen Feldnamen und der Favoriten-Leiste darüber.", 105,
-     ausschnitt=(411, 640))
+bild("favoriten", "Messwertblock 2 des Motors mit eigenen Feldnamen und der Favoriten-Leiste darüber.", 120)
 p("Alle eigenen Namen auf einen Blick — zum Ändern und Löschen — unter Werkzeuge → Fahrzeug-Datenbank → "
   "<b>Eigene Texte</b> → Eigene Messwert-Namen.")
 bild("namen", "Werkzeuge → Fahrzeug-Datenbank → Eigene Texte: Liste aller gespeicherten Messwert-Namen.", 80)
@@ -372,6 +375,25 @@ tabelle(["Messpunkt", "Gut", "Gemessen am echten Golf 6 (29.10.2026)"], [
 ], [55, 40, 75])
 p("Bricht die Spannung so stark ein, starten manche Steuergeräte (z. B. das Radio) neu. Sie antworten dann ein "
   "paar Sekunden lang nicht oder verspätet.")
+h2("Live-Grafik und Armaturen")
+p("Messen → <b>Live-Grafik</b> zeichnet beliebige Werte gleichzeitig auf: OBD-Werte, Messwertblöcke älterer "
+  "Steuergeräte und UDS-Kennungen. Mit <b>🕓 Armaturen</b> werden daraus Rundinstrumente, große Zahlen oder "
+  "Balken (Rechtsklick auf ein Instrument). Eine Zusammenstellung speicherst du als <b>Ansicht</b>. "
+  "<b>⚠ Warnen bei Grenzwert</b> meldet Überschreitungen und zeichnet die 30 Sekunden davor und danach auf; "
+  "<b>⏺ CSV aufzeichnen</b> schreibt alles mit.")
+bild("scope", "Messen → Live-Grafik mit einem Messwertblock des Motors (Simulation).", 120)
+bild("armaturen", "Dieselben Werte als Armaturen.", 120)
+h2("Live-Werte auf dem Handy (QR-Code)")
+schritte("In der Live-Grafik die gewünschten Werte starten.",
+         "Haken bei <b>📱 Handy-Anzeige</b> setzen — es öffnet sich ein Fenster mit einem QR-Code.",
+         "Den QR-Code mit der <b>Handy-Kamera</b> scannen und den Link öffnen. Die Werte laufen im Browser mit.")
+bild("handy-qr", "Live-Grafik mit eingeschalteter Handy-Anzeige und QR-Code zum Scannen.", 120)
+bild("handy", "So sieht die Handy-Anzeige im Browser des Handys aus.", 140)
+kasten("Gut zu wissen",
+       "Handy und Laptop müssen im <b>gleichen WLAN</b> sein — im Auto am einfachsten über den Hotspot des Handys. "
+       "Ist die Firewall ufw aktiv, einmal freigeben: <font name='DV-M'>sudo ufw allow from 192.168.0.0/16 to any "
+       "port 8088 proto tcp</font>. Das Handy kann nur ansehen, nichts steuern. Die Adresse enthält einen geheimen "
+       "Schlüssel — den QR-Code nicht weitergeben.")
 
 # ---------------------------------------------------------------- 8
 story.append(PageBreak())
@@ -407,6 +429,12 @@ liste(
     "Gelb = bald fällig, rot = überfällig. Beim Programmstart erscheint ein Hinweis, wenn etwas fällig ist.",
     "<b>Fahrzeugakte (PDF)</b> und <b>ZIP-Sicherung</b> des ganzen Ordners.",
 )
+h2("Firmenkopf und Logo für Berichte")
+p("Für Werkstätten: unter Fahrzeug → Fahrzeuge &amp; Wartung → <b>Firmenkopf für Berichte</b> Name, Anschrift, "
+  "Telefon, E-Mail und eine Zusatzzeile eintragen, mit <b>🖼 Logo wählen…</b> ein Firmenlogo (PNG oder JPG) "
+  "hinzufügen und speichern. Der Firmenkopf steht dann oben auf jeder Seite aller PDF-Berichte — auf Seite 1 "
+  "rechts im Titelbalken mit dem Logo.")
+bild("bericht", "Fehlerspeicher-Protokoll (PDF) mit Firmenkopf und Logo (Beispieldaten).", 150)
 h2("Kilometerstand")
 p("Der Scan liest den Kilometerstand selbst. Beim Golf 6 gibt ihn das Kombiinstrument nur "
   "<b>auf 10 km abgerundet</b> heraus (Tacho 242 488 km → 242 480 km). Den genauen Wert kannst du von Hand "
@@ -441,14 +469,15 @@ p("<b>Codier-Sicherung</b> speichert die Codierung aller Steuergeräte und vergl
   "Änderung am Auto: erst sichern. Einzelne Steuergeräte lassen sich daraus zurückschreiben.")
 bild("sicherung", "Fahrzeug → Codier-Sicherung: Sicherungen vergleichen und einzeln zurückschreiben.", 145)
 h2("Wo liegen die Dateien?")
-code("~/.local/share/ecu-werkbank/fahrzeuge/<Fahrgestellnummer>/",
-     "    fahrzeug.toml          Angaben, km, Wartung",
-     "    profil.toml            Steuergeräte für den Schnell-Scan",
-     "    historie/              alle Scans",
-     "    berichte/              PDFs und Testlauf-Protokolle",
-     "    codierung/             Codierungs-Sicherungen",
-     "    software/              Softwarestände",
-     "    grundeinstellung.toml  gelernte Grundeinstellungs-Abläufe (Kapitel 13)")
+p("Seit Version 0.4 liegen alle Angaben, Scans, Sicherungen und Einstellungen in <b>einer Datei</b>, der "
+  "Fahrzeug-Datenbank. Nur Dokumente (PDF, CSV-Aufzeichnungen, Mitschnitte) bleiben einzelne Dateien in den "
+  "Fahrzeugordnern.")
+code("~/.local/share/ecu-werkbank/",
+     "    fahrzeugdaten.sqlite   Fahrzeuge, Scans, Sicherungen, eigene Labels und Texte",
+     "    fahrzeuge/<Fahrgestellnummer>/berichte/   PDFs und Protokolle",
+     "    vor-datenbank/         die Dateien von vor Version 0.4 (nur zur Sicherheit)")
+p("Fahrzeug → Fahrzeuge &amp; Wartung → <b>Datensicherung</b> schreibt alles als ZIP mit lesbaren Dateien, z. B. "
+  "auf einen USB-Stick, und spielt es auch zurück.")
 
 # ---------------------------------------------------------------- 10
 h1("10  Testlauf und Sicherheit &amp; Assistenz")
@@ -465,8 +494,21 @@ bild("sicherheit", "Diagnose → Sicherheit &amp; Assistenz.", 60)
 
 # ---------------------------------------------------------------- 11
 story.append(PageBreak())
-h1("11  Nachschlagen")
-p("Drei Seiten helfen beim Verstehen, ohne etwas am Auto zu ändern.")
+h1("11  Werkzeuge und Nachschlagen")
+p("Diese Seiten helfen beim Verstehen und Untersuchen, ohne etwas am Auto zu ändern.")
+h2("CAN-Monitor")
+p("Werkzeuge → <b>CAN-Monitor</b> zeigt live alle Botschaften auf dem Bus: je CAN-ID die Daten, wie oft sie "
+  "kommen und welche Bits sich ändern. Es wird nur zugehört, nichts gesendet. Zum Finden eines Signals erst "
+  "<b>Rauschen merken</b>, dann am Auto etwas betätigen (Blinker, Fenster) — hervorgehoben bleiben nur die Bits, "
+  "die sich dadurch ändern. Namen und Signale kommen aus der Fahrzeug-Datenbank (importierte DBC-Dateien) oder "
+  "aus einer eigenen DBC-Datei. Braucht den CAN-Adapter; am Golf 6 kommt am OBD-Stecker meist nur der "
+  "Diagnose-Verkehr an.")
+bild("canmonitor", "Werkzeuge → CAN-Monitor (Simulation).", 120)
+h2("Skripte")
+p("Für eigene Abläufe: kleine Programme in der Sprache Rhai, z. B. „lies diese drei Werte, vergleiche, "
+  "wiederhole“. Skripte können <b>nur lesen</b> — schreiben ans Auto geht nur über die normalen Seiten mit "
+  "Rückfrage.")
+bild("skripte", "Werkzeuge → Skripte mit dem mitgelieferten Beispiel.", 110)
 h2("Erweiterte Identifikation")
 p("Der Knopf <b>🆔 Erweiterte Identifikation</b> beim gewählten Steuergerät liest alle genormten Kennungen eines "
   "<b>UDS</b>-Steuergeräts (Fahrgestellnummer, Teilenummern, Software- und Hardwarestand, Seriennummer, "
@@ -480,9 +522,29 @@ p("Ein Lexikon der üblichen Werkstattfunktionen je System: Drosselklappe anlern
 bild("lexikon", "Werkzeuge → Fehlerbilder &amp; Referenz: Grundeinstellungen nach System, durchsuchbar.", 140)
 
 # ---------------------------------------------------------------- 12
-h1("12  Eigene Beschriftungen")
-p("ECUWerkbank liefert keine fremden Beschriftungen mit. Du kannst aber selbst welche anlegen — so viel oder so "
-  "wenig du willst. Es gibt drei Wege:")
+h1("12  Fahrzeug-Datenbank und eigene Beschriftungen")
+p("Werkzeuge → <b>Fahrzeug-Datenbank</b> ist der Ort für alles Wissen zu Fahrzeugen: was ECUWerkbank mitbringt, "
+  "was du importierst und was du selbst einträgst. Jede <b>Quelle</b> steht mit Art und Lizenz in der Liste und "
+  "lässt sich als Ganzes wieder entfernen. Daten ohne Lizenzangabe bleiben immer nur auf deinem Rechner.")
+bild("datenbank", "Werkzeuge → Fahrzeug-Datenbank: Übersicht, Quellen, Import und Teilenummer-Suche.", 130)
+h2("Daten importieren — mit Vorschau")
+p("<b>📂 Datei importieren…</b> nimmt DBC-Dateien (CAN-Botschaften), Datenpakete (TOML oder JSON), CSV-Listen, "
+  "Label-Dateien und selbst gekaufte ODX/PDX-Daten. Die Art wird erkannt. Vor dem Übernehmen zeigt eine "
+  "<b>Vorschau</b>, was wohin eingetragen würde: Hersteller, Adresse, Steuergerät mit Fehlertexten, Messwerten, "
+  "Codier-Bits und Anpassungen. Erst <b>Übernehmen</b> schreibt in die Datenbank. Dateien lassen sich auch einfach "
+  "ins Fenster ziehen. Eine Vorlage mit allem, was ein Datenpaket enthalten kann, liegt bei: "
+  "<font name='DV-M'>datenpaket-alles.toml</font>.")
+bild("datenbank-vorschau", "Vorschau vor dem Import der Vorlage datenpaket-alles.toml.", 130)
+h2("Inhalt ansehen und bearbeiten")
+p("Quelle wählen, links einen Eintrag anklicken, rechts ändern: Name, Adresse, Teilenummer, CAN-Kennungen, "
+  "Codier-Kennung, Fehlertexte, Messwerte, Codier-Bits (auch „braucht“ und „nicht mit“), Anpassungskanäle und "
+  "<b>Sollwerte</b> für die Ampel bei Messwerten. <b>+ Steuergerät</b> legt ein neues an.")
+bild("datenbank-inhalt", "Ein Steuergerät der Vorlage im Editor.", 130)
+kasten("Die Teilenummer ist der Schlüssel",
+       "Am Auto sucht ECUWerkbank die Namen von Anpassungskanälen und Codier-Bits über die <b>Teilenummer</b> des "
+       "Steuergeräts (z. B. 5K0937086) — die steht in jeder Kennung. Darum beim Eintragen die Teilenummer nicht "
+       "vergessen. Mit <b>🔎 Teilenummer</b> siehst du, was die Datenbank zu einem Steuergerät weiß.")
+p("Du kannst dir auch selbst Beschriftungen anlegen — so viel oder so wenig du willst. Es gibt drei Wege:")
 tabelle(["Weg", "Wofür", "Wo"], [
     ["Eigene Namen", "Namen von Messwertblöcken und ihren Feldern", "✏ am Messwertblock; Liste: Fahrzeug-Datenbank → Eigene Texte"],
     ["Eigene Fehlertexte", "Klartext zu einem Fehlercode", "✏ neben dem Code; Liste: Fahrzeug-Datenbank → Eigene Texte"],
