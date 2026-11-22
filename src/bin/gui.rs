@@ -404,7 +404,10 @@ struct App {
     code_kurz_ok: bool,
 
     // Softwarestände
-    sw_last: Option<ecu_werkbank::swinfo::Stand>,
+    /// Angezeigter Softwarestand: (Fahrzeug-Schlüssel, Stand) — immer der des gewählten Fahrzeugs
+    sw_last: Option<(String, Option<ecu_werkbank::swinfo::Stand>)>,
+    /// Name des Fahrzeugs zu `sw_last`
+    sw_fahrzeug: Option<String>,
     sw_diff: Vec<(String, String)>,
     // Erweiterte Identifikation (nur lesen)
     ident_tx: String,

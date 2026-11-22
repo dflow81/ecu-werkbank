@@ -5,6 +5,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Geändert
+- **Softwarestände** zeigen immer nur den Stand des gewählten Fahrzeugs (mit Namen in der
+  Überschrift); beim Fahrzeugwechsel wird neu geladen, dazu die Änderungen seit dem vorigen
+  gespeicherten Stand. Vorher blieb der Stand des zuvor gezeigten Autos stehen.
 - **Aufgeräumte Oberfläche — alles Eigene an einer Stelle (Werkzeuge → Fahrzeug-Datenbank):**
   - Der **Label-Editor** ist entfallen: „Eigene Labels“ ist eine normale Quelle und wird
     unter „Inhalt ansehen und bearbeiten“ bearbeitet — jetzt auch **Sollwerte** und die

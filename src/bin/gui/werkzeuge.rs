@@ -6,6 +6,23 @@ impl App {
     pub(super) fn ui_software(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("Softwarestände"));
         ui.label(tr!("Teilenummer, Software- und Hardwarestand jedes Steuergeräts. Der Vergleich mit dem letzten Mal zeigt getauschte oder neu programmierte Steuergeräte."));
+        // Immer nur der Stand des gewählten Fahrzeugs: bei einem Wechsel neu laden
+        let akt = self.active_vehicle.clone().unwrap_or_default();
+        if self.sw_last.as_ref().map(|(k, _)| k) != Some(&akt) {
+            let mut l = if akt.is_empty() { Vec::new() } else { ecu_werkbank::swinfo::list(&akt) };
+            // Unterschiede zum vorigen gespeicherten Stand desselben Fahrzeugs
+            self.sw_diff = match l.len() {
+                n if n >= 2 => ecu_werkbank::swinfo::compare(&l[n - 2], &l[n - 1]),
+                _ => Vec::new(),
+            };
+            self.sw_last = Some((akt.clone(), l.pop()));
+            self.sw_fahrzeug = ecu_werkbank::vehicle::load(&akt).map(|v| v.label());
+        }
+        let fahrzeug = self.sw_fahrzeug.clone();
+        match &fahrzeug {
+            Some(n) => ui.strong(tr!("Fahrzeug: {a}", a = n)),
+            None => ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Kein Fahrzeug gewählt — oben ein Fahrzeug wählen. Gezeigt wird immer nur der Stand dieses Fahrzeugs.")),
+        };
         if ui.button(tr!("⬇ Auslesen und speichern")).clicked() {
             let be = self.backend();
             let dir = self.labels_dir.clone();
@@ -13,23 +30,32 @@ impl App {
                 let db = LabelDb::load_dir(&dir).unwrap_or_default();
                 let r = ecu_werkbank::swinfo::read(&be, &db, true, |_| {});
                 Box::new(move |app: &mut App| match r {
-                    Ok(st) => {
-                        if let Ok(v) = ecu_werkbank::vehicle::resolve(st.vin.as_deref(), app.active_vehicle.as_deref()) {
-                            app.sw_diff = ecu_werkbank::swinfo::list(&v.key).pop().map(|p| ecu_werkbank::swinfo::compare(&p, &st)).unwrap_or_default();
+                    Ok(st) => match ecu_werkbank::vehicle::resolve(st.vin.as_deref(), app.active_vehicle.as_deref()) {
+                        Ok(v) => {
                             let _ = ecu_werkbank::swinfo::save(&v.key, &st);
+                            // neu laden lassen: zeigt den Stand des gewählten Fahrzeugs samt Vergleich
+                            app.sw_last = None;
+                            app.status = if app.active_vehicle.as_deref() == Some(v.key.as_str()) {
+                                tr!("{a} Steuergerät(e) ausgelesen.", a = st.module.len())
+                            } else {
+                                tr!("Ausgelesen und bei {a} gespeichert (Fahrgestellnummer). Zum Ansehen oben dieses Fahrzeug wählen.", a = v.label())
+                            };
                         }
-                        app.status = tr!("{a} Steuergerät(e) ausgelesen.", a = st.module.len());
-                        app.sw_last = Some(st);
-                    }
+                        Err(e) => app.status = tr!("Softwarestände: {e}", e = format!("{:#}", e)),
+                    },
                     Err(e) => app.status = tr!("Softwarestände: {e}", e = format!("{:#}", e)),
                 })
             });
         }
-        if self.sw_last.is_none() {
-            if let Some(st) = self.active_vehicle.as_deref().and_then(|k| ecu_werkbank::swinfo::list(k).pop()) {
-                ui.weak(tr!("Zuletzt gespeichert: {a}", a = st.created));
-                self.sw_last = Some(st);
+        let Some((_, Some(st))) = &self.sw_last else {
+            if fahrzeug.is_some() {
+                ui.weak(tr!("Für dieses Fahrzeug ist noch kein Softwarestand gespeichert."));
             }
+            return;
+        };
+        ui.weak(tr!("Stand vom {a}", a = st.created));
+        if !self.sw_diff.is_empty() {
+            ui.strong(tr!("Geändert seit dem vorigen Stand:"));
         }
         for (m, t) in &self.sw_diff {
             ui.horizontal_wrapped(|ui| {
@@ -37,26 +63,24 @@ impl App {
                 ui.label(format!("{m}: {t}"));
             });
         }
-        if let Some(st) = &self.sw_last {
-            egui::ScrollArea::both().id_source("swtab").show(ui, |ui| {
-                egui::Grid::new("sw").striped(true).spacing([14.0, 3.0]).show(ui, |ui| {
-                    for h in [trn!("Adresse"), trn!("System"), trn!("Teilenummer"), trn!("Software"), trn!("HW-Nr."), trn!("HW"), trn!("Seriennr.")] {
-                        ui.strong(ecu_werkbank::i18n::t(h));
-                    }
+        egui::ScrollArea::both().id_source("swtab").show(ui, |ui| {
+            egui::Grid::new("sw").striped(true).spacing([14.0, 3.0]).show(ui, |ui| {
+                for h in [trn!("Adresse"), trn!("System"), trn!("Teilenummer"), trn!("Software"), trn!("HW-Nr."), trn!("HW"), trn!("Seriennr.")] {
+                    ui.strong(ecu_werkbank::i18n::t(h));
+                }
+                ui.end_row();
+                for m in &st.module {
+                    ui.label(&m.adresse);
+                    ui.label(if m.system.is_empty() { &m.name } else { &m.system });
+                    ui.monospace(&m.teilenummer);
+                    ui.monospace(&m.software);
+                    ui.monospace(&m.hardware_nr);
+                    ui.monospace(&m.hardware_ver);
+                    ui.monospace(&m.seriennummer);
                     ui.end_row();
-                    for m in &st.module {
-                        ui.label(&m.adresse);
-                        ui.label(if m.system.is_empty() { &m.name } else { &m.system });
-                        ui.monospace(&m.teilenummer);
-                        ui.monospace(&m.software);
-                        ui.monospace(&m.hardware_nr);
-                        ui.monospace(&m.hardware_ver);
-                        ui.monospace(&m.seriennummer);
-                        ui.end_row();
-                    }
-                });
+                }
             });
-        }
+        });
     }
 
     /// Erweiterte Identifikation (wie VCDS „Advanced ID“): alle Standard-

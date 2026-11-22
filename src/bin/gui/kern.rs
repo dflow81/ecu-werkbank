@@ -130,6 +130,7 @@ impl App {
             code_kurz_neu: String::new(),
             code_kurz_ok: false,
             sw_last: None,
+            sw_fahrzeug: None,
             sw_diff: Vec::new(),
             ident_tx: "0x7E0".into(),
             ident_result: None,
