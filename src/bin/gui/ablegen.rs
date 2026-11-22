@@ -66,10 +66,8 @@ impl App {
                     self.scope_csv_laden(&p);
                     self.tab = Tab::Scope;
                 }
-                Ziel::Label => {
-                    self.ed_open(p);
-                    self.tab = Tab::Editor;
-                }
+                // Label-Dateien kommen wie alles andere über die Vorschau in die Datenbank
+                Ziel::Label => fuer_db.push(p),
                 Ziel::Datensicherung => {
                     self.status = tr!("Datensicherung zurückspielen bitte bewusst über Fahrzeug → Fahrzeuge & Wartung → Datensicherung.");
                     self.tab = Tab::Fahrzeuge;

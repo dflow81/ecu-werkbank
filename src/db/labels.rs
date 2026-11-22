@@ -46,9 +46,14 @@ impl Db {
             let dtc = liste("SELECT dtc_code, title FROM dtc WHERE ecu_id = ?1 ORDER BY id")?
                 .query_map(params![id], |r| Ok(DtcLabel { code: r.get(0)?, description: r.get(1)? }))?
                 .collect::<rusqlite::Result<_>>()?;
-            let measuring = liste("SELECT pid, name, unit, factor, \"offset\" FROM measurement WHERE ecu_id = ?1 ORDER BY id")?
+            // Messwerte: aus Label-Dateien übernommen (measurement) und im Datenbank-Editor gespeichert (did)
+            let mut measuring: Vec<Measuring> = liste("SELECT pid, name, unit, factor, \"offset\" FROM measurement WHERE ecu_id = ?1 ORDER BY id")?
                 .query_map(params![id], |r| Ok(Measuring { id: r.get(0)?, name: r.get(1)?, unit: r.get(2)?, factor: r.get(3)?, offset: r.get(4)? }))?
                 .collect::<rusqlite::Result<_>>()?;
+            let aus_did: Vec<Measuring> = liste("SELECT did, name, unit, factor, \"offset\" FROM did WHERE ecu_id = ?1 ORDER BY id")?
+                .query_map(params![id], |r| Ok(Measuring { id: r.get(0)?, name: r.get(1)?, unit: r.get(2)?, factor: r.get(3)?, offset: r.get(4)? }))?
+                .collect::<rusqlite::Result<_>>()?;
+            measuring.extend(aus_did);
             let adaptation = liste("SELECT channel, name FROM adaptation WHERE ecu_id = ?1 ORDER BY id")?
                 .query_map(params![id], |r| Ok(Adaptation { channel: r.get(0)?, name: r.get(1)? }))?
                 .collect::<rusqlite::Result<_>>()?;
@@ -110,6 +115,21 @@ impl Db {
         }
         tx.commit()?;
         Ok(neu)
+    }
+
+    /// Sollwerte und Stellfunktionen aller ANDEREN Quellen (Datenpakete, im
+    /// Datenbank-Editor eingetragen) — die eigenen Labels liefert [`Db::eigene_labels`].
+    pub fn sollwerte_und_stellfunktionen_fremd(&self) -> Result<(Vec<(Option<u16>, Sollwert)>, Vec<crate::control::Stellfunktion>)> {
+        let q = quelle(self)?;
+        let mut st = self.con.prepare(
+            "SELECT e.diagnostic_address, s.quelle, s.kennung, s.feld, s.min, s.max, s.name FROM sollwert s LEFT JOIN ecu e ON e.id = s.ecu_id WHERE s.source_id <> ?1 ORDER BY s.source_id, s.id",
+        )?;
+        let soll = st
+            .query_map(params![q], |r| Ok((r.get(0)?, Sollwert { quelle: r.get(1)?, id: r.get(2)?, feld: r.get(3)?, min: r.get(4)?, max: r.get(5)?, name: r.get(6)? })))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut st = self.con.prepare("SELECT inhalt FROM stellfunktion WHERE source_id <> ?1 ORDER BY source_id, id")?;
+        let texte: Vec<String> = st.query_map(params![q], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+        Ok((soll, texte.iter().filter_map(|t| toml::from_str(t).ok()).collect()))
     }
 
     /// Ein eigenes Label entfernen.

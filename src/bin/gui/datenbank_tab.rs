@@ -11,7 +11,9 @@ type Vorschau = Vec<(PathBuf, Result<(Art, String, Inhalt), String>)>;
 
 /// Was gerade bearbeitet wird.
 enum Bearbeitung {
-    Sg { id: i64, s: PaketSteuergeraet, adresse: String, tx: String, rx: String, loeschen: bool },
+    Sg { id: i64, s: PaketSteuergeraet, adresse: String, tx: String, rx: String, kennung: String, loeschen: bool },
+    /// Eigene Texte eines Bereichs (fehler, messwert, codier, kennung, wert): (Schlüssel, Text), Stand beim Öffnen
+    Eigene { bereich: &'static str, liste: Vec<(String, String)>, vorher: Vec<String> },
     Fehler { quelle: i64, liste: Vec<PaketFehler> },
     Fehlerarten { quelle: i64, liste: Vec<PaketFehlerart> },
     Can(CanBotschaft),
@@ -36,6 +38,8 @@ pub(super) struct DatenbankSeite {
     bearbeitung: Option<Bearbeitung>,
     teil_suche: String,
     teil_ergebnis: Vec<String>,
+    /// Anzahl eigener Texte je Bereich (zwischengespeichert)
+    eigene_anzahl: Option<Vec<usize>>,
 }
 
 impl Default for DatenbankSeite {
@@ -57,6 +61,7 @@ impl Default for DatenbankSeite {
             bearbeitung: None,
             teil_suche: String::new(),
             teil_ergebnis: Vec::new(),
+            eigene_anzahl: None,
         }
     }
 }
@@ -179,6 +184,11 @@ impl App {
         ui.add_space(8.0);
         ui.separator();
         self.ui_db_inhalt(ui, &quellen);
+
+        // --- Eigene Texte (früher „Eigene Namen“ und „Eigene Fehlertexte“)
+        ui.add_space(8.0);
+        ui.separator();
+        self.ui_db_eigene_texte(ui);
 
         // --- Import
         ui.add_space(8.0);
@@ -404,6 +414,23 @@ fn inhalt_baum(ui: &mut egui::Ui, i: &Inhalt, schluessel: &str) {
     }
 }
 
+/// Überschrift und Hinweis zu einem Bereich der eigenen Texte.
+fn eigene_bereich_text(bereich: &str) -> (String, String) {
+    match bereich {
+        "fehler" => (tr!("Eigene Fehlertexte"), tr!("Code, z. B. 01627 oder P0420 — gilt vor allen anderen Texten, auch im PDF.")),
+        "messwert" => (tr!("Eigene Messwert-Namen (TP 2.0)"), tr!("Schlüssel Adresse-Block oder Adresse-Block-Feld, z. B. 01-002 oder 01-002-3. Am schnellsten mit ✏ am Messwertblock im TP-2.0-Reiter.")),
+        "codier" => (tr!("Eigene Codier-Texte"), tr!("Schlüssel CAN-ID-Byte.Bit, z. B. 220-04.3 (TP 2.0: 200 + Adresse). Am schnellsten auf der Seite Codierung.")),
+        "kennung" => (tr!("Eigene Kennungs-Namen (UDS)"), tr!("Schlüssel Gerät-Kennung, z. B. 714-2203.")),
+        _ => (tr!("Eigene Wert-Texte"), tr!("Texte zu Textnummern bei Messwerten (Formel F25), meist gelernt.")),
+    }
+}
+
+/// Bearbeitung eines Steuergeräts vorbereiten (Hex-Felder als Text).
+fn sg_bearbeitung(id: i64, s: PaketSteuergeraet) -> Bearbeitung {
+    let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
+    Bearbeitung::Sg { id, adresse: h(s.adresse), tx: h(s.tx), rx: h(s.rx), kennung: s.codier_kennung.map(|x| format!("{x:#06x}")).unwrap_or_default(), s, loeschen: false }
+}
+
 fn hex_opt(s: &str) -> Result<Option<u16>, ()> {
     if s.trim().is_empty() {
         Ok(None)
@@ -413,6 +440,45 @@ fn hex_opt(s: &str) -> Result<Option<u16>, ()> {
 }
 
 impl App {
+    /// Abschnitt „Eigene Texte“: alles, was du selbst benannt hast, an einer Stelle.
+    fn ui_db_eigene_texte(&mut self, ui: &mut egui::Ui) {
+        ui.strong(tr!("Eigene Texte"));
+        ui.weak(tr!("Was du selbst benannt hast: Fehlertexte, Namen von Messwertblöcken, Codier-Bits und Kennungen. Gilt vor allen anderen Quellen."));
+        const BEREICHE: [&str; 5] = ["fehler", "messwert", "codier", "kennung", "wert"];
+        let anzahl = self.dbs.eigene_anzahl.get_or_insert_with(|| BEREICHE.iter().map(|b| ecu_werkbank::db::eigen::alle(b).len()).collect()).clone();
+        ui.horizontal_wrapped(|ui| {
+            for (b, n) in BEREICHE.into_iter().zip(anzahl) {
+                let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Eigene { bereich, .. }) if *bereich == b);
+                if ui.selectable_label(aktiv, format!("{} ({n})", eigene_bereich_text(b).0)).clicked() {
+                    self.dbs_eigene_texte_oeffnen(b);
+                }
+            }
+        });
+        if matches!(self.dbs.bearbeitung, Some(Bearbeitung::Eigene { .. })) {
+            ui.add_space(4.0);
+            self.ui_db_bearbeiten(ui);
+        }
+    }
+
+    /// Eigene Texte eines Bereichs zum Bearbeiten öffnen.
+    pub(super) fn dbs_eigene_texte_oeffnen(&mut self, bereich: &'static str) {
+        let liste: Vec<(String, String)> = ecu_werkbank::db::eigen::alle(bereich).into_iter().collect();
+        let vorher = liste.iter().map(|(k, _)| k.clone()).collect();
+        self.dbs.bearbeitung = Some(Bearbeitung::Eigene { bereich, liste, vorher });
+    }
+
+    /// Zähler der eigenen Texte neu bestimmen lassen (nach Änderungen anderswo).
+    pub(super) fn dbs_zaehler_neu(&mut self) {
+        self.dbs.eigene_anzahl = None;
+    }
+
+    /// Quelle für „Inhalt ansehen und bearbeiten“ wählen.
+    pub(super) fn dbs_quelle_waehlen(&mut self, id: Option<i64>) {
+        self.dbs.quelle = id;
+        self.dbs.inhalt = None;
+        self.dbs.bearbeitung = None;
+    }
+
     /// Bildschirmfoto: erste Quelle außer den eigenen Labels öffnen, erstes Steuergerät bearbeiten.
     pub(super) fn db_demo_inhalt(&mut self) {
         let q = mit_db(|d| d.quellen()).unwrap_or_default().into_iter().find(|q| q.name != db::labels::QUELLE);
@@ -420,8 +486,7 @@ impl App {
             self.dbs.quelle = Some(q.id);
             if let Ok(i) = mit_db(|d| d.inhalt(q.id)) {
                 if let Some((id, _, s)) = i.steuergeraete.first().cloned() {
-                    let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
-                    self.dbs.bearbeitung = Some(Bearbeitung::Sg { id, adresse: h(s.adresse), tx: h(s.tx), rx: h(s.rx), s, loeschen: false });
+                    self.dbs.bearbeitung = Some(sg_bearbeitung(id, s));
                 }
                 self.dbs.inhalt = Some(i);
             }
@@ -499,9 +564,29 @@ impl App {
         let Some(inhalt) = self.dbs.inhalt.clone() else { return };
         let ist_labels = inhalt.quelle.name == db::labels::QUELLE && inhalt.quelle.art == db::QuellArt::User;
         ui.weak(inhalt.zusammenfassung());
-        if ist_labels {
-            ui.weak(tr!("Eigene Labels bearbeitest du im Label-Editor (dort auch Sollwerte und Stellfunktionen)."));
-        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.button(tr!("+ Steuergerät")).on_hover_text(tr!("Neues, leeres Steuergerät in dieser Quelle anlegen")).clicked() {
+                match mit_db(|d| d.sg_neu(qid)) {
+                    Ok(id) => {
+                        self.dbs.inhalt = None;
+                        if let Ok((_, s)) = mit_db(|d| d.sg_laden(id)) {
+                            self.dbs.bearbeitung = Some(sg_bearbeitung(id, s));
+                        }
+                        self.status = tr!("Neues Steuergerät angelegt — ausfüllen und speichern.");
+                    }
+                    Err(e) => self.status = format!("{e:#}"),
+                }
+            }
+            if ist_labels
+                && ui
+                    .button(tr!("⬇ Aus letztem Scan anlegen"))
+                    .on_hover_text(tr!("Legt für jedes Steuergerät aus dem letzten Scan des aktiven Fahrzeugs einen vorbefüllten Eintrag an (Adresse, Name, Teilenummer, CAN-IDs) — nur wo noch keiner existiert. Überschreibt nichts."))
+                    .clicked()
+            {
+                self.labels_aus_scan();
+                self.dbs.inhalt = None;
+            }
+        });
         let f = self.dbs.filter.to_lowercase();
         let passt = |t: &str| f.is_empty() || t.to_lowercase().contains(&f);
         ui.columns(2, |sp| {
@@ -514,15 +599,7 @@ impl App {
                     }
                     let aktiv = matches!(&self.dbs.bearbeitung, Some(Bearbeitung::Sg { id: i, .. }) if i == id);
                     if ui.selectable_label(aktiv, format!("🔧 {t}")).clicked() {
-                        if ist_labels {
-                            self.tab = Tab::Editor;
-                            if let Some((lid, _)) = self.label_liste().into_iter().find(|(lid, _)| lid == id) {
-                                self.ed_oeffnen(lid);
-                            }
-                        } else {
-                            let h = |v: Option<u16>| v.map(|x| format!("{x:#04x}")).unwrap_or_default();
-                            self.dbs.bearbeitung = Some(Bearbeitung::Sg { id: *id, adresse: h(s.adresse), tx: h(s.tx), rx: h(s.rx), s: s.clone(), loeschen: false });
-                        }
+                        self.dbs.bearbeitung = Some(sg_bearbeitung(*id, s.clone()));
                     }
                 }
                 if !inhalt.fehler.is_empty() || !ist_labels && inhalt.steuergeraete.is_empty() && inhalt.can.is_empty() {
@@ -549,7 +626,13 @@ impl App {
                 }
             });
             // rechts: Bearbeiten
-            egui::ScrollArea::vertical().id_source("db_bearbeiten").max_height(380.0).show(&mut sp[1], |ui| self.ui_db_bearbeiten(ui));
+            egui::ScrollArea::vertical().id_source("db_bearbeiten").max_height(380.0).show(&mut sp[1], |ui| {
+                if matches!(self.dbs.bearbeitung, Some(Bearbeitung::Eigene { .. })) {
+                    ui.weak(tr!("Links einen Eintrag wählen."));
+                } else {
+                    self.ui_db_bearbeiten(ui);
+                }
+            });
         });
     }
 
@@ -561,7 +644,7 @@ impl App {
             None => {
                 ui.weak(tr!("Links einen Eintrag wählen."));
             }
-            Some(Bearbeitung::Sg { s, adresse, tx, rx, loeschen: frage, .. }) => {
+            Some(Bearbeitung::Sg { s, adresse, tx, rx, kennung, loeschen: frage, .. }) => {
                 egui::Grid::new("db_sg_kopf").num_columns(2).show(ui, |ui| {
                     ui.label(tr!("Name"));
                     ui.text_edit_singleline(&mut s.name);
@@ -583,6 +666,9 @@ impl App {
                     ui.end_row();
                     ui.label(tr!("Teilenummer"));
                     ui.text_edit_singleline(&mut s.teilenummer);
+                    ui.end_row();
+                    ui.label(tr!("Codier-Kennung"));
+                    ui.add(egui::TextEdit::singleline(kennung).desired_width(60.0).hint_text("0x0600")).on_hover_text(tr!("Nur nötig, wenn die Codierung nicht unter 0x0600 steht"));
                     ui.end_row();
                 });
                 ui.add_space(4.0);
@@ -672,6 +758,48 @@ impl App {
                 if ui.small_button(tr!("+ Anpassungskanal")).clicked() {
                     s.anpassung.push(PaketAnpassung { kanal: 1, name: String::new() });
                 }
+                ui.add_space(4.0);
+                ui.strong(tr!("Sollwerte ({a})", a = s.sollwert.len())).on_hover_text(tr!("Grenzen für die Ampel bei Messwerten: Quelle kwp (Block), uds (Kennung) oder obd (PID); Feld nur bei kwp"));
+                let mut weg = None;
+                for (i, w) in s.sollwert.iter_mut().enumerate() {
+                    ui.horizontal_wrapped(|ui| {
+                        egui::ComboBox::from_id_source(("sw_quelle", i)).width(56.0).selected_text(w.quelle.clone()).show_ui(ui, |ui| {
+                            for q in ["kwp", "uds", "obd"] {
+                                ui.selectable_value(&mut w.quelle, q.to_string(), q);
+                            }
+                        });
+                        ui.add(egui::DragValue::new(&mut w.id).prefix(tr!("Nr. ")));
+                        let mut feld = w.feld.map(|f| f.to_string()).unwrap_or_default();
+                        if ui.add(egui::TextEdit::singleline(&mut feld).desired_width(24.0).hint_text(tr!("Feld"))).changed() {
+                            w.feld = feld.trim().parse().ok();
+                        }
+                        let mut min = w.min.map(|x| x.to_string()).unwrap_or_default();
+                        if ui.add(egui::TextEdit::singleline(&mut min).desired_width(50.0).hint_text("min")).changed() {
+                            w.min = min.trim().replace(',', ".").parse().ok();
+                        }
+                        let mut max = w.max.map(|x| x.to_string()).unwrap_or_default();
+                        if ui.add(egui::TextEdit::singleline(&mut max).desired_width(50.0).hint_text("max")).changed() {
+                            w.max = max.trim().replace(',', ".").parse().ok();
+                        }
+                        ui.add(egui::TextEdit::singleline(&mut w.name).desired_width(120.0).hint_text(tr!("Name")));
+                        if ui.small_button("🗑").clicked() {
+                            weg = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = weg {
+                    s.sollwert.remove(i);
+                }
+                if ui.small_button(tr!("+ Sollwert")).clicked() {
+                    s.sollwert.push(ecu_werkbank::labels::Sollwert { quelle: "kwp".into(), id: 1, feld: Some(1), min: None, max: None, name: String::new() });
+                }
+                if !s.stellfunktion.is_empty() {
+                    ui.add_space(4.0);
+                    ui.strong(tr!("Stellfunktionen ({a})", a = s.stellfunktion.len()));
+                    for f in &s.stellfunktion {
+                        ui.weak(tr!("{a} — {b}, Kennung {c}, {d}–{e} {f} (bleibt beim Speichern erhalten; ändern über ein Datenpaket)", a = f.name, b = f.art, c = format!("{:#06x}", f.id), d = f.min, e = f.max, f = f.einheit));
+                    }
+                }
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
                     speichern = ui.button(tr!("💾 Speichern")).clicked();
@@ -687,6 +815,33 @@ impl App {
                             *frage = false;
                         }
                     }
+                });
+            }
+            Some(Bearbeitung::Eigene { bereich, liste, .. }) => {
+                let (titel, hinweis) = eigene_bereich_text(bereich);
+                ui.strong(tr!("{a} ({b})", a = titel, b = liste.len()));
+                ui.weak(hinweis);
+                let mut weg = None;
+                egui::ScrollArea::vertical().id_source("eigene_texte").max_height(320.0).show(ui, |ui| {
+                    for (i, (k, t)) in liste.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(k).desired_width(90.0).font(egui::TextStyle::Monospace));
+                            ui.add(egui::TextEdit::singleline(t).desired_width(320.0));
+                            if ui.small_button("🗑").clicked() {
+                                weg = Some(i);
+                            }
+                        });
+                    }
+                });
+                if let Some(i) = weg {
+                    liste.remove(i);
+                }
+                if ui.small_button(tr!("+ Eintrag")).clicked() {
+                    liste.push((String::new(), String::new()));
+                }
+                ui.horizontal(|ui| {
+                    speichern = ui.button(tr!("💾 Speichern")).clicked();
+                    verwerfen = ui.button(tr!("↺ Verwerfen")).clicked();
                 });
             }
             Some(Bearbeitung::Fehler { liste, .. }) => {
@@ -790,16 +945,35 @@ impl App {
         }
         if speichern {
             let r = match &mut self.dbs.bearbeitung {
-                Some(Bearbeitung::Sg { id, s, adresse, tx, rx, .. }) => match (hex_opt(adresse), hex_opt(tx), hex_opt(rx)) {
-                    (Ok(a), Ok(t), Ok(r)) => {
+                Some(Bearbeitung::Sg { id, s, adresse, tx, rx, kennung, .. }) => match (hex_opt(adresse), hex_opt(tx), hex_opt(rx), hex_opt(kennung)) {
+                    (Ok(a), Ok(t), Ok(r), Ok(k)) => {
                         s.adresse = a;
                         s.tx = t;
                         s.rx = r;
+                        s.codier_kennung = k;
                         let (id, s) = (*id, s.clone());
                         mit_db(|d| d.sg_speichern(id, &s))
                     }
-                    _ => Err(anyhow::anyhow!(tr!("Adresse/Anfrage/Antwort ungültig (hex, z. B. 0x09)."))),
+                    _ => Err(anyhow::anyhow!(tr!("Adresse/Anfrage/Antwort/Codier-Kennung ungültig (hex, z. B. 0x09)."))),
                 },
+                Some(Bearbeitung::Eigene { bereich, liste, vorher }) => {
+                    let bereich: &'static str = bereich;
+                    let norm = |k: &str| if bereich == "fehler" { ecu_werkbank::fehlertexte::norm(k) } else { k.trim().to_string() };
+                    let neu: Vec<(String, String)> = liste.iter().map(|(k, t)| (norm(k), t.trim().to_string())).filter(|(k, t)| !k.is_empty() && !t.is_empty()).collect();
+                    // weggefallene Schlüssel löschen (leerer Text = löschen)
+                    let mut aenderung: Vec<(String, String)> = vorher.iter().filter(|k| !neu.iter().any(|(n, _)| n == *k)).map(|k| (k.clone(), String::new())).collect();
+                    aenderung.extend(neu);
+                    let r = ecu_werkbank::db::eigen::setzen(bereich, &aenderung);
+                    if r.is_ok() {
+                        let l = ecu_werkbank::db::eigen::alle(bereich).into_iter().collect::<Vec<_>>();
+                        *vorher = l.iter().map(|(k, _)| k.clone()).collect();
+                        *liste = l;
+                        self.dbs.eigene_anzahl = None;
+                        self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
+                        self.code_texte = ecu_werkbank::codiertexte::Texte::laden();
+                    }
+                    r
+                }
                 Some(Bearbeitung::Fehler { quelle, liste }) => {
                     let (q, l) = (*quelle, liste.clone());
                     mit_db(|d| d.fehler_allgemein_speichern(q, &l))

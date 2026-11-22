@@ -8,8 +8,8 @@ impl App {
         let db = LabelDb::load_dir(&labels_dir).unwrap_or_default();
         // Optionaler Start-Reiter (nur für Demo/Screenshots): VAG_TAB=messwerte|labels
         let tabsel = std::env::var("VAG_TAB").unwrap_or_default();
-        let (tab, seed) = match tabsel.as_str() {
-            "messwerte" => (Tab::Messwerte, true),
+        let (tab, _vorbelegen) = match tabsel.as_str() {
+            "messwerte" => (Tab::Scope, true),
             "scope" | "armaturen" => (Tab::Scope, false),
             "codierung" => (Tab::Codierung, false),
             "service" => (Tab::Service, false),
@@ -19,7 +19,7 @@ impl App {
             "canmonitor" | "canmonitor-grafik" => (Tab::CanMonitor, false),
             "skripte" => (Tab::Skripte, false),
             "datenbank" | "datenbank-vorschau" | "datenbank-inhalt" => (Tab::Datenbank, false),
-            "editor" => (Tab::Editor, false),
+            "editor" => (Tab::Datenbank, false),
             "fahrzeuge" => (Tab::Fahrzeuge, false),
             "batterie" => (Tab::Batterie, false),
             "motor" => (Tab::Motor, false),
@@ -36,13 +36,13 @@ impl App {
             "lernen" => (Tab::Mitschnitt, false),
             "historie" => (Tab::Historie, false),
             "sicherung" => (Tab::Sicherung, false),
-            "labels" | "namen" => (Tab::Namen, false),
+            "labels" | "namen" => (Tab::Datenbank, false),
             "ident" => (Tab::Ident, false),
-            "lexikon" | "grundlexikon" => (Tab::GrundLexikon, false),
+            "lexikon" | "grundlexikon" => (Tab::Wissen, false),
             "tp20-block" | "favoriten" | "grundeinstellung" | "anpassung" => (Tab::Tp20, false),
             "service-frage" => (Tab::Service, false),
-            "editor-scan" => (Tab::Editor, false),
-            "namen-scan" => (Tab::Namen, false),
+            "editor-scan" => (Tab::Datenbank, false),
+            "namen-scan" => (Tab::Tp20, false),
             "steuergeraete-wahl" => (Tab::Steuergeraete, false),
             "steuergeraete" => (Tab::Steuergeraete, false),
             _ => (Tab::Start, false),
@@ -59,11 +59,6 @@ impl App {
                 startup_status = tr!("⚠ Wartung fällig für {a}: {b}", a = v.label(), b = due.join("; "));
             }
         }
-        let mut meas_inputs = HashMap::new();
-        if seed {
-            meas_inputs.insert((0x01u16, 0xF40Cu16), "1180".to_string());
-            meas_inputs.insert((0x01u16, 0xF405u16), "5A".to_string());
-        }
         let (code_ecu, code_bytes) = if tabsel == "codierung" {
             (Some(0x09u16), "110007".to_string())
         } else {
@@ -79,10 +74,6 @@ impl App {
         }
         Self {
             labels_dir,
-            qn_addr: "0x09".into(),
-            qn_block: String::new(),
-            qn_feld: String::new(),
-            qn_name: String::new(),
             db,
             iface: std::env::var("VAG_IFACE").unwrap_or_else(|_| "can0".into()),
             transport: match std::env::var("VAG_TRANSPORT").unwrap_or_else(|_| ecu_werkbank::transport::STANDARD_TRANSPORT.into()) {
@@ -122,7 +113,6 @@ impl App {
             fz_info: String::new(),
             fz_clear_confirm: false,
             ad_cache: std::cell::RefCell::new(None),
-            meas_inputs,
             code_ecu,
             code_bytes,
             code_tx: "0x7E0".into(),
@@ -171,8 +161,6 @@ impl App {
             ws_code: String::new(),
             ws_modell: String::new(),
             ws_text: String::new(),
-            ft_code: String::new(),
-            ft_text: String::new(),
             ds: ecu_werkbank::datensicherung::laden(),
             ds_job: None,
             ds_geprueft: false,
@@ -360,12 +348,6 @@ impl App {
             bk_sel: None,
             bk_cmp: None,
             bk_confirm: None,
-            ed_id: None,
-            ed_loeschen: false,
-            ed_file: LabelFile::default(),
-            ed_addr: String::new(),
-            ed_tx: String::new(),
-            ed_rx: String::new(),
             tp_last_read: std::time::Instant::now(),
             tp_lines: Vec::new(),
             tp_block_values: Vec::new(),
@@ -382,6 +364,7 @@ impl App {
             an_kanaele: "1".into(),
             an_result: Vec::new(),
             an_wissen: None,
+            diesel_cache: Default::default(),
             code_wissen: None,
             an_zeigen: false,
             an_kanal: String::new(),
@@ -390,7 +373,6 @@ impl App {
             bn_nur_offen: false,
             bn_suche: String::new(),
             bn_roh_aus: true,
-            bn_addr: "0x01".into(),
             tp_block_key: (0, 0),
             mw_texte: ecu_werkbank::messwerttexte::Texte::laden(),
             favoriten: ecu_werkbank::favoriten::alle(),
@@ -463,6 +445,8 @@ impl App {
         ecu_werkbank::dtc_db::fehlerarten_neu_laden();
         self.an_wissen = None;
         self.code_wissen = None;
+        *self.diesel_cache.borrow_mut() = None;
+        self.dbs_zaehler_neu();
     }
 
     /// Die 8 OBD-Motor-Adressen nach UDS-Antwort abfragen (im Hintergrund).

@@ -263,13 +263,13 @@ p("Ganz oben stehen immer: die <b>Verbindungsart</b> (echter Adapter oder Simula
   "Darunter die fünf Bereiche:")
 tabelle(["Bereich", "Unterseiten"], [
     ["Start", "Fahrzeug auf einen Blick"],
-    ["Diagnose", "Steuergeräte · Ältere Steuergeräte (TP 2.0) · OBD-II · Codierung · Erweiterte Identifikation · "
+    ["Diagnose", "Steuergeräte · Ältere Steuergeräte (TP 2.0) · OBD-II · Codierung · "
                  "Prüfen &amp; Fehlersuche · Sicherheit &amp; Assistenz · Andere Marken"],
-    ["Messen", "Live-Grafik · Zielbereich · Batterie · Partikelfilter · Motor-Checks · Fahrt-Rekorder · Rohwerte umrechnen"],
+    ["Messen", "Live-Grafik · Batterie · Motor-Checks · Fahrt-Rekorder; bei Dieseln Zielbereich und Partikelfilter"],
     ["Fahrzeug", "Fahrzeuge &amp; Wartung · Service-Anzeige · Historie &amp; Trends · Softwarestände · "
                  "Codier-Sicherung · Nachrüstung"],
-    ["Werkzeuge", "Testlauf · Mitschnitt &amp; Lernhilfe · Eigene Namen · Label-Editor · Fehlerbilder · "
-                  "Grundeinstellungen (Referenz) · Experten: Routine &amp; Stellglied (UDS)"],
+    ["Werkzeuge", "Testlauf · CAN-Monitor · Skripte · Mitschnitt &amp; Lernhilfe · Fahrzeug-Datenbank · "
+                  "Fehlerbilder &amp; Referenz · Experten: Routine &amp; Stellglied (UDS)"],
 ], [32, 138])
 h2("Sprache")
 p("Oben rechts wählst du die Sprache (Feld mit der Weltkugel). Eingebaut sind Deutsch und Englisch. Eine weitere Sprache legst du "
@@ -358,9 +358,9 @@ p("Oft gebrauchte Blöcke merkst du dir mit dem <b>Stern</b> (☆ → ★) neben
   "nochmal dem Stern.")
 bild("favoriten", "Messwertblock 2 des Motors mit eigenen Feldnamen und der Favoriten-Leiste darüber.", 105,
      ausschnitt=(411, 640))
-p("Alle eigenen Namen auf einen Blick — und schnell neue eintragen — unter Werkzeuge → <b>Eigene Namen</b>: "
-  "Adresse, Block, Feld (leer = Name des ganzen Blocks) und Name eingeben, <b>Speichern</b>.")
-bild("namen", "Werkzeuge → Eigene Namen: Schnell-Eingabe und Liste aller gespeicherten Namen.", 80)
+p("Alle eigenen Namen auf einen Blick — zum Ändern und Löschen — unter Werkzeuge → Fahrzeug-Datenbank → "
+  "<b>Eigene Texte</b> → Eigene Messwert-Namen.")
+bild("namen", "Werkzeuge → Fahrzeug-Datenbank → Eigene Texte: Liste aller gespeicherten Messwert-Namen.", 80)
 h2("Batterie- und Starttest")
 schritte("Zündung an, Motor aus.", "Messen → Batterie → <b>Test starten</b>.",
          "Bei „JETZT MOTOR STARTEN“ den Motor starten und laufen lassen.")
@@ -468,34 +468,34 @@ story.append(PageBreak())
 h1("11  Nachschlagen")
 p("Drei Seiten helfen beim Verstehen, ohne etwas am Auto zu ändern.")
 h2("Erweiterte Identifikation")
-p("Diagnose → Erweiterte Identifikation liest alle genormten Kennungen eines <b>UDS</b>-Steuergeräts "
-  "(Fahrgestellnummer, Teilenummern, Software- und Hardwarestand, Seriennummer, Codierung …) und benennt sie. "
-  "CAN-ID eingeben (z. B. 0x714 für das Kombi), <b>Lesen</b>. Für TP-2.0-Steuergeräte steht die Identifikation "
+p("Der Knopf <b>🆔 Erweiterte Identifikation</b> beim gewählten Steuergerät liest alle genormten Kennungen eines "
+  "<b>UDS</b>-Steuergeräts (Fahrgestellnummer, Teilenummern, Software- und Hardwarestand, Seriennummer, "
+  "Codierung …) und benennt sie. Für TP-2.0-Steuergeräte steht die Identifikation "
   "im Reiter TP 2.0.")
-bild("ident", "Diagnose → Erweiterte Identifikation des Kombiinstruments (0x714).", 80)
+bild("ident", "Erweiterte Identifikation des Kombiinstruments (0x714).", 80)
 h2("Grundeinstellungen (Referenz)")
 p("Ein Lexikon der üblichen Werkstattfunktionen je System: Drosselklappe anlernen, Lenkwinkelsensor, "
   "ABS entlüften, Parkbremse, Service-Intervall … Zu jeder steht, wozu sie dient, worauf du achten musst und "
   "wie heikel sie ist (harmlos / mit Bedacht / sicherheitsrelevant). <b>Hier wird nichts ausgeführt.</b>")
-bild("lexikon", "Werkzeuge → Grundeinstellungen (Referenz), nach System sortiert und durchsuchbar.", 140)
+bild("lexikon", "Werkzeuge → Fehlerbilder &amp; Referenz: Grundeinstellungen nach System, durchsuchbar.", 140)
 
 # ---------------------------------------------------------------- 12
 h1("12  Eigene Beschriftungen")
 p("ECUWerkbank liefert keine fremden Beschriftungen mit. Du kannst aber selbst welche anlegen — so viel oder so "
   "wenig du willst. Es gibt drei Wege:")
 tabelle(["Weg", "Wofür", "Wo"], [
-    ["Eigene Namen", "Namen von Messwertblöcken und ihren Feldern", "✏ am Messwertblock oder Werkzeuge → Eigene Namen"],
-    ["Eigene Fehlertexte", "Klartext zu einem Fehlercode", "✏ neben dem Code"],
-    ["Label-Editor", "Alles zu einem Steuergerät: Name, Fehlertexte, Messwerte, Sollwerte", "Werkzeuge → Label-Editor"],
+    ["Eigene Namen", "Namen von Messwertblöcken und ihren Feldern", "✏ am Messwertblock; Liste: Fahrzeug-Datenbank → Eigene Texte"],
+    ["Eigene Fehlertexte", "Klartext zu einem Fehlercode", "✏ neben dem Code; Liste: Fahrzeug-Datenbank → Eigene Texte"],
+    ["Eigene Labels", "Alles zu einem Steuergerät: Name, Fehlertexte, Messwerte, Codier-Bits, Sollwerte", "Fahrzeug-Datenbank → Inhalt ansehen und bearbeiten"],
 ], [35, 65, 70])
-h2("Label-Editor und „Aus letztem Scan anlegen“")
+h2("Eigene Labels und „Aus letztem Scan anlegen“")
 p("Der Knopf <b>⬇ Aus letztem Scan anlegen</b> legt für jedes Steuergerät aus dem letzten Scan des aktiven "
-  "Fahrzeugs eine fertige Datei an — mit Adresse, Name und Teilenummer aus <b>deinem</b> Scan. Steuergeräte, "
-  "die schon eine Datei haben, werden übersprungen; überschrieben wird nichts. Danach Datei wählen, "
-  "Fehlertexte und Messwerte ergänzen, <b>Speichern</b> (vorher wird eine Sicherung .toml.bak angelegt).")
-bild("editor", "Werkzeuge → Label-Editor mit der aus dem Scan angelegten Datei des Bordnetzsteuergeräts.", 75)
+  "Fahrzeugs einen Eintrag in der Quelle „Eigene Labels“ an — mit Adresse, Name und Teilenummer aus <b>deinem</b> "
+  "Scan. Steuergeräte, die schon einen Eintrag haben, werden übersprungen; überschrieben wird nichts. Danach "
+  "Eintrag wählen, Fehlertexte, Messwerte und Sollwerte ergänzen, <b>Speichern</b>.")
+bild("editor", "Werkzeuge → Fahrzeug-Datenbank, Quelle „Eigene Labels“ mit den aus dem Scan angelegten Einträgen.", 75)
 kasten("Gut zu wissen",
-       "Die Label-Dateien ordnen nach <b>Adresse</b> zu, nicht nach Auto. Haben zwei Autos an derselben Adresse "
+       "Eigene Labels ordnen nach <b>Adresse</b> zu, nicht nach Auto. Haben zwei Autos an derselben Adresse "
        "verschiedene Steuergeräte, können sich Messwert-Namen überschneiden. Fehlertexte und Codierung sind davon "
        "meist nicht betroffen.")
 # ---------------------------------------------------------------- 13

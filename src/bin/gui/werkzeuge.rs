@@ -805,47 +805,18 @@ impl App {
 
         ui.add_space(14.0);
         ui.heading(tr!("Eigene Fehlertexte"));
-        ui.label(tr!("Klartext zu einem Code, z. B. für 5-stellige Herstellercodes wie 01627 ohne Beschreibung. Gilt danach in allen Anzeigen und Berichten (auch PDF)."));
         ui.horizontal_wrapped(|ui| {
-            ui.add_sized([80.0, 20.0], egui::TextEdit::singleline(&mut self.ft_code).hint_text("01627"));
-            ui.add_sized([380.0, 20.0], egui::TextEdit::singleline(&mut self.ft_text).hint_text(tr!("Text, z. B. Einparkhilfe: Sensor hinten links")));
-            if ui.button(tr!("+ Speichern")).clicked() && !self.ft_code.trim().is_empty() && !self.ft_text.trim().is_empty() {
-                self.status = match ecu_werkbank::fehlertexte::setzen(&self.ft_code, &self.ft_text) {
-                    Ok(()) => {
-                        self.db.set_dtc_text(&self.ft_code, &self.ft_text);
-                        self.ft_code.clear();
-                        self.ft_text.clear();
-                        tr!("Fehlertext gespeichert.")
-                    }
-                    Err(e) => format!("{e:#}"),
-                };
+            ui.label(tr!("Eigene Klartexte zu Fehlercodes stehen jetzt in der Fahrzeug-Datenbank unter „Eigene Texte“."));
+            if ui.button(tr!("➜ Öffnen")).clicked() {
+                self.tab = Tab::Datenbank;
+                self.dbs_eigene_texte_oeffnen("fehler");
             }
         });
-        let mut ft_del = None;
-        let mut ft_edit = None;
-        egui::Grid::new("fehlertexte").striped(true).spacing([12.0, 3.0]).show(ui, |ui| {
-            for (c, t) in ecu_werkbank::fehlertexte::alle() {
-                ui.monospace(&c);
-                ui.label(&t);
-                if ui.small_button(tr!("ändern")).clicked() {
-                    ft_edit = Some((c.clone(), t.clone()));
-                }
-                if ui.small_button("🗑").clicked() {
-                    ft_del = Some(c);
-                }
-                ui.end_row();
-            }
-        });
-        if let Some((c, t)) = ft_edit {
-            self.ft_code = c;
-            self.ft_text = t;
-        }
-        if let Some(c) = ft_del {
-            let _ = ecu_werkbank::fehlertexte::setzen(&c, "");
-            self.db.set_dtc_text(&c, "");
-        }
         ui.add_space(10.0);
         self.ui_fehlergeruest(ui);
+        ui.add_space(14.0);
+        ui.separator();
+        egui::CollapsingHeader::new(tr!("📚 Grundeinstellungen & Werkstattfunktionen (Referenz)")).id_source("grund_lexikon").show(ui, |ui| self.ui_grund_lexikon(ui));
     }
 
     /// Alle möglichen Fehlercodes aus dem Auto lesen und Texte direkt eintragen.

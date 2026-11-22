@@ -91,10 +91,10 @@ Fahrzeugakte). Alles Weitere ist in vier Gruppen sortiert:
 
 | Gruppe | Unterseiten |
 |---|---|
-| 🔧 Diagnose | Steuergeräte · Ältere Steuergeräte (TP 2.0) · OBD-II · Codierung · Erweiterte Identifikation · Prüfen & Fehlersuche · Sicherheit & Assistenz · Andere Marken |
-| 📈 Messen | Live-Grafik · Zielbereich · Batterie · Partikelfilter · Motor-Checks · Fahrt-Rekorder · Rohwerte umrechnen |
+| 🔧 Diagnose | Steuergeräte · Ältere Steuergeräte (TP 2.0) · OBD-II · Codierung · Prüfen & Fehlersuche · Sicherheit & Assistenz · Andere Marken |
+| 📈 Messen | Live-Grafik · Batterie · Motor-Checks · Fahrt-Rekorder · bei Dieseln zusätzlich Zielbereich und Partikelfilter |
 | 🚘 Fahrzeug | Fahrzeuge & Wartung · Service-Anzeige · Historie & Trends · Softwarestände · Codier-Sicherung · Nachrüstung |
-| 🛠 Werkzeuge | Testlauf · Mitschnitt & Lernhilfe · Eigene Namen · Label-Editor · Fehlerbilder · Grundeinstellungen (Referenz) · Experten: Routine & Stellglied (UDS) |
+| 🛠 Werkzeuge | Testlauf · CAN-Monitor · Skripte · Mitschnitt & Lernhilfe · Fahrzeug-Datenbank · Fehlerbilder & Referenz · Experten: Routine & Stellglied (UDS) |
 
 Oben immer erreichbar: Verbindungsart, aktives Fahrzeug, 🔌 Verbindung,
 ✅ Schnell-Check, 📄 Fehler-PDF, Hell/Dunkel.
@@ -141,7 +141,7 @@ Historie und Codierungs-Sicherungen in `~/.local/share/ecu-werkbank/`.
 
 ZIP entpacken, `ecu-werkbank-gui.exe` starten — keine Installation. Unter Windows gibt
 es kein SocketCAN, daher: **ELM327** (COM-Port oder WLAN), **Demo-Fahrzeug** und alles
-ohne Auto (Fahrzeuge, Wartung, Teile, PDFs, Mitschnitte, Label-Editor). **Nicht**:
+ohne Auto (Fahrzeuge, Wartung, Teile, PDFs, Mitschnitte, Fahrzeug-Datenbank). **Nicht**:
 CAN-Adapter und damit TP 2.0 (ältere Steuergeräte). Daten liegen in
 `%APPDATA%\ecu-werkbank`. Einmalig zum Bauen nötig: `rustup target add x86_64-pc-windows-gnu`
 und `sudo apt install mingw-w64`. Der CAN-Zugang ist in `src/can.rs` gekapselt — ein
@@ -216,7 +216,7 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 | **CAN-Mitschnitt** aufnehmen, Lernhilfe aus Mitschnitt | ✅ | ❌ | braucht direkten Buszugriff |
 | Auto-Erkennung (Auto an/aus, Fahrzeug automatisch wählen) | ✅ | ❌ | liest die Adapter-Zähler |
 | Adapter-Prüfmodus, CAN-Zustand (BUS-OFF …) | ✅ | ❌ | nur SocketCAN |
-| Mitschnitt auswerten, Rohwerte umrechnen, Label-Editor, Eigene Namen, Codier-Helfer, Wartung, PDFs | ➖ | ➖ | offline, kein Adapter nötig |
+| Mitschnitt auswerten, Fahrzeug-Datenbank, eigene Texte, Codier-Helfer, Wartung, PDFs | ➖ | ➖ | offline, kein Adapter nötig |
 
 ✅ geht · ⚠️ geht eingeschränkt · ❌ geht nicht · ➖ braucht keinen Adapter
 
@@ -612,7 +612,7 @@ Motor ist, legst du einmal je Fahrzeug fest (`motorcheck.toml` im Fahrzeugordner
 ./target/release/ecu-werkbank -i can0 fehler-loeschen --ja            # … reparieren, löschen, Probefahrt …
 ./target/release/ecu-werkbank -f "B XY 123" -i can0 reparaturbericht --arbeiten "Zündspule Zyl. 3 erneuert"
 ./target/release/ecu-werkbank -i can0 verbindung                      # Adapter/Bitrate/Steuergeräte prüfen
-./target/release/ecu-werkbank lernen mit-aktion.log --vergleich ohne-aktion.log --out labels/gelernt.toml
+./target/release/ecu-werkbank lernen mit-aktion.log --vergleich ohne-aktion.log --out gelernt.toml
 ./target/release/ecu-werkbank -t demo --demo-muster "kauf=manipuliert" kaufcheck   # Demo: manipuliertes Auto
 ```
 
@@ -794,8 +794,9 @@ ecu-werkbank grundeinstellung --system bremse  # Katalog üblicher Werkstattfunk
 `ident` liest nur (funktioniert auf jedem UDS-Gerät, auch beim Golf).
 `grundeinstellung` ist eine reine Nachschlage-Hilfe und greift nie ins Auto ein.
 
-In der Oberfläche gibt es beide als eigene Seiten: **Erweiterte Identifikation**
-(Gruppe „Diagnose“) und **Grundeinstellungen (Referenz)** (Gruppe „Werkzeuge“).
+In der Oberfläche: **Erweiterte Identifikation** über den Knopf 🆔 beim gewählten
+UDS-Steuergerät (Diagnose → Steuergeräte), die **Referenz** unten auf der Seite
+Werkzeuge → Fehlerbilder & Referenz.
 
 ### Nach dem Tausch: Anpassungen zurückschreiben
 
@@ -1126,52 +1127,46 @@ Botschaftsnamen und Signale; mit 📈 kommt ein Signal als Kurve in die Live-Gra
 Hinweis Golf 6: Am OBD-Stecker kommt durch das Gateway meist nur Diagnose-Verkehr an.
 
 **Dateien ins Fenster ziehen:** Mitschnitt (`.log`, `.asc`), DBC, Aufzeichnung
-(`.csv`) und Label-Datei (`.toml`) einfach auf das Fenster ziehen. Sie öffnen
-sich auf der passenden Seite. Eine Datensicherung (`.zip`) wird dabei nicht
+(`.csv`), Datenpaket oder Label-Datei (`.toml`, `.json`) einfach auf das Fenster
+ziehen. Sie öffnen sich auf der passenden Seite, Daten für die Fahrzeug-Datenbank
+erst mit Vorschau. Eine Datensicherung (`.zip`) wird dabei nicht
 zurückgespielt, das geht nur bewusst über „Fahrzeuge & Wartung“.
 
-## Eigene Labels (dein Inhalt)
+## Eigene Labels und eigene Texte (dein Inhalt)
 
-Seit 0.4 liegen alle Daten (Fahrzeuge, Scans, Sicherungen, Einstellungen) sowie eigene Labels und alle eigenen Texte (Fehlertexte, Namen für
-Messwerte, Codier-Bits, Anpassungen, Messwert-Texte) **in der Fahrzeug-Datenbank**
-(`<Datenordner>/fahrzeugdaten.sqlite`). Bearbeitet wird im GUI-Reiter
-**„Label-Editor“**; eine Label-Datei (`*.toml`, Format wie
-[`labels/beispiel.toml`](labels/beispiel.toml)) kann man ins Fenster ziehen und dort
-übernehmen, „Als Datei…“ schreibt einen Eintrag zum Weitergeben.
+Seit 0.4 liegen alle Daten (Fahrzeuge, Scans, Sicherungen, Einstellungen), eigene
+Labels und alle eigenen Texte **in der Fahrzeug-Datenbank**
+(`<Datenordner>/fahrzeugdaten.sqlite`). Bearbeitet wird alles an einer Stelle:
+**Werkzeuge → Fahrzeug-Datenbank**.
 
-**Umstieg:** Beim ersten Start übernimmt ECUWerkbank den bisherigen Label-Ordner und
-die Text-Dateien einmal in die Datenbank. Die Label-Dateien bleiben unverändert liegen,
-die Text-Dateien heißen danach `*.toml.uebernommen` — beides als Sicherung, gelesen
-wird ab dann nur noch die Datenbank. Für über 300 genormte Codes (P0xxx, P2xxx, U0xxx)
-sind **deutsche Grundtexte eingebaut** (eigene Formulierungen, `src/dtc_db.rs`); deine
-Texte haben immer Vorrang. Damit bekommen DTCs Klartextnamen:
+- **Inhalt ansehen und bearbeiten:** Quelle wählen (z. B. „Eigene Labels“ oder ein
+  importiertes Datenpaket), dann je Steuergerät Name, Adresse, Teilenummer, CAN-IDs,
+  Codier-Kennung, Fehlertexte, Messwerte, Codier-Bits, Anpassungskanäle und
+  **Sollwerte** (Ampel bei Messwerten) ändern. „+ Steuergerät“ legt ein neues an.
+- **⬇ Aus letztem Scan anlegen** (bei der Quelle „Eigene Labels“): legt für jedes
+  Steuergerät aus dem letzten Scan des aktiven Fahrzeugs einen Eintrag mit Adresse,
+  Name, Teilenummer und CAN-IDs aus *deinem* Scan an. Nichts wird überschrieben.
+- **Eigene Texte:** deine Fehlertexte, Namen von Messwertblöcken (TP 2.0),
+  Codier-Texte, Kennungs-Namen und Wert-Texte als Liste zum Ändern und Löschen. Sie
+  gelten vor allen anderen Quellen. Am schnellsten benennst du Messwerte mit ✏ direkt
+  am Messwertblock im TP-2.0-Reiter; „🔍 Alle Blöcke lesen“ zeigt dort ein ganzes
+  Steuergerät als Liste zum Benennen.
+
+Label-Dateien (`*.toml` mit `[ecu]`) gibt es nur noch zum Austausch: ins Fenster
+ziehen oder über „Datei importieren“ übernehmen; der Export der Datenbank schreibt
+Datenpakete. **Umstieg:** Beim ersten Start übernimmt ECUWerkbank einen vorhandenen
+Label-Ordner und die früheren Text-Dateien einmal in die Datenbank.
+
+Für über 300 genormte Codes (P0xxx, P2xxx, U0xxx) sind **deutsche Grundtexte
+eingebaut** (eigene Formulierungen, `src/dtc_db.rs`); deine Texte haben immer Vorrang.
 
 ```bash
 ./target/release/ecu-werkbank labels                      # zeigt geladene Labels
-./target/release/ecu-werkbank -l meine_labels dtc --tx 0x7E0 --rx 0x7E8
 ```
 
 > Die Texte formulierst du selbst (oder nimmst sie aus offenen, genormten
 > Quellen). Fremde Label-Dateien anderer Diagnoseprogramme liest ECUWerkbank
 > nicht — der Inhalt gehört dir.
-
-**Vorbefüllen aus dem Scan:** Im Label-Editor legt der Knopf **„⬇ Aus letztem
-Scan anlegen“** für jedes Steuergerät aus dem letzten Scan des aktiven Fahrzeugs
-eine fertige Datei an — mit Adresse, Name, Teilenummer und CAN-IDs aus *deinem*
-Scan. Nur Steuergeräte ohne vorhandene Datei werden angelegt, nichts wird
-überschrieben. Fehlercodes und Messwerte ergänzt du dann im Editor. Das greift
-vor allem bei TP-2.0/KWP-Steuergeräten (ältere Autos), weil nur die eine feste
-Adresse melden.
-
-Noch schneller geht es im GUI-Reiter **„Eigene Namen“** (Gruppe Werkzeuge):
-Steuergerät-Adresse, Block und Feld eingeben, Namen tippen, speichern — der Name
-gilt danach überall (Live-Werte, Testlauf, Rekorder, Kurven) und bleibt in
-`messwerttexte.toml`. Das ist der empfohlene Weg für eigene Messwert-Namen.
-Ganze Steuergeräte auf einmal: unter **„📋 Ganzes Steuergerät benennen“** die
-Adresse eingeben und **„🔍 Alle Blöcke lesen“** — danach steht jedes Feld mit
-seinem aktuellen Wert und der Art (Drehzahl, Temperatur …) in einer Liste, du
-tippst nur noch die Namen ein. Mit Fortschritt („37 von 120 Feldern benannt“),
-Filter „nur Felder ohne Namen“ und Suche.
 
 ## Testen ohne Auto und ohne sudo
 

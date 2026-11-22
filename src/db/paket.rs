@@ -57,6 +57,33 @@ pub struct PaketFehlerart {
     pub text: String,
 }
 
+/// Sollwerte und Stellfunktionen eines Steuergeräts schreiben (Import und Editor).
+pub(crate) fn zusatz_eintragen(con: &rusqlite::Connection, ecu: i64, s: &PaketSteuergeraet, quelle: i64) -> Result<()> {
+    for w in &s.sollwert {
+        con.execute(
+            "INSERT INTO sollwert (ecu_id, quelle, kennung, feld, min, max, name, source_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![ecu, w.quelle.trim().to_ascii_lowercase(), w.id, w.feld, w.min, w.max, w.name, quelle],
+        )?;
+    }
+    for f in &s.stellfunktion {
+        con.execute("INSERT INTO stellfunktion (ecu_id, inhalt, source_id) VALUES (?1, ?2, ?3)", params![ecu, toml::to_string(f)?, quelle])?;
+    }
+    Ok(())
+}
+
+/// Sollwerte und Stellfunktionen eines Steuergeräts lesen.
+pub(crate) fn zusatz_laden(con: &rusqlite::Connection, ecu: i64, s: &mut PaketSteuergeraet) -> Result<()> {
+    let mut st = con.prepare("SELECT quelle, kennung, feld, min, max, name FROM sollwert WHERE ecu_id = ?1 ORDER BY id")?;
+    s.sollwert = st
+        .query_map(params![ecu], |r| Ok(crate::labels::Sollwert { quelle: r.get(0)?, id: r.get(1)?, feld: r.get(2)?, min: r.get(3)?, max: r.get(4)?, name: r.get(5)? }))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut st = con.prepare("SELECT inhalt FROM stellfunktion WHERE ecu_id = ?1 ORDER BY id")?;
+    let texte: Vec<String> = st.query_map(params![ecu], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    s.stellfunktion = texte.iter().filter_map(|t| toml::from_str(t).ok()).collect();
+    s.codier_kennung = con.query_row("SELECT coding_did FROM ecu WHERE id = ?1", params![ecu], |r| r.get(0))?;
+    Ok(())
+}
+
 /// Erlaubte Protokolle für Fehlerarten.
 pub const FEHLERART_PROTOKOLLE: &[&str] = &["TP20", "UDS", "KW1281"];
 
@@ -120,6 +147,9 @@ pub struct PaketSteuergeraet {
     pub rx: Option<u16>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub teilenummer: String,
+    /// Kennung, unter der die Codierung steht (ohne Angabe 0x0600)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codier_kennung: Option<u16>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fehler: Vec<PaketFehler>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -128,6 +158,12 @@ pub struct PaketSteuergeraet {
     pub codierung: Vec<PaketCodierung>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub anpassung: Vec<PaketAnpassung>,
+    /// Sollwerte für die Ampel bei Messwerten (quelle = kwp | uds | obd)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sollwert: Vec<crate::labels::Sollwert>,
+    /// Stellfunktionen (Steuergerät stellt einen Wert selbst ein)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stellfunktion: Vec<crate::control::Stellfunktion>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -235,9 +271,9 @@ impl Db {
             let hid = self.hersteller(&h.name, &wmi, Some(q))?;
             for s in &h.steuergeraete {
                 tx.execute(
-                    "INSERT INTO ecu (manufacturer_id, ecu_name, ecu_family, software_number, protocol, diagnostic_address, can_tx, can_rx, source_id)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    params![hid, s.name, s.gruppe, s.teilenummer, s.protokoll, s.adresse, s.tx, s.rx, q],
+                    "INSERT INTO ecu (manufacturer_id, ecu_name, ecu_family, software_number, protocol, diagnostic_address, can_tx, can_rx, coding_did, source_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![hid, s.name, s.gruppe, s.teilenummer, s.protokoll, s.adresse, s.tx, s.rx, s.codier_kennung, q],
                 )?;
                 let ecu = tx.last_insert_rowid();
                 erg.steuergeraete += 1;
@@ -264,6 +300,7 @@ impl Db {
                     tx.execute("INSERT INTO adaptation (ecu_id, channel, name, source_id) VALUES (?1, ?2, ?3, ?4)", params![ecu, a.kanal, a.name, q])?;
                     erg.anpassung += 1;
                 }
+                zusatz_eintragen(&tx, ecu, s, q)?;
             }
         }
         tx.commit()?;
@@ -412,6 +449,7 @@ impl Db {
                     Ok(PaketCodierung { byte: r.get(0)?, bit: r.get(1)?, name: r.get(2)?, benoetigt: liste(r.get(3)?), schliesst_aus: liste(r.get(4)?) })
                 })?;
                 s.anpassung = self.kinder(eid, "SELECT channel, name FROM adaptation WHERE ecu_id = ?1 ORDER BY channel", |r| Ok(PaketAnpassung { kanal: r.get(0)?, name: r.get(1)? }))?;
+                zusatz_laden(&self.con, eid, &mut s)?;
                 h.steuergeraete.push(s);
             }
             if !h.steuergeraete.is_empty() {
@@ -564,6 +602,8 @@ dids = [{ did = 0xF40C, name = "Drehzahl", einheit = "U/min", faktor = 0.25 }]
     fn beispiel_dateien_lassen_sich_uebernehmen() {
         let db = Db::im_speicher().unwrap();
         let p = Datenpaket::aus_text(include_str!("../../beispiele/datenpaket-alles.toml"), false).unwrap();
+        let sg = &p.hersteller[0].steuergeraete;
+        assert_eq!((sg[0].sollwert.len(), sg[0].codier_kennung, sg[1].stellfunktion.len()), (1, Some(0x0600), 1));
         let e = db.paket_importieren(&p, QuellArt::User).unwrap();
         assert_eq!((e.steuergeraete, e.fehler, e.messwerte, e.codierung, e.anpassung, e.fehlerarten), (2, 4, 3, 4, 2, 3));
         let e = db.csv_text_importieren(include_str!("../../beispiele/gemischt.csv"), "gemischt.csv", "").unwrap();
@@ -588,6 +628,69 @@ dids = [{ did = 0xF40C, name = "Drehzahl", einheit = "U/min", faktor = 0.25 }]
         // CSV ohne Protokoll = TP20
         let e = db.csv_text_importieren("fehlerart;text\n12;Stromkreis\n", "f.csv", "").unwrap();
         assert_eq!(e.fehlerarten, 1);
+    }
+
+    #[test]
+    fn sollwerte_stellfunktionen_und_codier_kennung() {
+        let db = Db::im_speicher().unwrap();
+        let p = Datenpaket::aus_text(
+            r#"
+[quelle]
+name = "S"
+
+[[hersteller]]
+name = "Volkswagen"
+
+[[hersteller.steuergeraet]]
+adresse = 0x01
+name = "Motor"
+codier_kennung = 0x0601
+
+[[hersteller.steuergeraet.sollwert]]
+quelle = "kwp"
+id = 2
+feld = 3
+min = 80.0
+max = 105.0
+name = "Kühlmittel"
+
+[[hersteller.steuergeraet.stellfunktion]]
+name = "Leerlauf"
+art = "drehzahl"
+tx = 0x7E0
+rx = 0x7E8
+id = 0x1234
+min = 600.0
+max = 2000.0
+"#,
+            false,
+        )
+        .unwrap();
+        db.paket_importieren(&p, QuellArt::User).unwrap();
+        let q = db.quellen().unwrap()[0].id;
+        let (id, _, s) = db.inhalt(q).unwrap().steuergeraete[0].clone();
+        assert_eq!(s.codier_kennung, Some(0x0601));
+        assert_eq!(s.sollwert[0].max, Some(105.0));
+        assert_eq!(s.stellfunktion[0].name, "Leerlauf");
+        // Editor: speichern behält alles, Änderung kommt an
+        let mut s2 = s.clone();
+        s2.sollwert[0].min = Some(85.0);
+        db.sg_speichern(id, &s2).unwrap();
+        let (_, s3) = db.sg_laden(id).unwrap();
+        assert_eq!(s3.sollwert[0].min, Some(85.0));
+        assert_eq!(s3.stellfunktion.len(), 1);
+        assert_eq!(s3.codier_kennung, Some(0x0601));
+        // gelten auch beim Arbeiten (andere Quelle als „Eigene Labels“)
+        let (soll, stell) = db.sollwerte_und_stellfunktionen_fremd().unwrap();
+        assert_eq!((soll.len(), stell.len()), (1, 1));
+        assert_eq!(soll[0].0, Some(0x01));
+        // Rundreise über den Export
+        let (e, _) = db.paket_exportieren("x", "CC0-1.0").unwrap();
+        let t = toml::to_string(&e).unwrap();
+        assert!(Datenpaket::aus_text(&t, false).unwrap().hersteller[0].steuergeraete[0].stellfunktion.len() == 1, "{t}");
+        // neues leeres Steuergerät
+        let n = db.sg_neu(q).unwrap();
+        assert_eq!(db.sg_laden(n).unwrap().0, "Volkswagen");
     }
 
     #[test]

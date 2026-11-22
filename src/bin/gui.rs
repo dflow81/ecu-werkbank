@@ -22,7 +22,6 @@ use ecu_werkbank::uds::Uds;
 use ecu_werkbank::kwp::{self, Kwp, Tp20Found};
 use ecu_werkbank::tp20::Channel;
 use ecu_werkbank::csvlog::CsvLog;
-use ecu_werkbank::labels::LabelFile;
 use ecu_werkbank::obd::{self, Obd};
 use std::sync::mpsc;
 
@@ -295,7 +294,6 @@ enum SgMsg {
 enum Tab {
     Start,
     Steuergeraete,
-    Messwerte,
     Scope,
     Codierung,
     Service,
@@ -318,13 +316,10 @@ enum Tab {
     Datenbank,
     Historie,
     Sicherung,
-    Namen,
-    Editor,
     Motor,
     Rekorder,
     Fremd,
     Ident,
-    GrundLexikon,
 }
 
 /// VAG_FILM: nimmt eine Bildfolge auf, während die Demo läuft (für ein bewegtes Video).
@@ -384,13 +379,8 @@ struct App {
     ad_cache: std::cell::RefCell<Option<(std::time::Instant, String, (Stufe, String, String))>>,
 
     // (c) Live-Dekodierung: pro (ecu,id) ein Rohbyte-Eingabefeld
-    meas_inputs: HashMap<(u16, u16), String>,
 
     // Schnell-Eingabe eigener Messwert-/Feldnamen
-    qn_addr: String,
-    qn_block: String,
-    qn_feld: String,
-    qn_name: String,
 
     // (1) Codierung (Long Coding Helper, offline)
     code_ecu: Option<u16>,
@@ -454,8 +444,6 @@ struct App {
     ws_modell: String,
     ws_text: String,
     /// eigene Fehlertexte: Code + Text
-    ft_code: String,
-    ft_text: String,
     /// Datensicherung: Einstellungen (Eingabe), laufender Job, beim Start schon geprüft?
     ds: ecu_werkbank::datensicherung::Einstellung,
     ds_job: Option<mpsc::Receiver<Result<(PathBuf, usize), String>>>,
@@ -705,12 +693,6 @@ struct App {
 
     // Label-Editor
     /// Offener Eintrag im Label-Editor: None = keiner, Some(None) = neu, Some(Some(id)) = gespeichert
-    ed_id: Option<Option<i64>>,
-    ed_loeschen: bool,
-    ed_file: LabelFile,
-    ed_addr: String,
-    ed_tx: String,
-    ed_rx: String,
     tp_last_read: std::time::Instant,
     tp_lines: Vec<String>,
     tp_block_values: Vec<(String, Option<Stufe>)>,
@@ -734,6 +716,8 @@ struct App {
     an_result: Vec<String>,
     /// Wissen aus der Fahrzeug-Datenbank zum gewählten TP-2.0-Steuergerät (Adresse, Wissen)
     an_wissen: Option<(u8, Option<ecu_werkbank::db::teile::SgWissen>)>,
+    /// Ist das aktive Fahrzeug (Schlüssel) ein Diesel? Zwischengespeichert fürs Menü.
+    diesel_cache: std::cell::RefCell<Option<(String, bool)>>,
     /// Codier-Bits aus der Fahrzeug-Datenbank zur Teilenummer (Teilenummer, Bits)
     code_wissen: Option<(String, Vec<ecu_werkbank::labels::Coding>)>,
     an_zeigen: bool,
@@ -746,7 +730,6 @@ struct App {
     bn_suche: String,
     bn_roh_aus: bool,
     /// „Eigene Namen“: Steuergerät, dessen Blöcke gelesen werden
-    bn_addr: String,
     tp_block_key: (u8, u8),
     mw_texte: ecu_werkbank::messwerttexte::Texte,
     /// Grundeinstellung (TP 2.0): Gruppe, gelernter-aber-noch-nicht-übernommener Ablauf,
@@ -811,7 +794,11 @@ impl eframe::App for App {
                 self.log_report = gui_text(&d.pruefbericht());
                 self.log_path = tr!("(Beispiel)");
             }
-            "editor" => self.ed_open(self.labels_dir.join("beispiel.toml")),
+            "editor" => self.labels_quelle_zeigen(),
+            "namen" | "labels" => {
+                self.tab = Tab::Datenbank;
+                self.dbs_eigene_texte_oeffnen("messwert");
+            }
             "historie" => self.hist_refresh(),
             "blockscan" => {
                 self.tp_addr = "0x01".into();
@@ -902,10 +889,7 @@ impl eframe::App for App {
                     }
                 }
             }
-            "namen-scan" => {
-                self.bn_addr = "0x01".into();
-                self.bs_start(0x01);
-            }
+            "namen-scan" => self.bs_start(0x01),
             "anpassung" => {
                 self.tp_addr = "0x20".into();
                 self.an_kanaele = "1,3,17,23".into();
@@ -929,10 +913,8 @@ impl eframe::App for App {
                 self.svc_plan = self.svc_plan_bauen(true).ok();
             }
             "editor-scan" => {
-                self.ed_aus_scan();
-                if let Some((id, _)) = self.label_liste().into_iter().find(|(_, n)| n.starts_with("20 ")) {
-                    self.ed_oeffnen(id);
-                }
+                self.labels_aus_scan();
+                self.labels_quelle_zeigen();
             }
             "scope" | "armaturen" => {
                 // Bildschirmfoto: gespeicherte Ansicht (VAG_ANSICHT=Name), sonst ein Messwertblock
@@ -1131,7 +1113,12 @@ impl eframe::App for App {
             if let Some(gi) = group {
                 ui.horizontal_wrapped(|ui| {
                     ui.add_space(8.0);
+                    let diesel = self.diesel_moeglich();
                     for (t, name) in GROUPS[gi].1 {
+                        // Partikelfilter und Zielbereich (Regenerationsfahrt) nur bei Dieseln
+                        if matches!(t, Tab::Dpf | Tab::Ziel) && !diesel && self.tab != *t {
+                            continue;
+                        }
                         ui.selectable_value(&mut self.tab, *t, ecu_werkbank::i18n::t(name));
                     }
                 });
@@ -1140,7 +1127,7 @@ impl eframe::App for App {
         });
 
         // (b) Modul-Seitenleiste — nur dort, wo Steuergeräte gewählt werden
-        if matches!(self.tab, Tab::Messwerte | Tab::Codierung) {
+        if matches!(self.tab, Tab::Codierung) {
         egui::SidePanel::left("module").resizable(true).default_width(200.0).show(ctx, |ui| {
             ui.add_space(6.0);
             ui.strong(tr!("Steuergeräte"));
@@ -1159,7 +1146,7 @@ impl eframe::App for App {
                 }
             }
             if clear {
-                self.tab = Tab::Messwerte;
+                self.code_ecu = self.selected_ecu;
             }
             ui.add_space(10.0);
             ui.separator();
@@ -1880,7 +1867,6 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
         (Tab::Tp20, trn!("Ältere Steuergeräte (TP 2.0)")),
         (Tab::Obd, trn!("OBD-II")),
         (Tab::Codierung, trn!("Codierung")),
-        (Tab::Ident, trn!("Erweiterte Identifikation")),
         (Tab::Diagnose, trn!("Prüfen & Fehlersuche")),
         (Tab::Sicherheit, trn!("Sicherheit & Assistenz")),
         (Tab::Fremd, trn!("Andere Marken")),
@@ -1892,7 +1878,6 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
         (Tab::Dpf, trn!("Partikelfilter")),
         (Tab::Motor, trn!("Motor-Checks")),
         (Tab::Rekorder, trn!("Fahrt-Rekorder")),
-        (Tab::Messwerte, trn!("Rohwerte umrechnen")),
     ]),
     (trn!("🚘 Fahrzeug"), &[
         (Tab::Fahrzeuge, trn!("Fahrzeuge & Wartung")),
@@ -1907,11 +1892,8 @@ const GROUPS: &[(&str, &[(Tab, &str)])] = &[
         (Tab::CanMonitor, trn!("CAN-Monitor")),
         (Tab::Skripte, trn!("Skripte")),
         (Tab::Mitschnitt, trn!("Mitschnitt & Lernhilfe")),
-        (Tab::Namen, trn!("Eigene Namen")),
-        (Tab::Editor, trn!("Label-Editor")),
         (Tab::Datenbank, trn!("Fahrzeug-Datenbank")),
-        (Tab::Wissen, trn!("Fehlerbilder")),
-        (Tab::GrundLexikon, trn!("Grundeinstellungen (Referenz)")),
+        (Tab::Wissen, trn!("Fehlerbilder & Referenz")),
         (Tab::Service, trn!("Experten: Routine & Stellglied (UDS)")),
     ]),
 ];

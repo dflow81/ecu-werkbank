@@ -591,7 +591,7 @@ impl App {
                         Ok(lf) => match ecu_werkbank::db::eigen::mit_db(|db| db.label_speichern(None, &lf)) {
                             Ok(_) => {
                                 self.reload_labels();
-                                self.status = tr!("Gespeichert (Fahrzeug-Datenbank) — im Label-Editor Namen/Einheiten/Grenzen prüfen.");
+                                self.status = tr!("Gespeichert (Fahrzeug-Datenbank, Quelle „Eigene Labels“) — dort Namen, Einheiten und Grenzen prüfen.");
                             }
                             Err(e) => self.status = format!("{e:#}"),
                         },

@@ -1,7 +1,7 @@
 //! Grund-Klartexte für genormte Fehlercodes (SAE J2012 / ISO 15031-6).
 //!
 //! Die Codes selbst sind genormt; die deutschen Beschreibungen hier sind
-//! eigene Formulierungen. Eigene Label-Texte (labels/*.toml) haben Vorrang —
+//! eigene Formulierungen. Eigene Texte aus der Fahrzeug-Datenbank haben Vorrang —
 //! siehe [`crate::labels::LabelDb::dtc_description`].
 //!
 //! Wiederkehrende Gruppen (Zylinder, Lambdasonden je Bank/Sonde, Zündspulen …)

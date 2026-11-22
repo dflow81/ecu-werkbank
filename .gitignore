@@ -10,9 +10,7 @@
 *.rod
 
 # Eigene Label-Dateien: nur Beispiel und leere Vorlage gehören ins Projekt
-/labels/*
-!/labels/beispiel.toml
-!/labels/j519-bordnetz.toml
+/labels/
 
 # Persönliche Daten: Mitschnitte, Logs, Sicherungen, Berichte
 /logs/

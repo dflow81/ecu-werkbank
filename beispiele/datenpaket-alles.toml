@@ -34,7 +34,8 @@ gruppe = "Karosserie & Komfort"  # Gruppe in der Steuergeräte-Liste
 protokoll = "TP20"               # UDS | TP20 | KWP1281 | OBD
 tx = 0x70E                       # CAN-Kennung zum Steuergerät (nur UDS nötig)
 rx = 0x778                       # CAN-Kennung der Antwort
-teilenummer = "1K0937049"        # Teilenummer, wenn die Daten nur dazu passen
+teilenummer = "1K0937049"        # Teilenummer: daran erkennt das Programm das Steuergerät am Auto
+codier_kennung = 0x0600          # nur nötig, wenn die Codierung woanders steht
 
 # Fehlertexte dieses Steuergeräts
 fehler = [
@@ -64,10 +65,29 @@ anpassung = [
     { kanal = 60, name = "Coming Home Dauer" },
 ]
 
+# Sollwerte: Ampel bei Messwerten. quelle = kwp (Messwertblock, mit Feld),
+# uds (Kennung) oder obd (PID); min/max dürfen einzeln fehlen.
+sollwert = [
+    { quelle = "kwp", id = 7, feld = 2, min = 12.0, max = 14.8, name = "Bordspannung" },
+]
+
+# Stellfunktionen (Steuergerät stellt einen Wert selbst ein) stehen als eigene
+# Blöcke direkt unter dem Steuergerät, siehe Kombiinstrument unten.
+
 # ── Ein zweites Steuergerät, nur mit dem Nötigsten ──────────────────────
 [[hersteller.steuergeraet]]
 adresse = 0x17
 name = "Kombiinstrument"
+
+[[hersteller.steuergeraet.stellfunktion]]
+name = "Beispiel-Stellfunktion"
+art = "drehzahl"          # was gestellt wird
+tx = 0x714                # Anfrage-ID
+rx = 0x77E                # Antwort-ID
+id = 0x1234               # Kennung des Sollwerts
+min = 0.0
+max = 100.0
+einheit = "%"
 
 # ── Fehlertexte ohne festes Steuergerät (z. B. genormte P-Codes) ────────
 [[fehler]]

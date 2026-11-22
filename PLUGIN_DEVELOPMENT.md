@@ -13,11 +13,11 @@ Schreibt die Herkunft dazu.
 
 | Was | Wo | Format | Befehl/GUI |
 |---|---|---|---|
-| Steuergeräte-Labels (Messwerte, Codier-Bits, Kennungen) | Fahrzeug-Datenbank (Quelle „Eigene Labels“) | TOML zum Austausch, Beispiel `labels/beispiel.toml` (ins Fenster ziehen) | Werkzeuge → Label-Editor |
-| Namen für Messwertblöcke (TP 2.0) | Datenordner | TOML | `messwerttext`, Werkzeuge → Eigene Namen |
-| Namen für Codier-Bits | Datenordner | TOML | `codiertext`, Seite Codierung |
-| Namen für Anpassungs-Kennungen | Datenordner | TOML | Sicherung → Anpassungen |
-| Fehlertexte | Datenordner | TOML | `fehlertext`, Fehlergerüst |
+| Steuergeräte (Messwerte, Codier-Bits, Anpassung, Sollwerte, Stellfunktionen) | Fahrzeug-Datenbank (Quelle „Eigene Labels“ oder eigene Datenpakete) | Datenpaket TOML/JSON zum Austausch, Vorlage `beispiele/datenpaket-alles.toml` | Werkzeuge → Fahrzeug-Datenbank → Inhalt ansehen und bearbeiten |
+| Namen für Messwertblöcke (TP 2.0) | Fahrzeug-Datenbank (eigene Texte) | – | `messwerttext`, ✏ am Messwertblock, Fahrzeug-Datenbank → Eigene Texte |
+| Namen für Codier-Bits | Fahrzeug-Datenbank (eigene Texte) | – | `codiertext`, Seite Codierung |
+| Namen für Anpassungs-Kennungen | Fahrzeug-Datenbank (eigene Texte) | – | Sicherung → Anpassungen |
+| Fehlertexte | Fahrzeug-Datenbank (eigene Texte) | – | `fehlertext`, Fehlergerüst, Fahrzeug-Datenbank → Eigene Texte |
 | Fehlerbilder (Erfahrungen je Modell) | Datenordner | TOML | Werkzeuge → Fehlerbilder |
 | Grundeinstellungs-/Stellglied-Abläufe | aus eigenem Mitschnitt gelernt | TOML | Mitschnitt & Lernhilfe |
 | Sprachen | `<Datenordner>/sprachen/<code>.toml` | TOML: deutscher Text = Übersetzung | `sprache vorlage <code>` |

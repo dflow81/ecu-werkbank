@@ -5,7 +5,8 @@
 //! proprietärer Label-Text übernommen — die Beschreibungen schreibst du selbst
 //! oder nimmst sie aus offenen, genormten Quellen (ISO 14229 / SAE J1979).
 //!
-//! Format (eine Datei pro Steuergerät), siehe `labels/beispiel.toml`:
+//! Format (eine Datei pro Steuergerät, nur noch zum Austausch — gespeichert wird
+//! in der Fahrzeug-Datenbank):
 //!
 //! ```toml
 //! [ecu]
@@ -286,9 +287,8 @@ pub fn nutzer_dir() -> std::path::PathBuf {
     crate::history::programmordner(&base).join("labels")
 }
 
-/// Standard-Label-Ordner:
-/// 1. `$VAG_LABELS`, 2. `./labels` (Projektordner), 3. `~/.config/ecu-werkbank/labels`
-///    (wird beim ersten Mal mit der Beispieldatei angelegt).
+/// Früherer Label-Ordner (nur noch für die einmalige Übernahme in die Datenbank):
+/// 1. `$VAG_LABELS`, 2. `./labels` (Projektordner), 3. `~/.config/ecu-werkbank/labels`.
 pub fn default_dir() -> std::path::PathBuf {
     use std::path::PathBuf;
     if let Ok(d) = std::env::var("VAG_LABELS") {
@@ -298,11 +298,9 @@ pub fn default_dir() -> std::path::PathBuf {
     if local.is_dir() {
         return local;
     }
-    let dir = nutzer_dir();
-    if !dir.exists() && std::fs::create_dir_all(&dir).is_ok() {
-        let _ = std::fs::write(dir.join("beispiel.toml"), include_str!("../labels/beispiel.toml"));
-    }
-    dir
+    // Seit Weg A liegen alle Labels in der Fahrzeug-Datenbank. Der Ordner wird
+    // nicht mehr angelegt; gibt es ihn (ältere Version), wird er einmal übernommen.
+    nutzer_dir()
 }
 
 /// Alle geladenen Labels, nach ECU-Adresse indexiert.
@@ -352,6 +350,11 @@ impl LabelDb {
             db.dtcs.insert(code, text);
         }
         db.db_dtcs = crate::db::fehlertexte_falls_vorhanden().into_iter().collect();
+        // Sollwerte und Stellfunktionen auch aus allen anderen Quellen der Datenbank
+        if let Ok((soll, stell)) = crate::db::eigen::mit_db(|d| d.sollwerte_und_stellfunktionen_fremd()) {
+            db.sollwerte.extend(soll);
+            db.stellfunktionen.extend(stell);
+        }
         db.db_dids = crate::db::dids_falls_vorhanden().into_iter().map(|(id, name, unit, factor, offset)| (id, Measuring { id, name, unit, factor, offset })).collect();
         Ok(db)
     }
@@ -597,10 +600,69 @@ pub fn dateien_lesen_mit_pfad(dir: &Path) -> Vec<(std::path::PathBuf, LabelFile)
 mod tests {
     use super::*;
 
+    const BEISPIEL: &str = r#"# Eigene Label-Datei — Vorlage. Alle Texte hier sind selbst formuliert.
+# Die P-/C-/B-/U-Codes selbst sind genormt (SAE J2012 / ISO 15031-6);
+# die Beschreibungstexte schreibst du in deinen eigenen Worten.
+
+[ecu]
+address = 0x01            # Logikadresse (0x01 = Motor, 0x03 = ABS, 0x17 = Kombi …)
+name = "Motorsteuergerät"
+
+# --- Fehlercodes: eigene Klartext-Beschreibungen ---
+[[dtc]]
+code = "P0101"
+description = "Luftmassen-/Luftmengenmesser: Signal unplausibel"
+
+[[dtc]]
+code = "P0171"
+description = "Gemisch zu mager (Bank 1)"
+
+[[dtc]]
+code = "P0300"
+description = "Verbrennungsaussetzer erkannt (mehrere Zylinder)"
+
+# --- Messwerte: UDS-DID bzw. KWP-Gruppe mit Skalierung ---
+# Anzeigewert = Rohwert * factor + offset
+[[measuring]]
+id = 0xF40C               # Beispiel-DID
+name = "Motordrehzahl"
+unit = "1/min"
+factor = 0.25
+offset = 0.0
+
+[[measuring]]
+id = 0xF405
+name = "Kühlmitteltemperatur"
+unit = "°C"
+factor = 1.0
+offset = -40.0
+
+# --- Codier-Bits mit Abhängigkeiten (Beispiel, erfundene Stellen) ---
+# benoetigt:     diese Bits müssen mit an sein ("Byte.Bit")
+# schliesst_aus: diese Bits dürfen nicht gleichzeitig an sein
+# Der Codier-Helfer warnt, wenn eine Regel verletzt ist.
+[[coding]]
+byte = 0
+bit = 0
+name = "Funktion A"
+
+[[coding]]
+byte = 0
+bit = 1
+name = "Zusatz zu A"
+benoetigt = ["0.0"]
+
+[[coding]]
+byte = 0
+bit = 2
+name = "Funktion B (nicht zusammen mit A)"
+schliesst_aus = ["0.0"]
+"#;
+
     #[test]
     fn label_file_roundtrip_keeps_content() {
-        let text = std::fs::read_to_string("labels/beispiel.toml").unwrap();
-        let a = LabelFile::parse(&text).unwrap();
+        // frühere Beispiel-Datei labels/beispiel.toml (Label-Dateien gibt es nur noch zum Austausch)
+        let a = LabelFile::parse(BEISPIEL).unwrap();
         let written = a.to_toml();
         assert!(written.contains("address = 0x01"));
         assert!(written.contains("id = 0xf40c"));

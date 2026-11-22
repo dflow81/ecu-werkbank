@@ -1,4 +1,4 @@
-//! GUI: Reiter-Verteilung und Kern-Reiter (Steuergeräte, Messwerte, Codierung, Service, Namen)
+//! GUI: Reiter-Verteilung und Kern-Reiter (Steuergeräte, Codierung, Service)
 
 use super::*;
 
@@ -7,7 +7,6 @@ impl App {
         match self.tab {
             Tab::Start => self.ui_start(ui),
             Tab::Steuergeraete => self.ui_module(ui),
-            Tab::Messwerte => self.ui_messwerte(ui),
             Tab::Scope => self.ui_scope(ui),
             Tab::Codierung => self.ui_codierung(ui),
             Tab::Service => self.ui_service(ui),
@@ -31,12 +30,9 @@ impl App {
             Tab::Datenbank => self.ui_datenbank(ui),
             Tab::Historie => self.ui_historie(ui),
             Tab::Sicherung => self.ui_sicherung(ui),
-            Tab::Namen => self.ui_namen(ui),
-            Tab::Editor => self.ui_editor(ui),
             Tab::Motor => self.ui_motor(ui),
             Tab::Rekorder => self.ui_rekorder(ui),
             Tab::Ident => self.ui_ident(ui),
-            Tab::GrundLexikon => self.ui_grund_lexikon(ui),
         }
     }
 
@@ -173,10 +169,6 @@ impl App {
             if ui.button(tr!("🧹 Fehler löschen")).clicked() {
                 self.run_clear();
             }
-            if ui.button(tr!("📈 Messwerte")).clicked() {
-                self.selected_ecu = Some(addr);
-                self.tab = Tab::Messwerte;
-            }
             if ui.button(tr!("🔧 Codierung")).clicked() {
                 self.code_ecu = Some(addr);
                 self.code_tx = self.dtc_tx.clone();
@@ -213,63 +205,6 @@ impl App {
                 self.dtc_row(ui, &line, &model, &notes);
             }
         }
-    }
-
-    pub(super) fn ui_messwerte(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.heading(tr!("Messwerte"));
-            if let Some(a) = self.selected_ecu {
-                ui.weak(tr!("(gefiltert: ECU {a})", a = format!("{:#04x}", a)));
-                if ui.small_button(tr!("Filter aus")).clicked() {
-                    self.selected_ecu = None;
-                }
-            }
-        });
-        ui.label(tr!("Rohbytes (hex) eingeben: Wert wird live über dein Label skaliert. Offline nutzbar."));
-        ui.add_space(6.0);
-
-        let rows = self.db.measurements();
-        let rows: Vec<_> = rows
-            .into_iter()
-            .filter(|(e, _, _)| self.selected_ecu.is_none_or(|s| *e == s))
-            .collect();
-
-        if rows.is_empty() {
-            ui.weak(tr!("Keine Messwert-Labels. Im Label-Editor anlegen (z. B. „⬇ Aus letztem Scan anlegen“) oder Namen unter „Eigene Namen“ eintragen."));
-            return;
-        }
-
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("meas").striped(true).num_columns(5).show(ui, |ui| {
-                ui.strong("ECU");
-                ui.strong("DID");
-                ui.strong(tr!("Name"));
-                ui.strong(tr!("Rohbytes (hex)"));
-                ui.strong(tr!("Wert"));
-                ui.end_row();
-                for (ecu, id, m) in rows {
-                    ui.monospace(format!("{ecu:#04x}"));
-                    ui.monospace(format!("{id:#06x}"));
-                    ui.label(if m.name.is_empty() { "—" } else { &m.name });
-
-                    let buf = self.meas_inputs.entry((ecu, id)).or_default();
-                    ui.add(egui::TextEdit::singleline(buf).desired_width(120.0).hint_text("z. B. 1180"));
-
-                    // Live-Dekodierung
-                    let out = match parse_hex_bytes(buf) {
-                        Ok(bytes) if !bytes.is_empty() => {
-                            let scaled = ecu_werkbank::raw_to_f64(&bytes) * m.factor + m.offset;
-                            let unit = if m.unit.is_empty() { String::new() } else { format!(" {}", m.unit) };
-                            format!("{:.2}{}", scaled, unit)
-                        }
-                        Ok(_) => "—".into(),
-                        Err(_) => tr!("ungültig"),
-                    };
-                    ui.monospace(out);
-                    ui.end_row();
-                }
-            });
-        });
     }
 
     /// Schlüssel der eigenen Codiertexte: TP 2.0 = 0x200 + Adresse, sonst TX.
@@ -881,150 +816,6 @@ impl App {
         }
     }
 
-    /// Schnell-Eingabe für eigene Namen von Messwertblöcken/Feldern.
-    /// Gespeichert in messwerttexte.toml; gilt danach überall (Live-Werte,
-    /// Testlauf, Rekorder, Kurven). Dein eigener Inhalt, kein fremder.
-    pub(super) fn ui_namen(&mut self, ui: &mut egui::Ui) {
-        ui.heading(tr!("Eigene Namen"));
-        ui.label(tr!("Gib Messwertblöcken und einzelnen Feldern eigene Namen. Sie gelten danach überall — Live-Werte, Testlauf, Rekorder und Kurven — und bleiben gespeichert."));
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.label(tr!("Steuergerät (Adresse, z. B. 0x09):"));
-            ui.add_sized([70.0, 20.0], egui::TextEdit::singleline(&mut self.qn_addr));
-            ui.label(tr!("Block:"));
-            ui.add_sized([55.0, 20.0], egui::TextEdit::singleline(&mut self.qn_block).hint_text("1"));
-            ui.label(tr!("Feld (leer = Blockname):"));
-            ui.add_sized([55.0, 20.0], egui::TextEdit::singleline(&mut self.qn_feld).hint_text("1–4"));
-        });
-        ui.horizontal(|ui| {
-            ui.label(tr!("Name:"));
-            ui.add_sized([300.0, 20.0], egui::TextEdit::singleline(&mut self.qn_name).hint_text(tr!("z. B. Kühlmitteltemperatur")));
-            if ui.button(tr!("+ Speichern")).clicked() {
-                self.namen_speichern();
-            }
-        });
-        ui.weak(tr!("Adresse 2-stellig hex (TP 2.0 / KWP-Block-Schema). Feld 1–4; leer = Name des ganzen Blocks. Tipp: die Namen zeigt dir ein Werkstatt-Diagnoseprogramm."));
-
-        ui.add_space(10.0);
-        ui.separator();
-        ui.strong(tr!("📋 Ganzes Steuergerät benennen"));
-        ui.label(tr!("Liest alle Messwertblöcke eines Steuergeräts (nur lesen) und zeigt jedes Feld mit seinem aktuellen Wert — du trägst nur noch die Namen ein. Geht bei älteren Steuergeräten (TP 2.0)."));
-        self.bs_poll(ui);
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tr!("Steuergerät (TP-2.0-Adresse):"));
-            ui.add_sized([70.0, 20.0], egui::TextEdit::singleline(&mut self.bn_addr).hint_text("0x01"));
-            let addr = parse_hex(&self.bn_addr).and_then(|a| u8::try_from(a).ok());
-            let busy = self.bs_job.is_some();
-            let ok = self.backend().supports_tp20();
-            if ui
-                .add_enabled(!busy && ok && addr.is_some(), egui::Button::new(tr!("🔍 Alle Blöcke lesen")))
-                .on_disabled_hover_text(tr!("Geht nur über TP 2.0 (CAN-Interface oder Demo)."))
-                .clicked()
-            {
-                self.bs_start(addr.expect("geprüft"));
-            }
-            if busy {
-                ui.add(egui::ProgressBar::new(f32::from(self.bs_at) / 255.0).desired_width(160.0).text(tr!("Block {a}", a = self.bs_at)));
-            }
-        });
-        ui.weak(tr!("Adressen am Golf 6: 01 Motor, 03 ABS, 09 Lenkung, 1D Einparkhilfe, 20 Bordnetz, 22–25 Türen, 2A Lenksäule, 43 Anhänger."));
-        if let Some((addr, bloecke)) = self.bs_result.clone() {
-            if !bloecke.is_empty() && self.bs_job.is_none() {
-                ui.add_space(4.0);
-                self.bs_namen_ui(ui, addr, &bloecke);
-            }
-        }
-
-        ui.add_space(10.0);
-        ui.separator();
-        let eigene = ecu_werkbank::messwerttexte::alle();
-        if eigene.is_empty() {
-            ui.weak(tr!("Noch keine eigenen Namen gespeichert."));
-        } else {
-            ui.strong(tr!("Gespeicherte Namen ({a}):", a = eigene.len()));
-            let mut loeschen: Option<String> = None;
-            egui::ScrollArea::vertical().id_source("qn_tab").max_height(300.0).show(ui, |ui| {
-                egui::Grid::new("qn").striped(true).spacing([14.0, 3.0]).show(ui, |ui| {
-                    ui.strong(tr!("Adr-Block-Feld"));
-                    ui.strong(tr!("Name"));
-                    ui.label("");
-                    ui.end_row();
-                    for (k, v) in &eigene {
-                        ui.monospace(k);
-                        ui.label(v);
-                        if ui.small_button("🗑").clicked() {
-                            loeschen = Some(k.clone());
-                        }
-                        ui.end_row();
-                    }
-                });
-            });
-            if let Some(k) = loeschen {
-                if let Some((a, b, f)) = Self::namen_schluessel(&k) {
-                    let _ = ecu_werkbank::messwerttexte::setzen(a, b, f, "");
-                    self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
-                    self.status = tr!("Name gelöscht: {a}", a = k);
-                }
-            }
-        }
-
-        ui.add_space(12.0);
-        ui.separator();
-        let (e, d, m, c) = self.db.len();
-        ui.weak(tr!("Geladene Labels: {e} Steuergerät(e), {d} DTC-Text(e), {m} Messwert(e), {c} Anpassung/Codierung.", e = e, d = d, m = m, c = c));
-        if ui.small_button(tr!("↻ Labels neu laden")).clicked() {
-            self.reload_labels();
-            self.status = tr!("Labels neu geladen.");
-        }
-    }
-
-    /// Adresse (u8, hex), Block (u8) und optionales Feld aus der Eingabe lesen.
-    pub(super) fn namen_speichern(&mut self) {
-        let Some(a) = parse_hex(&self.qn_addr).filter(|a| *a <= 0xFF).map(|a| a as u8) else {
-            self.status = tr!("Adresse nicht verstanden — 2-stellig hex, z. B. 0x09.");
-            return;
-        };
-        let Ok(b) = self.qn_block.trim().parse::<u8>() else {
-            self.status = tr!("Block nicht verstanden — eine Zahl 1–255.");
-            return;
-        };
-        let feld = if self.qn_feld.trim().is_empty() {
-            None
-        } else {
-            match self.qn_feld.trim().parse::<u8>() {
-                Ok(f) if f >= 1 => Some(f),
-                _ => {
-                    self.status = tr!("Feld nicht verstanden — leer lassen oder 1–4.");
-                    return;
-                }
-            }
-        };
-        let name = self.qn_name.trim();
-        if name.is_empty() {
-            self.status = tr!("Bitte einen Namen eingeben.");
-            return;
-        }
-        self.status = match ecu_werkbank::messwerttexte::setzen(a, b, feld, name) {
-            Ok(()) => {
-                self.qn_name.clear();
-                self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
-                tr!("Name gespeichert.")
-            }
-            Err(e) => format!("{e:#}"),
-        };
-    }
-
-    /// Schlüssel „09-001" / „09-001-2" zurück in (Adresse, Block, Feld).
-    pub(super) fn namen_schluessel(k: &str) -> Option<(u8, u8, Option<u8>)> {
-        let mut it = k.split('-');
-        let a = u8::from_str_radix(it.next()?, 16).ok()?;
-        let b = it.next()?.parse::<u8>().ok()?;
-        let f = match it.next() {
-            Some(s) => Some(s.parse::<u8>().ok()?),
-            None => None,
-        };
-        Some((a, b, f))
-    }
 }
 
 impl App {

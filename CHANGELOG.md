@@ -5,6 +5,22 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Geändert
+- **Aufgeräumte Oberfläche — alles Eigene an einer Stelle (Werkzeuge → Fahrzeug-Datenbank):**
+  - Der **Label-Editor** ist entfallen: „Eigene Labels“ ist eine normale Quelle und wird
+    unter „Inhalt ansehen und bearbeiten“ bearbeitet — jetzt auch **Sollwerte** und die
+    **Codier-Kennung**; „+ Steuergerät“ und „⬇ Aus letztem Scan anlegen“ sind dort.
+  - **Eigene Namen** und **Eigene Fehlertexte** sind als Abschnitt **„Eigene Texte“** auf
+    die Datenbank-Seite gezogen (dazu Codier-Texte, Kennungs-Namen, Wert-Texte). Benennen
+    am Messwertblock (✏) und die Liste „Alle Blöcke lesen“ bleiben im TP-2.0-Reiter.
+  - **Rohwerte umrechnen** ist entfallen (das Programm rechnet überall selbst um).
+  - **Erweiterte Identifikation** nur noch über den Knopf 🆔 beim gewählten Steuergerät.
+  - **Grundeinstellungen (Referenz)** steht unten auf „Fehlerbilder & Referenz“.
+  - **Partikelfilter** und **Zielbereich** erscheinen nur, wenn das aktive Fahrzeug ein
+    Diesel sein kann (DPF eingetragen, „TDI“ o. ä. in der Bezeichnung, oder unbekannt).
+- **Datenpakete** kennen jetzt auch `codier_kennung`, `[[…sollwert]]` und
+  `[[…stellfunktion]]`; Sollwerte und Stellfunktionen gelten aus allen Quellen.
+- Label-Ordner werden nicht mehr angelegt; Label-Dateien nur noch zum Austausch (Import).
+  `labels/beispiel.toml` ist entfallen — Vorlage ist `beispiele/datenpaket-alles.toml`.
 - **Datenbank-Wissen wird am Auto genutzt — über die Teilenummer:** Beim Lesen von
   Anpassungskanälen (TP 2.0, GUI und `kwp-anpassung`) stehen die Kanal-Namen aus allen
   Quellen der Fahrzeug-Datenbank dabei, z. B. „Kanal 007 (Abschaltung Standheizung): Wert …“;

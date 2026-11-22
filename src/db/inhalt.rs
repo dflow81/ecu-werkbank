@@ -93,6 +93,7 @@ impl Db {
             .collect::<rusqlite::Result<_>>()?;
         let mut st = self.con.prepare("SELECT channel, name FROM adaptation WHERE ecu_id = ?1 ORDER BY channel")?;
         s.anpassung = st.query_map(params![ecu], |r| Ok(PaketAnpassung { kanal: r.get(0)?, name: r.get(1)? }))?.collect::<rusqlite::Result<_>>()?;
+        super::paket::zusatz_laden(&self.con, ecu, &mut s)?;
         Ok((hersteller, s))
     }
 
@@ -102,10 +103,10 @@ impl Db {
         let q: i64 = self.con.query_row("SELECT source_id FROM ecu WHERE id = ?1", params![ecu], |r| r.get(0))?;
         let tx = self.con.unchecked_transaction()?;
         tx.execute(
-            "UPDATE ecu SET ecu_name = ?2, diagnostic_address = ?3, ecu_family = ?4, protocol = ?5, can_tx = ?6, can_rx = ?7, software_number = ?8 WHERE id = ?1",
-            params![ecu, s.name, s.adresse, s.gruppe, s.protokoll, s.tx, s.rx, s.teilenummer],
+            "UPDATE ecu SET ecu_name = ?2, diagnostic_address = ?3, ecu_family = ?4, protocol = ?5, can_tx = ?6, can_rx = ?7, software_number = ?8, coding_did = ?9 WHERE id = ?1",
+            params![ecu, s.name, s.adresse, s.gruppe, s.protokoll, s.tx, s.rx, s.teilenummer, s.codier_kennung],
         )?;
-        for t in ["dtc", "did", "measurement", "coding_item", "adaptation"] {
+        for t in ["dtc", "did", "measurement", "coding_item", "adaptation", "sollwert", "stellfunktion"] {
             tx.execute(&format!("DELETE FROM {t} WHERE ecu_id = ?1"), params![ecu])?;
         }
         for f in &s.fehler {
@@ -123,8 +124,21 @@ impl Db {
         for a in &s.anpassung {
             tx.execute("INSERT INTO adaptation (ecu_id, channel, name, source_id) VALUES (?1, ?2, ?3, ?4)", params![ecu, a.kanal, a.name, q])?;
         }
+        super::paket::zusatz_eintragen(&tx, ecu, s, q)?;
         tx.commit()?;
         Ok(())
+    }
+
+    /// Neues, leeres Steuergerät in einer Quelle anlegen (Hersteller: der des
+    /// ersten Steuergeräts der Quelle, sonst Volkswagen). Gibt die id zurück.
+    pub fn sg_neu(&self, quelle: i64) -> Result<i64> {
+        let h: Option<i64> = self.con.query_row("SELECT manufacturer_id FROM ecu WHERE source_id = ?1 ORDER BY id LIMIT 1", params![quelle], |r| r.get(0)).optional()?.flatten();
+        let h = match h {
+            Some(h) => h,
+            None => self.hersteller("Volkswagen", &["WVW", "WV1", "WV2", "WV3"], None)?,
+        };
+        self.con.execute("INSERT INTO ecu (manufacturer_id, ecu_name, source_id) VALUES (?1, ?2, ?3)", params![h, crate::tr!("Neues Steuergerät"), quelle])?;
+        Ok(self.con.last_insert_rowid())
     }
 
     pub fn sg_entfernen(&self, ecu: i64) -> Result<bool> {
