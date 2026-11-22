@@ -362,6 +362,29 @@ impl Db {
         Ok(d)
     }
 
+    /// Alle CAN-Botschaften aller Hersteller (und ohne Hersteller) zusammen —
+    /// für den CAN-Monitor. Spätere Quellen überschreiben gleiche IDs.
+    pub fn dbc_alle(&self) -> Result<crate::dbc::Dbc> {
+        let mut d = self.dbc(None)?;
+        let ids: Vec<i64> = {
+            let mut st = self.con.prepare("SELECT id FROM manufacturer ORDER BY id")?;
+            let v = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+            v
+        };
+        for h in ids {
+            d.botschaften.extend(self.dbc(Some(h))?.botschaften);
+        }
+        Ok(d)
+    }
+
+    /// Alle Messwerte (DIDs) aus allen Quellen: (DID, Name, Einheit, Faktor, Offset);
+    /// spätere Quellen zuletzt.
+    pub fn alle_dids(&self) -> Result<Vec<(u16, String, String, f64, f64)>> {
+        let mut st = self.con.prepare("SELECT did, name, unit, factor, \"offset\" FROM did WHERE name <> '' ORDER BY source_id, id")?;
+        let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?.collect::<rusqlite::Result<_>>()?;
+        Ok(v)
+    }
+
     /// Anzahl Zeilen je Tabelle (für „db status“).
     pub fn statistik(&self) -> Result<Vec<(&'static str, u64)>> {
         let mut v = Vec::new();
@@ -472,6 +495,15 @@ pub fn fehlertexte_falls_vorhanden() -> Vec<(String, String)> {
         return Vec::new();
     }
     Db::nur_lesen(&p).and_then(|db| db.alle_fehlertexte()).unwrap_or_default()
+}
+
+/// Messwerte (DIDs) aus der Nutzer-Datenbank, falls es sie gibt (nur lesend).
+pub fn dids_falls_vorhanden() -> Vec<(u16, String, String, f64, f64)> {
+    let p = standard_pfad();
+    if !p.exists() {
+        return Vec::new();
+    }
+    Db::nur_lesen(&p).and_then(|db| db.alle_dids()).unwrap_or_default()
 }
 
 /// Eigene Fehlerarten aus der Nutzer-Datenbank: (Protokoll, Nummer) → Text.

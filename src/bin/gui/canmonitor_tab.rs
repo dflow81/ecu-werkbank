@@ -12,6 +12,8 @@ pub(super) struct CanMonitorSeite {
     nur_geaenderte: bool,
     gewaehlt: Option<u32>,
     dbc: Option<(String, ecu_werkbank::dbc::Dbc)>,
+    /// schon einmal versucht, die CAN-Botschaften aus der Fahrzeug-Datenbank zu holen
+    db_versucht: bool,
 }
 
 /// Wie lange ein geändertes Byte hervorgehoben bleibt (s).
@@ -19,6 +21,10 @@ const FRISCH: f64 = 1.0;
 
 impl App {
     pub(super) fn ui_canmonitor(&mut self, ui: &mut egui::Ui) {
+        // Beim ersten Öffnen ohne eigene DBC: Botschaften aus der Fahrzeug-Datenbank nehmen
+        if self.cm.dbc.is_none() && !self.cm.db_versucht {
+            self.cm_dbc_aus_datenbank(false);
+        }
         ui.heading(tr!("CAN-Monitor"));
         ui.label(tr!("Zeigt live alle Botschaften auf dem Bus: je CAN-ID die Daten, wie oft sie kommt und welche Bits sich ändern. Nur zuhören — es wird nichts gesendet."));
         ui.weak(tr!("Signal finden: „Rauschen merken“ drücken, dann am Auto etwas betätigen (Blinker, Fenster, Licht). Hervorgehoben werden dann nur noch die Bits, die sich dadurch ändern."));
@@ -109,6 +115,9 @@ impl App {
                 if let Some(p) = rfd::FileDialog::new().add_filter("DBC", &["dbc"]).set_title(tr!("DBC-Datei wählen")).pick_file() {
                     self.cm_dbc_laden(&p);
                 }
+            }
+            if ui.button(tr!("🗄 Aus der Datenbank")).on_hover_text(tr!("CAN-Botschaften und Signale aus der Fahrzeug-Datenbank (importierte DBC-Dateien und Datenpakete)")).clicked() {
+                self.cm_dbc_aus_datenbank(true);
             }
             if let Some((name, _)) = &self.cm.dbc {
                 ui.weak(name);
@@ -254,6 +263,22 @@ impl App {
 
     pub(super) fn cm_dbc(&self) -> Option<&ecu_werkbank::dbc::Dbc> {
         self.cm.dbc.as_ref().map(|(_, d)| d)
+    }
+
+    /// CAN-Botschaften aus der Fahrzeug-Datenbank übernehmen. `melden`: auch
+    /// sagen, wenn nichts da ist (beim Klick, nicht beim stillen ersten Versuch).
+    pub(super) fn cm_dbc_aus_datenbank(&mut self, melden: bool) {
+        self.cm.db_versucht = true;
+        match ecu_werkbank::db::eigen::mit_db(|d| d.dbc_alle()) {
+            Ok(d) if !d.botschaften.is_empty() => {
+                self.status = tr!("CAN-Botschaften aus der Fahrzeug-Datenbank: {a}", a = d.botschaften.len());
+                self.cm.dbc = Some((tr!("Fahrzeug-Datenbank"), d));
+            }
+            Ok(_) if melden => self.status = tr!("In der Fahrzeug-Datenbank stehen noch keine CAN-Botschaften (DBC-Datei unter Werkzeuge → Fahrzeug-Datenbank importieren)."),
+            Ok(_) => {}
+            Err(e) if melden => self.status = tr!("Fehler: {e}", e = format!("{e:#}")),
+            Err(_) => {}
+        }
     }
 
     /// Eigene DBC-Datei für Namen und Signale laden.

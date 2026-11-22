@@ -312,6 +312,8 @@ pub struct LabelDb {
     dtcs: HashMap<String, String>,          // code -> description
     /// Fehlertexte aus der Fahrzeug-Datenbank (nach den Labels, vor der eingebauten Liste)
     db_dtcs: HashMap<String, String>,
+    /// Messwerte (DIDs) aus der Fahrzeug-Datenbank, alle Quellen (nach den Labels)
+    db_dids: HashMap<u16, Measuring>,
     measuring: HashMap<(u16, u16), Measuring>, // (ecu, id) -> label
     adaptation: HashMap<(u16, u16), Adaptation>, // (ecu, channel) -> label
     coding: HashMap<u16, Vec<Coding>>,        // ecu -> coding bits
@@ -350,6 +352,7 @@ impl LabelDb {
             db.dtcs.insert(code, text);
         }
         db.db_dtcs = crate::db::fehlertexte_falls_vorhanden().into_iter().collect();
+        db.db_dids = crate::db::dids_falls_vorhanden().into_iter().map(|(id, name, unit, factor, offset)| (id, Measuring { id, name, unit, factor, offset })).collect();
         Ok(db)
     }
 
@@ -462,9 +465,10 @@ impl LabelDb {
         self.measuring.get(&(ecu, id))
     }
 
-    /// Messwert-Label anhand der ID, egal welches Steuergerät.
+    /// Messwert-Label anhand der ID, egal welches Steuergerät: zuerst deine
+    /// Labels, sonst die Messwerte aus der Fahrzeug-Datenbank (Datenpakete, CSV, ODX).
     pub fn measuring_any(&self, id: u16) -> Option<&Measuring> {
-        self.measuring.iter().find(|((_, i), _)| *i == id).map(|(_, m)| m)
+        self.measuring.iter().find(|((_, i), _)| *i == id).map(|(_, m)| m).or_else(|| self.db_dids.get(&id))
     }
 
     #[allow(dead_code)] // wird beim Anpassungs-Befehl genutzt

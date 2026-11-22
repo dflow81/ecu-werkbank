@@ -12,6 +12,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   Datenbank, wenn kein Label passt. Gesucht wird nach der Teilenummer aus der Kennung
   (genau gleich vor „ohne Index-Buchstaben“ vor „gleiche Grundnummer“), weil die
   TP-2.0-Adressen nicht die gewohnten Diagnoseadressen sind.
+- **CAN-Monitor** nimmt die CAN-Botschaften aus der Fahrzeug-Datenbank (importierte DBC-Dateien,
+  Datenpakete), solange keine eigene DBC-Datei geladen ist; Knopf „🗄 Aus der Datenbank“.
+- **UDS-Messwerte** (Kennungen lesen, Freeze-Frame, Live-Grafik) zeigen Name, Einheit und
+  Umrechnung auch aus Datenpaketen/CSV/ODX der Fahrzeug-Datenbank, nicht nur aus eigenen Labels.
 - Fahrzeug-Datenbank: **Teilenummer nachschlagen** (GUI und `db teil 5K0937086`) und
   **🧹 Aufräumen** (`db aufraeumen`): löscht Anpassungskanäle ohne echten Namen („Kanal 4“);
   solche Platzhalter werden beim Import gar nicht erst übernommen.
