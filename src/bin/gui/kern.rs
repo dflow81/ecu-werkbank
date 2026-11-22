@@ -13,7 +13,7 @@ impl App {
             "scope" | "armaturen" | "handy" => (Tab::Scope, false),
             "codierung" => (Tab::Codierung, false),
             "service" => (Tab::Service, false),
-            "tp20" | "blockscan" => (Tab::Tp20, false),
+            "tp20" | "blockscan" | "tp20-live" => (Tab::Tp20, false),
             "obd" => (Tab::Obd, false),
             "mitschnitt" => (Tab::Mitschnitt, false),
             "canmonitor" | "canmonitor-grafik" => (Tab::CanMonitor, false),

@@ -885,6 +885,12 @@ impl eframe::App for App {
                 self.tp_block = "2".into();
                 self.block_lesen();
             }
+            // Video: Messwertblock des Motors fortlaufend (Live)
+            "tp20-live" => {
+                self.tp_addr = "0x01".into();
+                self.tp_block = "2".into();
+                self.tp_live = true;
+            }
             "sicherheit" => self.si_starten(),
             "steuergeraete-wahl" => {
                 // erstes älteres Steuergerät aus dem letzten Scan wählen (für Bilder)
