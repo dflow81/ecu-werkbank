@@ -210,7 +210,13 @@ impl<'a> Uds<'a> {
 
     /// ReadDTCInformation, sub-function 0x02 (reportDTCByStatusMask).
     pub fn read_dtcs(&self, status_mask: u8) -> Result<Vec<Dtc>> {
-        let resp = self.request(SID_READ_DTC, &[0x02, status_mask])?;
+        // Ein zweiter Versuch, wenn gar keine Antwort kam (nur lesen, also gefahrlos):
+        // Golf-6-Airbag über ELM327 antwortet nach einer abgelehnten Anfrage (0xF190 →
+        // NRC 0x31) auf die nächste nicht — die Wiederholung klappt (22.11.2026).
+        let resp = match self.request(SID_READ_DTC, &[0x02, status_mask]) {
+            Err(e) if !format!("{e:#}").contains("Negative Response") => self.request(SID_READ_DTC, &[0x02, status_mask])?,
+            r => r?,
+        };
         // Viele Steuergeräte melden ALLE bekannten Codes, auch mit Status
         // 0x10/0x40 („Test noch nicht gelaufen“) — das sind keine Fehler.
         let l: Vec<Dtc> = dtc_liste(&resp).into_iter().filter(|d| d.status & status_mask & !0x50 != 0).collect();

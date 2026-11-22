@@ -177,6 +177,10 @@ fn ascii(data: &[u8]) -> String {
 /// Statustexte (für die GUI).
 /// UDS-Ziele: Label-Steuergeräte mit CAN-IDs, OBD-Bereich 0x7E0–0x7E7 und
 /// (über SocketCAN) alles, was im schnellen VAG-Suchlauf antwortet.
+/// Übliche UDS-Anfrage-IDs von VAG-Steuergeräten (gesehen an Golf 6, Polo 6R und
+/// typischen PQ/MQB-Fahrzeugen) — für Adapter ohne Bus-Suchlauf (ELM327).
+const VAG_UDS_UEBLICH: [u16; 18] = [0x70A, 0x710, 0x711, 0x712, 0x713, 0x714, 0x715, 0x716, 0x717, 0x740, 0x742, 0x744, 0x746, 0x74F, 0x751, 0x757, 0x76C, 0x773];
+
 pub fn uds_targets(be: &Backend, db: &LabelDb) -> Vec<(Option<u16>, u16, u16)> {
     uds_targets_mit(be, db, None)
 }
@@ -208,7 +212,14 @@ pub fn uds_targets_mit(be: &Backend, db: &LabelDb, profil: Option<&crate::profil
                 targets.push((None, tx, rx));
             }
         }
-        _ => {}
+        // ELM327 (seriell/WLAN): kein Mithören des Busses, also kein Suchlauf. Stattdessen
+        // die UDS-Steuergeräte aus dem Profil dieses Fahrzeugs (frühere Scans, Fahrgestell-
+        // nummer per OBD), sonst die üblichen VAG-Kennungen (am Golf 6, 22.11.2026: ohne das
+        // fand autoscan über den ELM327 kein einziges UDS-Steuergerät).
+        _ => match crate::profil::fuer_scan(be).filter(|(_, p)| !p.uds.is_empty()) {
+            Some((_, p)) => targets.extend(p.uds.iter().map(|&(tx, rx)| (None, tx, rx))),
+            None => targets.extend(VAG_UDS_UEBLICH.iter().map(|&tx| (None, tx, crate::uds::antwort_id(tx)))),
+        },
     }
     // Jede CAN-ID nur einmal (mehrere Label-Dateien können dieselbe nennen)
     let mut seen = std::collections::HashSet::new();

@@ -5,6 +5,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Geändert
+- **ELM327:** `autoscan` und Berichte finden die UDS-Steuergeräte jetzt auch über den ELM327
+  (Profil des Fahrzeugs aus früheren Scans, sonst übliche VAG-Kennungen) — vorher wurde
+  nur der OBD-Bereich abgefragt. Fehlerspeicher wird bei fehlender Antwort einmal wiederholt
+  (Golf-6-Airbag über ELM327). Am Auto geprüft 22.11.2026.
 - **Firmenkopf oben statt in der Fußzeile, mit Firmenlogo:** Auf Seite 1 jedes PDF-Berichts
   rechts im Titelbalken (Logo auf weißem Feld), auf Folgeseiten klein oben rechts. Logo als
   PNG (auch mit Transparenz) oder JPG — GUI „🖼 Logo wählen…“, Terminal `firmenkopf --logo`.
