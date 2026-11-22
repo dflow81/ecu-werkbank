@@ -499,7 +499,9 @@ pub(super) fn kwp_coding(be: &Backend, address: u8, db: &LabelDb) -> Result<()> 
         Some(TpCodierung::Lang(b)) => {
             println!("{}", tr!("Codierung {a} (TP 2.0) = {b}", a = format!("{address:02X}"), b = ecu_werkbank::backup::hex(&b)));
             println!("{}", tr!("Eigene Texte dazu: codiertext --tx {a} …", a = format!("{key:03X}")));
-            print_coding(None, Some(key), &b, db);
+            let zeilen = if ident_raw.is_empty() { kwp::ident_zeilen(&mut k) } else { kwp::ident_9b(&ident_raw).unwrap_or_else(|| kwp::ident_strings(&ident_raw)) };
+            let teil = ecu_werkbank::verbauliste::teilenummer(&zeilen);
+            print_coding(None, Some(key), &b, db, Some(teil.as_str()).filter(|t| !t.is_empty()));
         }
         Some(TpCodierung::Kurz { wert, roh }) => {
             println!("{}", tr!("Kurzcodierung {a}: {b}", a = format!("{address:02X}"), b = format!("{wert:07}")));

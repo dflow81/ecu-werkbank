@@ -12,6 +12,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   Datenbank, wenn kein Label passt. Gesucht wird nach der Teilenummer aus der Kennung
   (genau gleich vor „ohne Index-Buchstaben“ vor „gleiche Grundnummer“), weil die
   TP-2.0-Adressen nicht die gewohnten Diagnoseadressen sind.
+- `kwp-coding` (Terminal) schlüsselt die Codierung mit Bit-Namen aus der Fahrzeug-Datenbank auf
+  (über die Teilenummer). Die Teilenummer wird auch bei Steuergeräten gefunden, die ihre
+  Kennung nur über 0x22 liefern (Golf-6-Bordnetz) — am Auto geprüft 22.11.2026.
 - **CAN-Monitor** nimmt die CAN-Botschaften aus der Fahrzeug-Datenbank (importierte DBC-Dateien,
   Datenpakete), solange keine eigene DBC-Datei geladen ist; Knopf „🗄 Aus der Datenbank“.
 - **UDS-Messwerte** (Kennungen lesen, Freeze-Frame, Live-Grafik) zeigen Name, Einheit und

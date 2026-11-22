@@ -2113,7 +2113,7 @@ fn main() -> Result<()> {
         Command::Coding { tx, rx, did, ecu } => coding_read(&be, tx, rx, did, ecu, &db),
         Command::DecodeCoding { ecu, tx, bytes } => {
             let raw = parse_hex_bytes(&bytes)?;
-            print_coding(ecu, tx, &raw, &db);
+            print_coding(ecu, tx, &raw, &db, None);
             Ok(())
         }
         Command::CodeWrite { tx, rx, did, bytes, ja } => {
@@ -2426,14 +2426,22 @@ fn coding_read(be: &Backend, tx: u16, rx: u16, did: u16, ecu: u16, db: &LabelDb)
     let bytes = uds.read_data_by_id(did)?;
     let hex: Vec<String> = bytes.iter().map(|b| format!("{b:02X}")).collect();
     println!("{}", tr!("Codierung {did} = {a}", did = format!("{:#06x}", did), a = hex.join(" ")));
-    print_coding(Some(ecu), Some(tx), &bytes, db);
+    print_coding(Some(ecu), Some(tx), &bytes, db, None);
     Ok(())
 }
 
 /// Codier-Bytes aufschlüsseln: alle Bytes als Bits, dazu die Namen aus deinen
 /// Codiertexten (über `tx`) und `[[coding]]`-Labels (über `ecu`).
-fn print_coding(ecu: Option<u16>, tx: Option<u16>, bytes: &[u8], db: &LabelDb) {
-    let labels = ecu.and_then(|e| db.coding(e)).unwrap_or(&[]);
+fn print_coding(ecu: Option<u16>, tx: Option<u16>, bytes: &[u8], db: &LabelDb, teil: Option<&str>) {
+    let mut labels: Vec<ecu_werkbank::labels::Coding> = ecu.and_then(|e| db.coding(e)).map(|c| c.to_vec()).unwrap_or_default();
+    // Sonst Codier-Bits aus der Fahrzeug-Datenbank über die Teilenummer
+    if labels.is_empty() {
+        if let Some(w) = teil.and_then(ecu_werkbank::db::teile::wissen_falls_vorhanden).filter(|w| !w.codierung.is_empty()) {
+            println!("{}", tr!("Bit-Namen aus der Fahrzeug-Datenbank ({a})", a = w.teilenummer));
+            labels = w.codierung.into_iter().map(|c| ecu_werkbank::labels::Coding { byte: c.byte, bit: c.bit, name: c.name, benoetigt: c.benoetigt, schliesst_aus: c.schliesst_aus }).collect();
+        }
+    }
+    let labels = &labels[..];
     // Ohne CAN-ID: Labels allein (eigene Texte hängen an der CAN-ID)
     let tx_key = tx.unwrap_or(u16::MAX);
     let texte = if tx.is_some() { ecu_werkbank::codiertexte::Texte::laden() } else { Default::default() };
