@@ -435,6 +435,48 @@ p("Für Werkstätten: unter Fahrzeug → Fahrzeuge &amp; Wartung → <b>Firmenko
   "hinzufügen und speichern. Der Firmenkopf steht dann oben auf jeder Seite aller PDF-Berichte — auf Seite 1 "
   "rechts im Titelbalken mit dem Logo.")
 bild("bericht", "Fehlerspeicher-Protokoll (PDF) mit Firmenkopf und Logo (Beispieldaten).", 150)
+h2("Alle PDF-Berichte im Überblick")
+p("ECUWerkbank schreibt diese Berichte als PDF in den Ordner <i>berichte</i> des Fahrzeugs. Alle haben "
+  "denselben Aufbau: Titelbalken mit Firmenkopf, Fahrzeugangaben, dann der Inhalt. Die Bilder zeigen jeweils "
+  "die erste Seite mit den Beispieldaten der Simulation.")
+tabelle(["Bericht", "Wo erstellen", "Inhalt"],
+        [["Fehlerspeicher-Protokoll", "Diagnose → Steuergeräte, „Als PDF speichern“", "alle Steuergeräte, Fehler mit Umgebungsdaten, Vergleich mit dem letzten Scan"],
+         ["Gebrauchtwagen-Check", "Diagnose → Prüfen &amp; Fehlersuche", "Ampel-Urteil, Prüfpunkte, km-Stände, Readiness, Abgas-Prüfwerte"],
+         ["Fahrzeugakte", "Fahrzeug → Fahrzeuge &amp; Wartung", "Wartung, Teile, Kosten, Verlauf aller Scans, Softwarestände"],
+         ["Messwert-Aufzeichnung", "Messen → Live-Grafik, „Als PDF“", "Tabelle min/max/Mittel und Diagramm jeder Kurve"],
+         ["Reparaturbericht", "Diagnose → Prüfen &amp; Fehlersuche, Reparatur-Modus", "vorher/nachher, erledigte und noch offene Fehler"],
+         ["Nachrüstprotokoll", "Fahrzeug → Nachrüstung", "was sich durch den Einbau geändert hat"],
+         ["Ersatzteil-Pass", "Fahrzeug → Codier-Sicherung, Notfall-Sicherung", "Teilenummern, Software, Codierung aller Steuergeräte"]],
+        [36, 60, 74])
+
+
+def bilder_paar(links, rechts):
+    """Zwei PDF-Seiten nebeneinander: je (name, unterschrift)."""
+    from PIL import Image as PILImage
+    zellen = []
+    for name, text in (links, rechts):
+        if not name:
+            zellen.append("")
+            continue
+        pfad = BILDER / f"{name}.png"
+        w, h = PILImage.open(pfad).size
+        breite = 80 * mm
+        img = Image(str(pfad), width=breite, height=breite * h / w)
+        innen = Table([[img]], colWidths=[breite + 2])
+        innen.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#999999")),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+        zellen.append([innen, Paragraph(text, S["klein"])])
+    t = Table([zellen], colWidths=[85 * mm, 85 * mm])
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
+                           ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
+    story.append(KeepTogether([Spacer(1, 4), t]))
+    story.append(Spacer(1, 6))
+
+
+bilder_paar(("pdf-kaufcheck", "Gebrauchtwagen-Check"), ("pdf-fahrzeugakte", "Fahrzeugakte"))
+bilder_paar(("pdf-messwerte", "Messwert-Aufzeichnung (CSV aus der Live-Grafik)"), ("pdf-reparaturbericht", "Reparaturbericht"))
+bilder_paar(("pdf-nachruestung", "Nachrüstprotokoll"), ("pdf-ersatzteilpass", "Ersatzteil-Pass aus der Notfall-Sicherung"))
 h2("Kilometerstand")
 p("Der Scan liest den Kilometerstand selbst. Beim Golf 6 gibt ihn das Kombiinstrument nur "
   "<b>auf 10 km abgerundet</b> heraus (Tacho 242 488 km → 242 480 km). Den genauen Wert kannst du von Hand "
