@@ -47,13 +47,7 @@ install -Dm644 packaging/ecu-werkbank.desktop  "$APPS/ecu-werkbank.desktop"
 install -Dm644 packaging/ecu-werkbank.svg      "$ICONS/ecu-werkbank.svg"
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
 
-# Eigene Labels aus dem Projekt übernehmen, wenn der Benutzerordner noch fehlt
-CFG="${XDG_CONFIG_HOME:-$HOME/.config}/ecu-werkbank"
-if [[ ! -d "$CFG/labels" && -d labels ]]; then
-  mkdir -p "$CFG" && cp -r labels "$CFG/labels"
-  [[ -d label ]] && cp -r label "$CFG/label"
-  echo "Labels kopiert nach $CFG/labels"
-fi
+# Eigene Labels und Texte liegen in der Fahrzeug-Datenbank (Datenordner) — nichts zu kopieren.
 
 if [[ $CAN == 1 ]]; then
   echo "Richte automatische CAN-Einrichtung ein (sudo)…"

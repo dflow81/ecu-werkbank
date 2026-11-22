@@ -16,7 +16,7 @@ install -Dm755 target/release/mockecu           "$STAGE/usr/bin/ecu-werkbank-moc
 install -Dm644 packaging/ecu-werkbank.desktop       "$STAGE/usr/share/applications/ecu-werkbank.desktop"
 install -Dm644 packaging/ecu-werkbank.svg           "$STAGE/usr/share/icons/hicolor/scalable/apps/ecu-werkbank.svg"
 install -Dm644 packaging/80-ecu-werkbank-can.rules  "$STAGE/usr/lib/udev/rules.d/80-ecu-werkbank-can.rules"
-install -Dm644 labels/beispiel.toml             "$STAGE/usr/share/doc/ecu-werkbank/beispiel-labels.toml"
+install -Dm644 beispiele/datenpaket-alles.toml "$STAGE/usr/share/doc/ecu-werkbank/datenpaket-alles.toml"
 install -Dm644 README.md                        "$STAGE/usr/share/doc/ecu-werkbank/README.md"
 install -Dm644 packaging/ecu-werkbank.png           "$STAGE/usr/share/icons/hicolor/256x256/apps/ecu-werkbank.png"
 # Lizenzen und Quellen (bei Weitergabe Pflicht)

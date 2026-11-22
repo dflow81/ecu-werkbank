@@ -33,10 +33,9 @@ Was (noch) nicht geht
 
 Daten
 -----
-Fahrzeuge, Scans, Sicherungen und Einstellungen liegen in
+Fahrzeuge, Scans, Sicherungen, Einstellungen, eigene Labels und Texte
+liegen in der Fahrzeug-Datenbank (fahrzeugdaten.sqlite) im Ordner
   ~/.local/share/ecu-werkbank
-Eigene Labels in
-  ~/.config/ecu-werkbank/labels
 (im Finder: Gehe zu → Gehe zum Ordner … und den Pfad eingeben).
 
 Terminal-Programm

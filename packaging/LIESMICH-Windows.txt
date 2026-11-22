@@ -28,10 +28,10 @@ Was (noch) nicht geht
 
 Daten
 -----
-Fahrzeuge, Scans, Sicherungen und Einstellungen liegen in
+Fahrzeuge, Scans, Sicherungen, Einstellungen, eigene Labels und Texte
+liegen in der Fahrzeug-Datenbank (fahrzeugdaten.sqlite) im Ordner
   %APPDATA%\ecu-werkbank
-(im Explorer in die Adresszeile eingeben). Eigene Labels in
-  %APPDATA%\ecu-werkbank\labels
+(im Explorer in die Adresszeile eingeben).
 
 Terminal-Programm
 -----------------
