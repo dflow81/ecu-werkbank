@@ -500,6 +500,8 @@ struct App {
     trip_last_check: std::time::Instant,
     trip_low_since: Option<std::time::Instant>,
     web_server: Option<ecu_werkbank::web::Server>,
+    /// QR-Code der Handy-Adresse anzeigen
+    web_qr: bool,
     web_data: ecu_werkbank::web::Shared,
 
     // (3) Service: Routine / Stellglied

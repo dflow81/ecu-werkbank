@@ -515,8 +515,8 @@ Weitere Hilfen in der GUI:
 - **Scope**: ⚠ **Warnen bei Grenzwert** (Ton + Meldung, zeichnet die 30 s davor
   und danach auf), 🚗 **Fahrtenschreiber** (startet bei laufendem Motor, speichert
   beim Abstellen CSV + PDF), 🕓 **Armaturen** (Rundinstrumente),
-  📱 **Handy-Anzeige** (Adresse wird angezeigt, im Handy-Browser öffnen — gleiches
-  WLAN; nur lesend), **CSV dazuladen** (Aufzeichnungen übereinanderlegen).
+  📱 **Handy-Anzeige** (QR-Code mit der Handy-Kamera scannen oder die Adresse im
+  Handy-Browser öffnen — gleiches WLAN; nur lesend), **CSV dazuladen** (Aufzeichnungen übereinanderlegen).
 
 ### Handy-Anzeige — ohne App, im Browser
 
@@ -524,8 +524,9 @@ Weitere Hilfen in der GUI:
 ./target/release/ecu-werkbank -i can0 handy                 # oder in der GUI: Scope → 📱 Handy-Anzeige
 ```
 
-Die angezeigte Adresse (z. B. `http://192.168.1.50:8088/3f9a…/`) im Handy-Browser
-öffnen — mit dem Schlüssel am Ende, ohne ihn zeigt der Server nichts; Handy und Laptop im gleichen WLAN — im Auto am einfachsten den
+Den angezeigten **QR-Code mit der Handy-Kamera scannen** (in der GUI in einem kleinen
+Fenster, im Terminal als Textgrafik) oder die Adresse (z. B.
+`http://192.168.1.50:8088/3f9a…/`) im Handy-Browser öffnen — mit dem Schlüssel am Ende, ohne ihn zeigt der Server nichts; Handy und Laptop im gleichen WLAN — im Auto am einfachsten den
 **Handy-Hotspot** einschalten und den Laptop damit verbinden. Ist die Firewall
 `ufw` aktiv (Standard bei Linux Mint), einmalig freigeben:
 

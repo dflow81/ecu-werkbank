@@ -369,7 +369,12 @@ pub(super) fn handy(be: &Backend, db: &LabelDb, port: u16, pids: &[u16], seconds
     let data: web::Shared = Default::default();
     let srv = web::serve(port, data.clone())?;
     let title = fahrzeug.and_then(ecu_werkbank::vehicle::find).map(|v| v.label()).unwrap_or_else(|| "ECUWerkbank".into());
-    println!("{}", tr!("Handy-Anzeige läuft. Im Handy-Browser öffnen:\n\n    {a}\n", a = srv.url));
+    println!("{}", tr!("Handy-Anzeige läuft. QR-Code mit der Handy-Kamera scannen oder im Handy-Browser öffnen:\n\n    {a}\n", a = srv.url));
+    if let Ok(code) = qrcode::QrCode::new(srv.url.as_bytes()) {
+        // hell auf dunkel getauscht, damit der Code im (meist dunklen) Terminal stimmt
+        let bild = code.render::<qrcode::render::unicode::Dense1x2>().dark_color(qrcode::render::unicode::Dense1x2::Light).light_color(qrcode::render::unicode::Dense1x2::Dark).quiet_zone(true).build();
+        println!("{bild}\n");
+    }
     println!("{}", tr!("(Handy und Rechner im gleichen WLAN/Hotspot. Strg-C beendet.)"));
     let start = Instant::now();
     loop {

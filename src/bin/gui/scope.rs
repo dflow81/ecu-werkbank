@@ -634,18 +634,39 @@ impl App {
                 if web {
                     match ecu_werkbank::web::serve(8088, self.web_data.clone()).or_else(|_| ecu_werkbank::web::serve(0, self.web_data.clone())) {
                         Ok(srv) => {
-                            self.status = tr!("Handy-Anzeige: im Browser {a} öffnen", a = srv.url);
+                            self.status = tr!("Handy-Anzeige: QR-Code mit der Handy-Kamera scannen oder im Browser {a} öffnen", a = srv.url);
                             self.web_server = Some(srv);
+                            self.web_qr = true;
                             self.web_update();
                         }
                         Err(e) => self.status = tr!("Handy-Anzeige: {e}", e = format!("{:#}", e)),
                     }
                 } else {
                     self.web_server = None;
+                    self.web_qr = false;
                 }
             }
             if let Some(srv) = &self.web_server {
                 ui.label(egui::RichText::new(&srv.url).monospace().strong());
+                if ui.small_button(tr!("▦ QR-Code")).on_hover_text(tr!("Adresse als QR-Code zum Scannen mit dem Handy")).clicked() {
+                    self.web_qr = !self.web_qr;
+                }
+            }
+            if let (true, Some(srv)) = (self.web_qr, &self.web_server) {
+                let url = srv.url.clone();
+                let mut offen = true;
+                egui::Window::new(tr!("📱 Handy-Anzeige"))
+                    .id(egui::Id::new("handy_qr"))
+                    .collapsible(false)
+                    .resizable(false)
+                    .open(&mut offen)
+                    .show(ui.ctx(), |ui| {
+                        ui.label(tr!("Mit der Handy-Kamera scannen — das Handy muss im selben WLAN sein."));
+                        qr_zeichnen(ui, &url, 240.0);
+                        ui.label(egui::RichText::new(&url).monospace());
+                        ui.weak(tr!("Nur lesen: das Handy zeigt die Live-Werte, steuern kann es nichts. Die Adresse enthält einen geheimen Schlüssel — nicht weitergeben."));
+                    });
+                self.web_qr = offen;
             }
             if ui.add_enabled(!self.scope_running, egui::Button::new(tr!("📂 CSV dazuladen…"))).on_hover_text(tr!("Zweite Aufzeichnung zum Vergleich darüberlegen")).clicked() {
                 if let Some(p) = rfd::FileDialog::new().add_filter("CSV", &["csv"]).pick_file() {
@@ -838,5 +859,27 @@ impl App {
                     pui.line(l);
                 }
             });
+    }
+}
+
+/// Text als QR-Code zeichnen (schwarz auf weiß, mit Ruhezone), Kantenlänge `groesse`.
+fn qr_zeichnen(ui: &mut egui::Ui, text: &str, groesse: f32) {
+    let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else {
+        ui.colored_label(egui::Color32::RED, tr!("QR-Code nicht möglich"));
+        return;
+    };
+    let n = code.width();
+    let farben = code.to_colors();
+    let rand = 4; // Ruhezone in Modulen, damit Handys den Code sicher erkennen
+    let modul = groesse / (n + 2 * rand) as f32;
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(groesse, groesse), egui::Sense::hover());
+    let maler = ui.painter_at(rect);
+    maler.rect_filled(rect, 0.0, egui::Color32::WHITE);
+    for (i, f) in farben.iter().enumerate() {
+        if *f == qrcode::Color::Dark {
+            let (x, y) = ((i % n + rand) as f32, (i / n + rand) as f32);
+            let r = egui::Rect::from_min_size(rect.min + egui::vec2(x * modul, y * modul), egui::vec2(modul.ceil(), modul.ceil()));
+            maler.rect_filled(r, 0.0, egui::Color32::BLACK);
+        }
     }
 }

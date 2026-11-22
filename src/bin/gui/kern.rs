@@ -208,6 +208,7 @@ impl App {
             trip_last_check: std::time::Instant::now(),
             trip_low_since: None,
             web_server: None,
+            web_qr: false,
             web_data: Default::default(),
             svc_tx: "0x7E0".into(),
             svc_rx: "0x7E8".into(),

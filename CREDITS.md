@@ -65,3 +65,8 @@ SOFTWARE.
 ISO-TP (ISO 15765-2), UDS (ISO 14229), KWP2000 (ISO 14230) und VWs TP 2.0 sind
 nach öffentlichen Normen bzw. öffentlicher Community-Dokumentation selbst
 umgesetzt.
+
+## Bibliotheken (Auswahl)
+
+- **qrcode** (kennytm/qrcode-rust) — <https://github.com/kennytm/qrcode-rust>, Lizenz MIT oder Apache-2.0.
+  Erzeugt den QR-Code für die Handy-Anzeige.

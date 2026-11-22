@@ -21,6 +21,7 @@ serde_json = "1.0.154"
 roxmltree = "0.21.2"
 miniz_oxide = "0.8"
 rhai = { version = "1.27.0", features = ["sync"] }
+qrcode = { version = "0.14", default-features = false }
 
 # Direkter CAN-Zugang nur unter Linux (Windows: siehe src/can.rs)
 [target.'cfg(target_os = "linux")'.dependencies]

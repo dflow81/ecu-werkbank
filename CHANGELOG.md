@@ -2,6 +2,14 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
+## Unveröffentlicht
+
+### Neu
+- **QR-Code für die Handy-Anzeige:** Beim Einschalten von „📱 Handy-Anzeige“ (Live-Grafik)
+  erscheint ein Fenster mit QR-Code — mit der Handy-Kamera scannen, schon laufen die
+  Messwerte im Handy-Browser (gleiches WLAN). Knopf „▦ QR-Code“ neben der Adresse; im
+  Terminal zeigt `handy` den Code als Textgrafik.
+
 ## 0.4.0 — 22.11.2026
 
 ### Geändert
