@@ -63,11 +63,25 @@ pub fn ids_aus_text(s: &str) -> Option<(u32, u32)> {
     Some((h(a)?, h(b)?))
 }
 
-/// Antwortet hier ein Steuergerät? (Tester Present, UDS und KWP gleich)
+/// Antwortet hier ein Steuergerät? (Tester Present, UDS und KWP gleich; auf den
+/// OBD-Adressen sonst eine OBD-Anfrage — der Golf-6-Motor MED17 kennt dort nur OBD)
 fn antwortet(be: &Backend, tx: u32, rx: u32) -> bool {
     let Ok(tp) = be.open_id(tx, rx) else { return false };
     let r = Uds::new(&*tp).tester_present();
-    r.is_ok() || r.is_err_and(|e| format!("{e:#}").contains("NRC"))
+    if r.is_ok() || r.is_err_and(|e| format!("{e:#}").contains("NRC")) {
+        return true;
+    }
+    ist_obd_adresse(tx) && nur_obd(&*tp)
+}
+
+/// Gehört die Anfrage-ID zu den genormten OBD-Adressen (11 oder 29 Bit)?
+fn ist_obd_adresse(tx: u32) -> bool {
+    (0x7E0..=0x7E7).contains(&tx) || tx & 0xFFFF_00FF == 0x18DA_00F1
+}
+
+/// Antwortet das Steuergerät auf OBD (Mode 01, PID 00 — muss jedes OBD-Gerät können)?
+fn nur_obd(tp: &dyn crate::transport::Transport) -> bool {
+    crate::obd::Obd::new(tp).read_pid(0x00).is_ok()
 }
 
 /// Steuergeräte suchen. Dauert mit SocketCAN etwa 30 s.
@@ -233,6 +247,31 @@ pub fn lesen(be: &Backend, db: &LabelDb, tx: u32, rx: u32) -> Result<ModuleRepor
     let mut vin = None;
     let mut protokoll = "UDS";
     let erste = u.read_data_by_id(0xF190);
+    // Gar keine Antwort auf UDS, aber auf OBD: nur über OBD auslesen (Golf-6-Motor MED17)
+    let keine_antwort = erste.as_ref().is_err_and(|e| !format!("{e:#}").contains("NRC"));
+    if keine_antwort && ist_obd_adresse(tx) && nur_obd(&*tp) {
+        let o = crate::obd::Obd::new(&*tp);
+        let vin = o.vin().ok().filter(|v| v.len() == 17);
+        let mut codes: Vec<(String, &str)> = Vec::new();
+        for (dienst, art) in [(0x03u8, crate::trn!("gespeichert")), (0x07, crate::trn!("sporadisch/ausstehend"))] {
+            for c in o.read_dtcs(dienst).unwrap_or_default() {
+                if !codes.iter().any(|(x, _)| *x == c) {
+                    codes.push((c, art));
+                }
+            }
+        }
+        let dtcs = codes
+            .into_iter()
+            .map(|(code, art)| DtcEntry { text: db.dtc_description(&code).unwrap_or("").to_string(), code, alt: None, status: crate::i18n::t(art).to_string(), umgebung: vec![], frueher: vec![] })
+            .collect();
+        let name = match tx {
+            0x7E0 | 0x18DA_10F1 => tr!("Motor (OBD)"),
+            0x7E1 | 0x18DA_18F1 => tr!("Getriebe (OBD)"),
+            _ => tr!("Steuergerät (OBD)"),
+        };
+        let ident = vec![tr!("Antwortet nur auf OBD (genormte Abgas-Diagnose), nicht auf UDS/KWP")];
+        return Ok(ModuleReport { protocol: "OBD".into(), address: None, name, can: format!("{}/{}", id_text(tx), id_text(rx)), ident, vin, dtcs: Some(dtcs) });
+    }
     if nicht_unterstuetzt(&erste) {
         // kein UDS-Lesen (0x22): KWP2000 auf CAN, Identifikation über 0x1A
         protokoll = "KWP2000";
@@ -338,10 +377,14 @@ pub fn scan(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> Re
     Ok((r, s))
 }
 
-/// Fehlerspeicher eines Steuergeräts löschen (UDS 0x14, sonst KWP 0x14 FF 00).
+/// Fehlerspeicher eines Steuergeräts löschen (UDS 0x14, KWP 0x14 FF 00, bei
+/// reinen OBD-Geräten Mode 04 — setzt dort auch die Readiness zurück).
 /// Schreibt ins Steuergerät — nur nach Bestätigung aufrufen.
 pub fn loeschen(be: &Backend, tx: u32, rx: u32, protokoll: &str) -> Result<()> {
     let tp = be.open_id(tx, rx)?;
+    if protokoll == "OBD" {
+        return crate::obd::Obd::new(&*tp).clear();
+    }
     let u = Uds::new(&*tp);
     if protokoll == "KWP2000" {
         u.request(0x14, &[0xFF, 0x00]).map(|_| ())

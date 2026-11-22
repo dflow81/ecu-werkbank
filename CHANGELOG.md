@@ -5,6 +5,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Geändert
+- **Andere Marken:** Steuergeräte, die auf den OBD-Adressen nur OBD sprechen (z. B. Golf-6-Motor
+  MED17 — kein „Tester Present“), werden jetzt gefunden und über OBD ausgelesen
+  (Fahrgestellnummer, gespeicherte und sporadische Fehler); Löschen dort über OBD Mode 04 mit
+  Hinweis, dass die Readiness zurückgesetzt wird. Vorher fand die Suche an solchen Autos nichts.
 - **ELM327:** `autoscan` und Berichte finden die UDS-Steuergeräte jetzt auch über den ELM327
   (Profil des Fahrzeugs aus früheren Scans, sonst übliche VAG-Kennungen) — vorher wurde
   nur der OBD-Bereich abgefragt. Fehlerspeicher wird bei fehlender Antwort einmal wiederholt

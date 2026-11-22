@@ -200,6 +200,9 @@ impl App {
                                 if self.fm_confirm == Some(i) {
                                     ui.horizontal(|ui| {
                                         ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Fehler in diesem Steuergerät wirklich löschen?"));
+                                        if m.protocol == "OBD" {
+                                            ui.colored_label(stufe_color(Stufe::Hinweis), tr!("(über OBD — setzt auch die Readiness zurück)"));
+                                        }
                                         if ui.button(tr!("Ja, löschen")).clicked() {
                                             loeschen = Some((i, tx, rx, m.protocol.clone()));
                                         }
