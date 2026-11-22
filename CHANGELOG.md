@@ -2,7 +2,7 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
-## Unveröffentlicht
+## 0.4.0 — 22.11.2026
 
 ### Geändert
 - **Andere Marken:** Steuergeräte, die auf den OBD-Adressen nur OBD sprechen (z. B. Golf-6-Motor
