@@ -10,6 +10,7 @@ pub mod autotest;
 pub mod backup;
 pub mod blick;
 pub mod battery;
+pub mod bild;
 pub mod canlog;
 pub mod chart;
 pub mod check;

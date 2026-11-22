@@ -48,7 +48,7 @@ pub fn bericht_pdf(before: &ScanReport, after: &ScanReport, arbeiten: &str, read
     let d: Diff = diff(before, after, &[]);
     let mut l = Layout::new();
     let accent = (0.10, 0.32, 0.55);
-    l.doc.rect(0.0, pdf::A4_H - 70.0, pdf::A4_W, 70.0, accent);
+    l.doc.banner(accent);
     l.doc.text_rgb(MARGIN, pdf::A4_H - 42.0, 20.0, Font::Bold, crate::trs!("Reparaturbericht"), (1.0, 1.0, 1.0));
     l.doc.text_rgb(MARGIN, pdf::A4_H - 58.0, 9.0, Font::Regular, &tr!("{a} · erstellt mit ECUWerkbank", a = after.created), (0.85, 0.9, 1.0));
     l.y = pdf::A4_H - 100.0;

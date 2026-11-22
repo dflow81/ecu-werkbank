@@ -1037,11 +1037,15 @@ Vergleicht die gespeicherten Codier- und Anpassungs-Sicherungen und Softwarestä
 
 ```bash
 ./target/release/ecu-werkbank firmenkopf --name "Kfz Muster" --adresse "Musterweg 1, 12345 Musterstadt" --telefon "0123 456"
+./target/release/ecu-werkbank firmenkopf --logo logo.png        # PNG oder JPG; --logo "" entfernt es
 ./target/release/ecu-werkbank firmenkopf --loeschen
 ```
 
-Der Firmenkopf steht dann in der Fußzeile jeder Seite aller PDF-Berichte. In der GUI:
-Fahrzeug → Fahrzeuge & Wartung → „Firmenkopf für Berichte“.
+Der Firmenkopf steht dann **oben** auf jeder Seite aller PDF-Berichte: auf Seite 1
+rechts im Titelbalken mit dem Logo auf weißem Feld, auf den Folgeseiten klein oben
+rechts. Das Logo am besten quer, mit wenig Rand und unter 300 KB (höchstens 2 MB);
+PNG mit durchsichtigem Hintergrund geht auch. In der GUI: Fahrzeug → Fahrzeuge &
+Wartung → „Firmenkopf für Berichte“ → „🖼 Logo wählen…“.
 
 ### Fahrzeug-Datenbank (nur lokal)
 

@@ -5,6 +5,12 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Geändert
+- **Firmenkopf oben statt in der Fußzeile, mit Firmenlogo:** Auf Seite 1 jedes PDF-Berichts
+  rechts im Titelbalken (Logo auf weißem Feld), auf Folgeseiten klein oben rechts. Logo als
+  PNG (auch mit Transparenz) oder JPG — GUI „🖼 Logo wählen…“, Terminal `firmenkopf --logo`.
+  Es wird mit dem Firmenkopf gespeichert und kommt so auch in die Datensicherung.
+- Fehlerbericht (PDF): lange Fehlerarten bei UDS-Fehlern überlagerten die Beschreibung —
+  sie stehen jetzt als graue Zeile darunter.
 - **Softwarestände** zeigen immer nur den Stand des gewählten Fahrzeugs (mit Namen in der
   Überschrift); beim Fahrzeugwechsel wird neu geladen, dazu die Änderungen seit dem vorigen
   gespeicherten Stand. Vorher blieb der Stand des zuvor gezeigten Autos stehen.

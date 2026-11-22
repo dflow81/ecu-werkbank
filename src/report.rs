@@ -587,7 +587,7 @@ impl ScanReport {
         let green = (0.15, 0.50, 0.25);
 
         // Kopf
-        l.doc.rect(0.0, pdf::A4_H - 70.0, pdf::A4_W, 70.0, accent);
+        l.doc.banner(accent);
         l.doc.text_rgb(MARGIN, pdf::A4_H - 42.0, 20.0, Font::Bold, crate::trs!("Fehlerspeicher-Protokoll"), (1.0, 1.0, 1.0));
         l.doc.text_rgb(MARGIN, pdf::A4_H - 58.0, 9.0, Font::Regular, crate::trs!("erstellt mit ECUWerkbank"), (0.85, 0.9, 1.0));
         l.y = pdf::A4_H - 100.0;
@@ -718,16 +718,27 @@ impl ScanReport {
             for e in m.dtcs.as_deref().unwrap_or(&[]) {
                 let text = if e.text.is_empty() { crate::tr!("(kein Klartext hinterlegt)") } else { e.text.clone() };
                 let lines = pdf::wrap(&text, text_w, 9.5, Font::Regular);
+                // Zweitcode/Fehlerart: passt er neben den Code (z. B. „(P0300)“), steht er dort,
+                // sonst (lange Fehlerart) als graue Zeile unter der Beschreibung
+                let alt = e.alt.as_ref().map(|a| format!("({a})"));
+                let alt_neben = alt.as_ref().filter(|a| pdf::text_width(a, 8.5, Font::Regular) <= dcols[1] - dcols[0] - 46.0);
+                let alt_unten: Vec<String> = match (&alt, alt_neben) {
+                    (Some(a), None) => pdf::wrap(a, text_w, 8.5, Font::Regular),
+                    _ => Vec::new(),
+                };
                 let status = pdf::wrap(&e.status, status_w, 8.5, Font::Regular);
-                let rows = lines.len().max(status.len());
+                let rows = (lines.len() + alt_unten.len()).max(status.len());
                 l.ensure(13.0 * rows as f32 + 6.0);
                 l.doc.text(dcols[0], l.y, 10.0, Font::Bold, &e.code);
-                if let Some(a) = &e.alt {
-                    l.doc.text_rgb(dcols[0] + 40.0, l.y, 8.5, Font::Regular, &format!("({a})"), (0.4, 0.4, 0.4));
+                if let Some(a) = alt_neben {
+                    l.doc.text_rgb(dcols[0] + 40.0, l.y, 8.5, Font::Regular, a, (0.4, 0.4, 0.4));
                 }
                 let gray = if e.text.is_empty() { (0.5, 0.5, 0.5) } else { (0.0, 0.0, 0.0) };
                 for (i, line) in lines.iter().enumerate() {
                     l.doc.text_rgb(dcols[1], l.y - 13.0 * i as f32, 9.5, Font::Regular, line, gray);
+                }
+                for (i, line) in alt_unten.iter().enumerate() {
+                    l.doc.text_rgb(dcols[1], l.y - 13.0 * (lines.len() + i) as f32, 8.5, Font::Regular, line, (0.4, 0.4, 0.4));
                 }
                 for (i, line) in status.iter().enumerate() {
                     l.doc.text_rgb(dcols[2], l.y - 13.0 * i as f32, 8.5, Font::Regular, line, (0.35, 0.35, 0.35));

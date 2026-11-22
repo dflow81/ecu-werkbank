@@ -166,7 +166,7 @@ pub fn to_pdf(title: &str, meta: &Meta, cols: &[Column]) -> Vec<u8> {
     let mut doc = Doc::new();
     doc.new_page();
     let accent = (0.10, 0.32, 0.55);
-    doc.rect(0.0, pdf::A4_H - 70.0, pdf::A4_W, 70.0, accent);
+    doc.banner(accent);
     doc.text_rgb(MARGIN, pdf::A4_H - 42.0, 20.0, Font::Bold, title, (1.0, 1.0, 1.0));
     doc.text_rgb(MARGIN, pdf::A4_H - 58.0, 9.0, Font::Regular, crate::trs!("erstellt mit ECUWerkbank"), (0.85, 0.9, 1.0));
     let mut y = pdf::A4_H - 100.0;

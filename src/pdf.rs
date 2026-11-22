@@ -17,7 +17,12 @@ pub enum Font {
 #[derive(Default)]
 pub struct Doc {
     pages: Vec<String>,
+    /// Seite 1 hat einen farbigen Titelbalken (dort steht der Firmenkopf in Weiß)
+    banner: bool,
 }
+
+/// Höhe des Titelbalkens oben auf Seite 1.
+pub const BANNER_H: f32 = 70.0;
 
 impl Doc {
     pub fn new() -> Self {
@@ -92,6 +97,15 @@ impl Doc {
         self.cur().push_str(&op);
     }
 
+    /// Farbiger Titelbalken oben auf der aktuellen Seite (Seite 1 der Berichte).
+    /// Ein eingetragener Firmenkopf erscheint rechts darin.
+    pub fn banner(&mut self, rgb: (f32, f32, f32)) {
+        self.rect(0.0, A4_H - BANNER_H, A4_W, BANNER_H, rgb);
+        if self.pages.len() <= 1 {
+            self.banner = true;
+        }
+    }
+
     /// Gefülltes Rechteck (x, y = unten links).
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, rgb: (f32, f32, f32)) {
         let (r, g, b) = rgb;
@@ -99,23 +113,25 @@ impl Doc {
         self.cur().push_str(&op);
     }
 
-    /// Fertiges PDF als Bytes.
+    /// Fertiges PDF als Bytes; ein eingetragener Firmenkopf steht oben auf jeder Seite.
     pub fn to_bytes(&self, title: &str) -> Vec<u8> {
-        self.to_bytes_mit(title, crate::firmenkopf::fusszeile().as_deref())
+        self.to_bytes_mit(title, crate::firmenkopf::fuer_pdf().as_ref())
     }
 
-    /// Wie [`Doc::to_bytes`]; `fuss`: Zeile unten links auf jeder Seite (Firmenkopf).
-    pub fn to_bytes_mit(&self, title: &str, fuss: Option<&str>) -> Vec<u8> {
-        let fuss_op = fuss.filter(|f| !f.trim().is_empty()).map(|f| {
-            // links unten, neben der Seitenzahl; zu lang → gekürzt
-            let mut t = f.to_string();
-            while text_width(&t, 7.5, Font::Regular) > 400.0 && t.chars().count() > 1 {
-                t.pop();
-            }
-            format!("BT 0.40 0.40 0.40 rg /F1 7.5 Tf 50.0 28.0 Td ({}) Tj ET\n", escape(&t))
-        });
-        let mit_fuss: Vec<String> = self.pages.iter().map(|p| match &fuss_op { Some(op) => format!("{p}{op}"), None => p.clone() }).collect();
-        let pages: Vec<&String> = mit_fuss.iter().collect();
+    /// Wie [`Doc::to_bytes`] mit ausdrücklichem Firmenkopf (None = ohne).
+    pub fn to_bytes_mit(&self, title: &str, kopf: Option<&crate::firmenkopf::Firmenkopf>) -> Vec<u8> {
+        let kopf = kopf.filter(|k| !k.ist_leer());
+        let logo = kopf.and_then(|k| k.logo_bild());
+        let mit_kopf: Vec<String> = self
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| match kopf {
+                Some(k) => format!("{p}{}", kopf_ops(k, logo.as_ref(), i == 0 && self.banner)),
+                None => p.clone(),
+            })
+            .collect();
+        let pages: Vec<&String> = mit_kopf.iter().collect();
         let n = pages.len().max(1);
         // Objekte: 1 Katalog, 2 Seitenbaum, 3/4 Schriften, 5 Info, dann je Seite: Seite + Inhalt
         let mut objs: Vec<Vec<u8>> = Vec::new();
@@ -129,12 +145,15 @@ impl Doc {
         info.extend(b") >>");
         objs.push(info);
         let empty = String::new();
+        // Logo als Bild-Objekt nach den Seiten (eins für alle Seiten), ggf. mit Transparenzmaske
+        let bild_nr = 6 + n * 2;
+        let xobj = if logo.is_some() { format!(" /XObject << /Logo {bild_nr} 0 R >>") } else { String::new() };
         for i in 0..n {
             let content = pages.get(i).copied().unwrap_or(&empty);
             objs.push(
                 format!(
                     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {A4_W} {A4_H}] \
-                     /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {} 0 R >>",
+                     /Resources << /Font << /F1 3 0 R /F2 4 0 R >>{xobj} >> /Contents {} 0 R >>",
                     7 + i * 2
                 )
                 .into_bytes(),
@@ -144,6 +163,27 @@ impl Doc {
             stream.extend_from_slice(&bytes);
             stream.extend_from_slice(b"\nendstream");
             objs.push(stream);
+        }
+        if let Some(b) = &logo {
+            let maske = b.maske.as_ref().map(|_| format!(" /SMask {} 0 R", bild_nr + 1)).unwrap_or_default();
+            let mut o = format!(
+                "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /{} /BitsPerComponent 8 /Filter /{}{maske} /Length {} >>\nstream\n",
+                b.breite, b.hoehe, b.farbraum, b.filter, b.daten.len()
+            )
+            .into_bytes();
+            o.extend_from_slice(&b.daten);
+            o.extend_from_slice(b"\nendstream");
+            objs.push(o);
+            if let Some(m) = &b.maske {
+                let mut o = format!(
+                    "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>\nstream\n",
+                    b.breite, b.hoehe, m.len()
+                )
+                .into_bytes();
+                o.extend_from_slice(m);
+                o.extend_from_slice(b"\nendstream");
+                objs.push(o);
+            }
         }
 
         let mut out = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
@@ -165,6 +205,77 @@ impl Doc {
         );
         out
     }
+}
+
+/// Text kürzen, bis er in `breite` passt (mit „…“).
+fn passend(s: &str, size: f32, font: Font, breite: f32) -> String {
+    if text_width(s, size, font) <= breite {
+        return s.to_string();
+    }
+    let mut t: String = s.to_string();
+    while !t.is_empty() && text_width(&format!("{t}…"), size, font) > breite {
+        t.pop();
+    }
+    format!("{}…", t.trim_end())
+}
+
+/// Zeichenbefehle für den Firmenkopf oben rechts. Auf der Seite mit
+/// Titelbalken in Weiß (Logo auf weißem Feld), sonst klein in Grau über dem Inhalt.
+fn kopf_ops(k: &crate::firmenkopf::Firmenkopf, logo: Option<&crate::bild::Bild>, im_banner: bool) -> String {
+    let rechts = A4_W - 25.0;
+    let mut op = String::new();
+    let text = |op: &mut String, x_rechts: f32, y: f32, size: f32, font: Font, s: &str, rgb: (f32, f32, f32)| {
+        let x = x_rechts - text_width(s, size, font);
+        let f = if font == Font::Bold { "F2" } else { "F1" };
+        let (r, g, b) = rgb;
+        op.push_str(&format!("BT {r:.2} {g:.2} {b:.2} rg /{f} {size:.1} Tf {x:.1} {y:.1} Td ({}) Tj ET\n", escape(s)));
+    };
+    let zeilen = k.zeilen();
+    if im_banner {
+        // Logo rechts im Balken, höchstens 46 pt hoch / 100 pt breit
+        let mut x_text = rechts;
+        if let Some(b) = logo {
+            let (mut h, mut w) = (46.0f32, 46.0 * b.verhaeltnis());
+            if w > 100.0 {
+                w = 100.0;
+                h = w / b.verhaeltnis();
+            }
+            let (x, y) = (rechts - w, A4_H - BANNER_H / 2.0 - h / 2.0);
+            op.push_str(&format!("1 1 1 rg {:.1} {:.1} {:.1} {:.1} re f\n", x - 4.0, y - 4.0, w + 8.0, h + 8.0));
+            op.push_str(&format!("q {w:.2} 0 0 {h:.2} {x:.2} {y:.2} cm /Logo Do Q\n"));
+            x_text = x - 14.0;
+        }
+        // Platz bis zum Titel links (Berichtstitel 20 pt enden spätestens bei etwa 270 pt)
+        let breite = (x_text - 280.0).max(110.0);
+        let mut y = A4_H - 22.0;
+        for (i, z) in zeilen.iter().take(4).enumerate() {
+            let (size, font, rgb) = if i == 0 { (10.0, Font::Bold, (1.0, 1.0, 1.0)) } else { (7.5, Font::Regular, (0.85, 0.90, 1.0)) };
+            text(&mut op, x_text, y, size, font, &passend(z, size, font, breite), rgb);
+            y -= if i == 0 { 12.0 } else { 9.5 };
+        }
+    } else {
+        // Folgeseiten: klein oben rechts, Logo höchstens 24 pt hoch
+        let mut x_text = rechts;
+        if let Some(b) = logo {
+            let (mut h, mut w) = (24.0f32, 24.0 * b.verhaeltnis());
+            if w > 80.0 {
+                w = 80.0;
+                h = w / b.verhaeltnis();
+            }
+            let (x, y) = (rechts - w, A4_H - 14.0 - h);
+            op.push_str(&format!("q {w:.2} 0 0 {h:.2} {x:.2} {y:.2} cm /Logo Do Q\n"));
+            x_text = x - 10.0;
+        }
+        let breite = x_text - 60.0;
+        if let Some(name) = zeilen.first() {
+            text(&mut op, x_text, A4_H - 22.0, 8.0, Font::Bold, &passend(name, 8.0, Font::Bold, breite), (0.35, 0.35, 0.35));
+        }
+        let rest = zeilen.iter().skip(1).cloned().collect::<Vec<_>>().join("  ·  ");
+        if !rest.is_empty() {
+            text(&mut op, x_text, A4_H - 31.0, 6.5, Font::Regular, &passend(&rest, 6.5, Font::Regular, breite), (0.45, 0.45, 0.45));
+        }
+    }
+    op
 }
 
 /// Text → WinAnsi-Bytes, PDF-String-sicher maskiert. Inhaltsströme bestehen

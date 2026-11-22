@@ -284,30 +284,61 @@ impl App {
         });
     }
 
-    /// Firmenkopf (Werkstatt) für die Fußzeile aller PDF-Berichte.
+    /// Firmenkopf (Werkstatt) mit Logo — steht oben auf jeder Seite aller PDF-Berichte.
     fn ui_firmenkopf(&mut self, ui: &mut egui::Ui) {
         let f = self.firmenkopf.get_or_insert_with(ecu_werkbank::firmenkopf::laden);
         let titel = if f.ist_leer() { tr!("🏢 Firmenkopf für Berichte (Werkstatt)") } else { tr!("🏢 Firmenkopf: {a}", a = f.name) };
         let mut speichern = false;
+        let mut meldung = None;
         egui::CollapsingHeader::new(titel).id_source("firmenkopf").show(ui, |ui| {
-            ui.weak(tr!("Steht in der Fußzeile jeder Seite aller PDF-Berichte. Leer lassen = keine Fußzeile."));
+            ui.weak(tr!("Steht oben auf jeder Seite aller PDF-Berichte — auf Seite 1 rechts im Titelbalken, mit Logo. Alles leer lassen = kein Firmenkopf."));
             egui::Grid::new("firmenkopf_grid").num_columns(2).show(ui, |ui| {
                 for (name, feld) in [(trn!("Name"), &mut f.name), (trn!("Anschrift"), &mut f.adresse), (trn!("Telefon"), &mut f.telefon), (trn!("E-Mail"), &mut f.email), (trn!("Zusatz"), &mut f.zusatz)] {
                     ui.label(ecu_werkbank::i18n::t(name));
                     ui.add(egui::TextEdit::singleline(feld).desired_width(320.0));
                     ui.end_row();
                 }
+                ui.label(tr!("Logo"));
+                ui.horizontal_wrapped(|ui| {
+                    match f.logo_bild() {
+                        Some(b) => {
+                            ui.label(tr!("{a} × {b} Pixel", a = b.breite, b = b.hoehe));
+                        }
+                        None if !f.logo.is_empty() => {
+                            ui.colored_label(stufe_color(Stufe::Warnung), tr!("Logo nicht lesbar"));
+                        }
+                        None => {
+                            ui.weak(tr!("kein Logo"));
+                        }
+                    }
+                    if ui.button(tr!("🖼 Logo wählen…")).on_hover_text(tr!("PNG oder JPG, am besten quer und mit wenig Rand, unter 300 KB")).clicked() {
+                        if let Some(p) = rfd::FileDialog::new().add_filter(tr!("Bild"), &["png", "jpg", "jpeg"]).pick_file() {
+                            meldung = Some(match std::fs::read(&p).map_err(anyhow::Error::from).and_then(|roh| f.logo_setzen(&roh)) {
+                                Ok(b) => tr!("Logo übernommen ({a} × {b} Pixel) — mit „Speichern“ festhalten.", a = b.breite, b = b.hoehe),
+                                Err(e) => tr!("Logo: {e}", e = format!("{e:#}")),
+                            });
+                        }
+                    }
+                    if !f.logo.is_empty() && ui.button(tr!("✖ Logo entfernen")).clicked() {
+                        f.logo.clear();
+                    }
+                });
+                ui.end_row();
             });
-            if !f.ist_leer() {
-                ui.weak(tr!("Vorschau: {a}", a = f.zeile()));
+            let z = f.zeilen();
+            if !z.is_empty() {
+                ui.weak(tr!("Vorschau: {a}", a = z.join("  ·  ")));
             }
             speichern = ui.button(tr!("💾 Speichern")).clicked();
         });
+        if let Some(m) = meldung {
+            self.status = m;
+        }
         if speichern {
             let f = self.firmenkopf.clone().unwrap_or_default();
             self.status = match ecu_werkbank::firmenkopf::speichern(&f) {
                 Ok(()) if f.ist_leer() => tr!("Firmenkopf entfernt."),
-                Ok(()) => tr!("Firmenkopf gespeichert — erscheint in allen neuen Berichten."),
+                Ok(()) => tr!("Firmenkopf gespeichert — erscheint oben in allen neuen Berichten."),
                 Err(e) => tr!("Firmenkopf: {e}", e = format!("{e:#}")),
             };
         }

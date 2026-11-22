@@ -1017,7 +1017,7 @@ enum Command {
         #[arg(long)]
         b: Option<String>,
     },
-    /// Firmenkopf für Berichte (Fußzeile jeder PDF-Seite): anzeigen, setzen oder löschen
+    /// Firmenkopf für Berichte (oben auf jeder PDF-Seite, mit Logo): anzeigen, setzen oder löschen
     Firmenkopf {
         #[arg(long)]
         name: Option<String>,
@@ -1030,6 +1030,9 @@ enum Command {
         /// freie Zusatzzeile (z. B. Meisterbetrieb)
         #[arg(long)]
         zusatz: Option<String>,
+        /// Firmenlogo (PNG oder JPG); leer ("") entfernt das Logo
+        #[arg(long)]
+        logo: Option<PathBuf>,
         /// Firmenkopf entfernen
         #[arg(long)]
         loeschen: bool,
@@ -1522,10 +1525,19 @@ fn main() -> Result<()> {
             print!("{}", konfigvergleich::text(&x, &y, &db));
             Ok(())
         }
-        Command::Firmenkopf { name, adresse, telefon, email, zusatz, loeschen } => {
+        Command::Firmenkopf { name, adresse, telefon, email, zusatz, logo, loeschen } => {
             use ecu_werkbank::firmenkopf;
             let mut f = if loeschen { firmenkopf::Firmenkopf::default() } else { firmenkopf::laden() };
-            let geaendert = loeschen || name.is_some() || adresse.is_some() || telefon.is_some() || email.is_some() || zusatz.is_some();
+            let geaendert = loeschen || name.is_some() || adresse.is_some() || telefon.is_some() || email.is_some() || zusatz.is_some() || logo.is_some();
+            match logo {
+                Some(p) if p.as_os_str().is_empty() => f.logo.clear(),
+                Some(p) => {
+                    let roh = std::fs::read(&p).with_context(|| tr!("{a} lesen", a = p.display()))?;
+                    let b = f.logo_setzen(&roh)?;
+                    println!("{}", tr!("Logo: {a} × {b} Pixel", a = b.breite, b = b.hoehe));
+                }
+                None => {}
+            }
             for (feld, neu) in [(&mut f.name, name), (&mut f.adresse, adresse), (&mut f.telefon, telefon), (&mut f.email, email), (&mut f.zusatz, zusatz)] {
                 if let Some(n) = neu {
                     *feld = n;
@@ -1537,7 +1549,7 @@ fn main() -> Result<()> {
             if f.ist_leer() {
                 println!("{}", tr!("Kein Firmenkopf. Setzen z. B.: ecu-werkbank firmenkopf --name \"Kfz Muster\" --telefon \"0123 456\""));
             } else {
-                println!("{}", tr!("Fußzeile in Berichten: {a}", a = f.zeile()));
+                println!("{}", tr!("Kopf in Berichten: {a}{b}", a = f.zeilen().join("  ·  "), b = if f.logo.is_empty() { String::new() } else { tr!(" (mit Logo)") }));
             }
             Ok(())
         }

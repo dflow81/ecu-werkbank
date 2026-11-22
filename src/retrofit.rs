@@ -58,7 +58,7 @@ pub fn vergleich(vorher: &Stand, nachher: &Stand, db: &LabelDb) -> Vec<(Stufe, S
 
 pub fn pdf(name: &str, vorher: &Stand, nachher: &Stand, punkte: &[(Stufe, String)], notiz: &str) -> Vec<u8> {
     let mut l = Layout::new();
-    l.doc.rect(0.0, pdf::A4_H - 70.0, pdf::A4_W, 70.0, (0.10, 0.32, 0.55));
+    l.doc.banner((0.10, 0.32, 0.55));
     l.doc.text_rgb(MARGIN, pdf::A4_H - 42.0, 20.0, Font::Bold, crate::trs!("Nachrüstprotokoll"), (1.0, 1.0, 1.0));
     l.doc.text_rgb(MARGIN, pdf::A4_H - 58.0, 9.0, Font::Regular, &tr!("{a} · erstellt mit ECUWerkbank", a = nachher.scan.created), (0.85, 0.9, 1.0));
     l.y = pdf::A4_H - 100.0;
