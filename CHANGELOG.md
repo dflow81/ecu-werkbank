@@ -18,6 +18,13 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   ECUWerkbank nicht weiß, ob die Bedingung gerade erfüllt ist. Ohne vorherigen Scan liest die
   GUI die Teilenummer beim ersten Lesen selbst (nur lesen).
 - Fehlercodes ohne eigentlichen Text bekommen den Alternativtext aus der Datenbank.
+- **Service-Rückstellung über die Fahrzeug-Datenbank:** Gelernte Service-Kennungen lassen sich
+  je Kombi-Teilenummer in der Datenbank speichern („📚 In die Fahrzeug-Datenbank übernehmen“
+  bzw. `service in-datenbank`). Jedes Auto mit demselben Kombi findet sie dann automatisch.
+  Datenpakete können sie unter `[hersteller.steuergeraet.service]` mitbringen (Schema 7).
+  Die Service-Seite zeigt außerdem die Service-Anpassungen, die das Kombi laut Datenbank kennt.
+- Experten-Seite „Routine & Stellglied (UDS)“: bekannte Stellfunktionen/Routinen aus der
+  Datenbank auswählen statt Kennungen abzutippen; Name der Kennung wird angezeigt.
 - Stellglieddiagnose (TP 2.0) nennt das angesteuerte Bauteil beim Namen (Bauteilnummern =
   VAG-Fehlernummern, Text aus der Fahrzeug-Datenbank), z. B. „01482: Motoren für Zentralverriegelung“.
 - Fehlersuche in der Datenbank zeigt die Fehlerart mit Text („13 (Unterbrechung)“).

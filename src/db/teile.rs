@@ -26,11 +26,13 @@ pub struct SgWissen {
     pub dids: Vec<PaketDid>,
     pub fehler: Vec<PaketFehler>,
     pub diagnose: Vec<DiagnoseReferenz>,
+    /// Service-Rückstellung (Kombi), aus der neuesten passenden Quelle
+    pub service: Option<crate::service::Config>,
 }
 
 impl SgWissen {
     pub fn ist_leer(&self) -> bool {
-        self.anpassung.is_empty() && self.codierung.is_empty() && self.dids.is_empty() && self.fehler.is_empty() && self.diagnose.is_empty()
+        self.anpassung.is_empty() && self.codierung.is_empty() && self.dids.is_empty() && self.fehler.is_empty() && self.diagnose.is_empty() && self.service.is_none()
     }
 
     /// Name eines Anpassungskanals, falls bekannt.
@@ -52,6 +54,9 @@ impl SgWissen {
                 t.push(format!("{n} {w}"));
             }
         }
+        if self.service.as_ref().is_some_and(crate::service::Config::kann_zuruecksetzen) {
+            t.push(crate::tr!("Service-Rückstellung"));
+        }
         format!("{}: {}", self.teilenummer, t.join(", "))
     }
 }
@@ -72,6 +77,46 @@ pub fn norm(t: &str) -> String {
         s += &gross(z);
     }
     s
+}
+
+/// Quelle für selbst gelernte Service-Kennungen.
+const SERVICE_QUELLE: &str = "Eigene Service-Kennungen";
+
+impl Db {
+    /// Gelernte Service-Rückstellung für eine Kombi-Teilenummer speichern —
+    /// danach findet jedes Auto mit diesem Kombi sie automatisch. Bleibt lokal,
+    /// bis du beim Export eine Lizenz angibst.
+    pub fn service_speichern(&self, teilenummer: &str, name: &str, adresse: Option<u16>, c: &crate::service::Config) -> Result<()> {
+        use rusqlite::OptionalExtension;
+        let teil = norm(teilenummer);
+        anyhow::ensure!(teil.len() >= 9, crate::tr!("Teilenummer „{a}“ ist zu kurz.", a = teilenummer));
+        anyhow::ensure!(!c.werte.is_empty(), crate::tr!("Keine Service-Kennungen zum Speichern."));
+        let tx = self.con.unchecked_transaction()?;
+        let q: i64 = match tx
+            .query_row("SELECT id FROM data_source WHERE source_type = 'USER' AND source_name = ?1 ORDER BY id LIMIT 1", params![SERVICE_QUELLE], |r| r.get(0))
+            .optional()?
+        {
+            Some(id) => id,
+            None => self.quelle_anlegen(super::QuellArt::User, SERVICE_QUELLE, "", "", &crate::tr!("am eigenen Auto gelernt (Vorher/Nachher bzw. Wertesuche)"))?,
+        };
+        let vw = self.hersteller("Volkswagen", &["WVW", "WV1", "WV2", "WV3"], None)?;
+        let ecu: i64 = match tx.query_row("SELECT id FROM ecu WHERE source_id = ?1 AND software_number = ?2", params![q, teil], |r| r.get(0)).optional()? {
+            Some(id) => id,
+            None => {
+                tx.execute(
+                    "INSERT INTO ecu (manufacturer_id, ecu_name, software_number, protocol, diagnostic_address, can_tx, can_rx, source_id) VALUES (?1, ?2, ?3, 'UDS', ?4, ?5, ?6, ?7)",
+                    params![vw, name, teil, adresse, c.tx, c.rx, q],
+                )?;
+                tx.last_insert_rowid()
+            }
+        };
+        tx.execute(
+            "INSERT INTO ecu_service_config (ecu_id, content) VALUES (?1, ?2) ON CONFLICT (ecu_id) DO UPDATE SET content = excluded.content",
+            params![ecu, serde_json::to_string(c)?],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
 }
 
 /// Platzhalter ohne Information („Kanal 4“, „Kanal 004“).
@@ -118,6 +163,12 @@ impl Db {
         let teilen = |s: String| -> Vec<String> { s.split(',').map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect() };
         for (_, id, teil, name) in bewertet.into_iter().filter(|(p, ..)| *p == beste) {
             w.teilenummer = norm(&teil);
+            // Service-Kennungen: die neueste Quelle gewinnt (Liste ist nach Quelle sortiert)
+            if beste >= 2 {
+                if let Some(c) = super::paket::service_laden(&self.con, id)? {
+                    w.service = Some(c);
+                }
+            }
             if beste == 3 {
                 let daten = diagnosedaten::ecu_laden(&self.con, id)?;
                 if !daten.ist_leer() && !w.diagnose.contains(&daten) {

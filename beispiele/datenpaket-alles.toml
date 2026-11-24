@@ -78,6 +78,7 @@ sollwert = [
 [[hersteller.steuergeraet]]
 adresse = 0x17
 name = "Kombiinstrument"
+teilenummer = "123920000A"   # ausgedacht
 
 [[hersteller.steuergeraet.stellfunktion]]
 name = "Beispiel-Stellfunktion"
@@ -88,6 +89,30 @@ id = 0x1234               # Kennung des Sollwerts
 min = 0.0
 max = 100.0
 einheit = "%"
+
+# Service-Rückstellung (Inspektion/Ölwechsel) — nur beim Kombi. Gilt für jedes
+# Auto mit dieser Kombi-Teilenummer. Am eigenen Auto lernen: Fahrzeug →
+# Service-Anzeige → Vorher/Nachher, dann „In die Fahrzeug-Datenbank übernehmen“.
+# reset = ganzer Inhalt der Kennung nach der Rückstellung (Hex); ohne reset
+# wird der Wert nur gelesen. Die Kennungen hier sind ausgedacht!
+[hersteller.steuergeraet.service]
+tx = 0x714
+rx = 0x77E
+sitzung = 0x03            # 0x03 = erweiterte Sitzung zum Schreiben
+
+[[hersteller.steuergeraet.service.werte]]
+art = "km_bis_oelwechsel" # km_bis_inspektion, tage_bis_inspektion, km_bis_oelwechsel,
+did = 0x1235              # tage_bis_oelwechsel, km_seit_service, tage_seit_service, sonstiges
+laenge = 2
+vorzeichen = true         # negativ = überfällig
+reset = "3A 98"           # 15000 km
+
+[[hersteller.steuergeraet.service.werte]]
+art = "tage_bis_oelwechsel"
+did = 0x1236
+laenge = 2
+vorzeichen = true
+reset = "01 6D"           # 365 Tage
 
 # ── Fehlertexte ohne festes Steuergerät (z. B. genormte P-Codes) ────────
 [[fehler]]

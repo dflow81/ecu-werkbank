@@ -34,6 +34,7 @@ Status: ⏳ offen · ✅ erledigt · ❌ Problem
 | A16 | Messwertblöcke mit Namen und Sollwerten aus der Datenbank | Motor 0x01: TP 2.0 → Messwertblock 1, 2, 4 lesen (ohne vorherigen Scan), Motor warm im Leerlauf; dann `kwp-block --address 01 --block 1` | Feldnamen wie „Motordrehzahl (G28)“, darunter „Soll … (Leerlauf)“; im Leerlauf grün, bei Gas nur Hinweis, keine Warnung | ⏳ |
 | A17 | Stellglieddiagnose mit Bauteilnamen | TP 2.0 → Tür (0x22) Stellglieddiagnose, Fahrzeug gesichert | „Bauteil 01482 wird angesteuert: Motoren für Zentralverriegelung“ o. ä. — Name passt zum Bauteil, das sich bewegt | ⏳ |
 | A18 | Identifikation mit Datenbank-Wissen | GUI Erweiterte Identifikation 0x7E0 (bzw. ein UDS-Gerät aus der Datenbank) und `kwp-ident --address 20` | Zeile „Fahrzeug-Datenbank: …“; bei UDS ASAM-Datensatz aus der Datenbank = Wert F19E des Steuergeräts | ⏳ |
+| A19 | Service-Seite zeigt Datenbank-Wissen (Golf, Kombi 5K0920860F) | GUI Fahrzeug → Service-Anzeige | Aufklappbereich „Service-Anpassungen dieses Kombis laut Fahrzeug-Datenbank (13)“; Lesen der Werte 0x2243/0x2244 wie bisher | ⏳ |
 | A9 | Polo 6R: Fahrzeugtyp / Gateway-Verbauliste (Roadmap 16) | GUI „Fahrzeugtyp erkennen“, Verbauliste aus dem Gateway | UDS oder TP 2.0 richtig erkannt | ✅ 19.11.2026: UDS + TP 2.0 gemischt erkannt. Gateway 6N0 909 901 kennt keine Verbauliste (NRC 0x11) — Meldung jetzt in Klartext |
 
 ## B. Mitschnitte mit dem Werkstattgerät (Y-Kabel, Werkstattgerät liest/schreibt)
@@ -55,6 +56,12 @@ Dateien aus dem Werkstattprogramm übernehmen.
 | B10 | Polo 6R: ABS (03) und Lenkhilfe (44) | Werkstattgerät öffnet ABS und Lenkhilfe (nur Identifikation), Y-Kabel-Mitschnitt | ABS: wie sieht der TP-2.0-Kanalaufbau aus (unsere Anfrage `200#03C00010000301` → nur `203#00D0A3`)? Lenkhilfe: geht sie über CAN oder K-Line? | ⏳ |
 | B11 | Hohe Messwertblöcke (> 127) | Werkstattgerät liest am Polo Gateway Block 201 und Bordnetz Block 220 | Wir bekommen dort „requestOutOfRange“ — welche Sitzung/welcher Dienst? | ⏳ |
 | B9 | Batterie anlernen (Roadmap 19) | falls vorhanden: Bordnetz/Batterie-Anpassung | prüfen, ob es das beim Golf 6 gibt | ⏳ |
+
+Zusatz zu B (nur wenn ohnehin ein Ölwechsel/Service ansteht): **Service-Rückstellung lernen** —
+Service-Anzeige → „vorher“ merken, Service mit den Kombi-Tasten zurückstellen, „nachher“
+merken, vergleichen, „Ins Fahrzeug übernehmen“, dann „📚 In die Fahrzeug-Datenbank
+übernehmen“. Danach gilt sie für jedes Auto mit Kombi 5K0920860F. (Die Tasten-Rückstellung
+setzt die echte Service-Anzeige zurück — darum nur nach einem echten Service.)
 
 ## C. Schreiben mit ECUWerkbank (erst nach B, mit Ladegerät)
 

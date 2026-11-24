@@ -449,6 +449,7 @@ impl App {
         self.an_wissen = None;
         self.code_wissen = None;
         self.mw_texte_neu_laden();
+        ecu_werkbank::service::datenbank_neu_laden();
         *self.diesel_cache.borrow_mut() = None;
         self.dbs_zaehler_neu();
     }

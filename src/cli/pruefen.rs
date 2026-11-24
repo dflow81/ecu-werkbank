@@ -72,7 +72,10 @@ pub(super) fn service_cfg(be: &Backend, fz: Option<&str>) -> Result<(Option<ecu_
         None if !matches!(be, Backend::Demo) => load_active().and_then(|k| ecu_werkbank::vehicle::load(&k)),
         None => None,
     };
-    let cfg = service::config_fuer(be, v.as_ref());
+    let (cfg, herkunft) = service::config_mit_herkunft(be, v.as_ref());
+    if let service::Herkunft::Datenbank(teil) = &herkunft {
+        println!("{}", tr!("Service-Kennungen aus der Fahrzeug-Datenbank (Kombi {a}).", a = teil));
+    }
     Ok((v, cfg))
 }
 
@@ -94,6 +97,15 @@ pub(super) fn service_cmd(be: &Backend, a: ServiceAktion, fz: Option<&str>) -> R
                 println!("{}", tr!("  3. ecu-werkbank -f <Fahrzeug> service merken --name nachher"));
                 println!("{}", tr!("  4. ecu-werkbank -f <Fahrzeug> service vergleich --uebernehmen"));
                 println!("{}", tr!("Oder ohne Tasten-Rückstellung: Anzeige im Kombi ablesen und `service suche --km … --tage … --einrichten`."));
+                if let Some(teil) = v.as_ref().and_then(service::kombi_teilenummer) {
+                    let namen = service::datenbank_wissen(&teil).namen;
+                    if !namen.is_empty() {
+                        println!("{}", tr!("\nLaut Fahrzeug-Datenbank kennt das Kombi {a} diese Service-Anpassungen (nur Namen, ohne Kennungen):", a = teil));
+                        for n in namen {
+                            println!("  · {n}");
+                        }
+                    }
+                }
                 return Ok(());
             }
             println!("{}", tr!("Service-Anzeige (Kombi {a}):", a = format!("{:#05x}", cfg.tx)));
@@ -103,6 +115,12 @@ pub(super) fn service_cmd(be: &Backend, a: ServiceAktion, fz: Option<&str>) -> R
             if !cfg.kann_zuruecksetzen() {
                 println!("{}", tr!("\nRückstellung über ECUWerkbank noch nicht eingerichtet (keine Rückstellwerte)."));
             }
+        }
+        ServiceAktion::InDatenbank => {
+            let v = v.context(tr!("Bitte das Fahrzeug angeben: -f \"B XY 123\""))?;
+            let eigen = v.service.clone().filter(|c| !c.werte.is_empty()).context(tr!("Für dieses Fahrzeug sind noch keine Service-Kennungen eingerichtet (service vergleich --uebernehmen)."))?;
+            let teil = service::in_datenbank(&v, &eigen)?;
+            println!("{}", tr!("In der Fahrzeug-Datenbank gespeichert: Kombi {a} ({b} Kennung(en){c}). Jedes Auto mit diesem Kombi findet sie jetzt automatisch.", a = teil, b = eigen.werte.len(), c = if eigen.kann_zuruecksetzen() { tr!(", mit Rückstellwerten") } else { tr!(", nur lesen") }));
         }
         ServiceAktion::Anleitung => {
             for z in service::anleitung_tasten(v.as_ref().map(|v| v.bezeichnung.as_str()).unwrap_or("golf")) {
@@ -152,6 +170,7 @@ pub(super) fn service_cmd(be: &Backend, a: ServiceAktion, fz: Option<&str>) -> R
                 v.service = Some(service::Config { werte: vor, ..cfg });
                 ecu_werkbank::vehicle::save(&v)?;
                 println!("{}", tr!("\nIn fahrzeug.toml übernommen. Prüfen mit: ecu-werkbank -f {a} service", a = v.key));
+                println!("{}", tr!("Für alle Autos mit demselben Kombi: ecu-werkbank -f {a} service in-datenbank", a = v.key));
             } else {
                 println!("{}", tr!("\nÜbernehmen mit --uebernehmen."));
             }

@@ -746,6 +746,30 @@ impl App {
             ui.label(tr!("RX:"));
             ui.add(egui::TextEdit::singleline(&mut self.svc_rx).desired_width(70.0));
         });
+        // bekannte Stellfunktionen/Routinen aus der Fahrzeug-Datenbank (und eigenen Labels)
+        let bekannte: Vec<ecu_werkbank::control::Stellfunktion> = self.db.stellfunktionen().to_vec();
+        ui.horizontal_wrapped(|ui| {
+            if bekannte.is_empty() {
+                ui.weak(tr!("Die Fahrzeug-Datenbank kennt noch keine Stellfunktionen oder Routinen — eintragen unter Werkzeuge → Fahrzeug-Datenbank oder per Datenpaket ([[…stellfunktion]])."));
+                return;
+            }
+            ui.label(tr!("Aus der Fahrzeug-Datenbank:"));
+            egui::ComboBox::from_id_source("svc_bekannt").selected_text(tr!("Stellfunktion wählen … ({a})", a = bekannte.len())).width(320.0).show_ui(ui, |ui| {
+                for f in &bekannte {
+                    let art = if f.art == "uds-routine" { "Routine" } else { "IO" };
+                    if ui.selectable_label(false, format!("{}  ·  {:#05x} {art} {:#06x}", f.name, f.tx, f.id)).clicked() {
+                        self.svc_tx = format!("{:#05x}", f.tx);
+                        self.svc_rx = format!("{:#05x}", f.rx);
+                        if f.art == "uds-routine" {
+                            self.routine_id = format!("{:#06x}", f.id);
+                        } else {
+                            self.io_did = format!("{:#06x}", f.id);
+                        }
+                        self.svc_result = tr!("„{a}“ eingetragen — Sollwert {b} … {c} {d}. Geregelt (mit Sicherheitsgrenzen) geht es unter Messen → Zielbereich.", a = f.name, b = f.min, c = f.max, d = f.einheit);
+                    }
+                }
+            });
+        });
         ui.add_space(8.0);
         ui.separator();
         ui.strong("Grundeinstellung / Routine (0x31)");
@@ -770,6 +794,9 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(tr!("DID:"));
             ui.add(egui::TextEdit::singleline(&mut self.io_did).desired_width(80.0));
+            if let Some(m) = parse_hex(&self.io_did).and_then(|d| self.db.measuring_any(d)).filter(|m| !m.name.is_empty()) {
+                ui.weak(&m.name).on_hover_text(tr!("Name der Kennung aus der Fahrzeug-Datenbank bzw. deinen Labels"));
+            }
             ui.label(tr!("Control:"));
             ui.add(egui::TextEdit::singleline(&mut self.io_control).desired_width(60.0));
             ui.label(tr!("State(hex):"));

@@ -65,6 +65,18 @@ pub struct PaketFehlerart {
 /// Sollwerte und Stellfunktionen eines Steuergeräts schreiben (Import und Editor).
 pub(crate) fn zusatz_eintragen(con: &rusqlite::Connection, ecu: i64, s: &PaketSteuergeraet, quelle: i64) -> Result<()> {
     diagnosedaten::ecu_eintragen(con, ecu, &s.diagnosereferenz)?;
+    match &s.service {
+        Some(c) if !c.werte.is_empty() => {
+            con.execute(
+                "INSERT INTO ecu_service_config (ecu_id, content) VALUES (?1, ?2)
+                 ON CONFLICT (ecu_id) DO UPDATE SET content = excluded.content",
+                params![ecu, serde_json::to_string(c)?],
+            )?;
+        }
+        _ => {
+            con.execute("DELETE FROM ecu_service_config WHERE ecu_id = ?1", [ecu])?;
+        }
+    }
     for w in &s.sollwert {
         con.execute(
             "INSERT INTO sollwert (ecu_id, quelle, kennung, feld, min, max, name, source_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -77,9 +89,20 @@ pub(crate) fn zusatz_eintragen(con: &rusqlite::Connection, ecu: i64, s: &PaketSt
     Ok(())
 }
 
+/// Service-Einstellungen eines Steuergeräts (Kombi), falls hinterlegt.
+pub(crate) fn service_laden(con: &rusqlite::Connection, ecu: i64) -> Result<Option<crate::service::Config>> {
+    use rusqlite::OptionalExtension;
+    let text: Option<String> = con.query_row("SELECT content FROM ecu_service_config WHERE ecu_id = ?1", [ecu], |r| r.get(0)).optional()?;
+    Ok(match text {
+        Some(t) => Some(serde_json::from_str(&t)?),
+        None => None,
+    })
+}
+
 /// Sollwerte und Stellfunktionen eines Steuergeräts lesen.
 pub(crate) fn zusatz_laden(con: &rusqlite::Connection, ecu: i64, s: &mut PaketSteuergeraet) -> Result<()> {
     s.diagnosereferenz = diagnosedaten::ecu_laden(con, ecu)?;
+    s.service = service_laden(con, ecu)?;
     let mut st = con.prepare("SELECT quelle, kennung, feld, min, max, name FROM sollwert WHERE ecu_id = ?1 ORDER BY id")?;
     s.sollwert = st
         .query_map(params![ecu], |r| Ok(crate::labels::Sollwert { quelle: r.get(0)?, id: r.get(1)?, feld: r.get(2)?, min: r.get(3)?, max: r.get(4)?, name: r.get(5)? }))?
@@ -175,6 +198,9 @@ pub struct PaketSteuergeraet {
     pub stellfunktion: Vec<crate::control::Stellfunktion>,
     #[serde(default, skip_serializing_if = "DiagnoseReferenz::ist_leer")]
     pub diagnosereferenz: DiagnoseReferenz,
+    /// Service-Rückstellung (nur beim Kombi): Kennungen und Rückstellwerte
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<crate::service::Config>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

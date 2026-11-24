@@ -242,6 +242,10 @@ impl App {
                         z.extend(w.codierung.iter().map(|c| tr!("  Codierung {a}: {b}", a = c.bit.map(|b| format!("{}.{}", c.byte, b)).unwrap_or_else(|| c.byte.to_string()), b = c.name)));
                         z.extend(w.dids.iter().map(|d| tr!("  Messwert {a}: {b} {c}", a = format!("{:#06x}", d.did), b = d.name, c = d.einheit)));
                         z.extend(w.diagnose.iter().flat_map(|d| d.zeilen()));
+                        if let Some(c) = &w.service {
+                            z.push(tr!("  Service-Rückstellung ({a} Kennung(en)):", a = c.werte.len()));
+                            z.extend(c.vorschau().into_iter().map(|v| format!("    {v}")));
+                        }
                         z.extend(w.fehler.iter().map(|f| tr!("  Fehler {a}: {b}", a = f.code, b = f.text)));
                         z
                     }

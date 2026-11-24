@@ -383,7 +383,7 @@ impl App {
         ui.label(tr!("Liest, wann Inspektion und Ölwechsel fällig sind, und stellt den Service nach dem Ölwechsel zurück."));
         let be = self.backend();
         let veh = self.active_vehicle.as_deref().and_then(ecu_werkbank::vehicle::load);
-        let cfg = sv::config_fuer(&be, veh.as_ref());
+        let (cfg, herkunft) = sv::config_mit_herkunft(&be, veh.as_ref());
         let ordner = sv::ordner(&be, veh.as_ref());
 
         // Hintergrund-Lesen abholen
@@ -424,6 +424,45 @@ impl App {
 
         if veh.is_none() && !matches!(be, Backend::Demo) {
             ui.colored_label(stufe_color(Stufe::Hinweis), tr!("Bitte oben ein Fahrzeug wählen — die Service-Kennungen werden je Fahrzeug gespeichert."));
+        }
+
+        // --- Herkunft der Kennungen / Fahrzeug-Datenbank ---
+        let kombi_teil = veh.as_ref().and_then(sv::kombi_teilenummer);
+        match &herkunft {
+            sv::Herkunft::Datenbank(t) => {
+                ui.colored_label(stufe_color(Stufe::Gut), tr!("📚 Service-Kennungen aus der Fahrzeug-Datenbank — passend zum Kombi {a}.", a = t));
+            }
+            sv::Herkunft::Fahrzeug if cfg.kann_zuruecksetzen() => {
+                if let (Some(t), Some(v)) = (&kombi_teil, &veh) {
+                    let schon = sv::datenbank_wissen(t).config.as_ref() == Some(&cfg);
+                    ui.horizontal_wrapped(|ui| {
+                        if schon {
+                            ui.weak(tr!("In der Fahrzeug-Datenbank für Kombi {a} gespeichert ✓", a = t));
+                        } else if ui
+                            .button(tr!("📚 In die Fahrzeug-Datenbank übernehmen"))
+                            .on_hover_text(tr!("Dann findet jedes Auto mit dem Kombi {a} die Service-Rückstellung automatisch.", a = t))
+                            .clicked()
+                        {
+                            self.status = match sv::in_datenbank(v, &cfg) {
+                                Ok(t) => tr!("Service-Kennungen für Kombi {a} in der Fahrzeug-Datenbank gespeichert.", a = t),
+                                Err(e) => tr!("Datenbank: {e}", e = format!("{:#}", e)),
+                            };
+                        }
+                    });
+                }
+            }
+            _ => {}
+        }
+        if let Some(t) = &kombi_teil {
+            let namen = sv::datenbank_wissen(t).namen;
+            if !namen.is_empty() {
+                egui::CollapsingHeader::new(tr!("Service-Anpassungen dieses Kombis laut Fahrzeug-Datenbank ({a})", a = namen.len())).id_source("svz_db_namen").show(ui, |ui| {
+                    ui.weak(tr!("Nur die Namen — welche Kennung dahintersteckt und welcher Wert bei der Rückstellung geschrieben wird, lernt ECUWerkbank unten einmal am Auto."));
+                    for n in namen {
+                        ui.label(format!("· {n}"));
+                    }
+                });
+            }
         }
 
         // --- Werte ---

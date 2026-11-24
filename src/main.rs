@@ -176,6 +176,8 @@ enum ServiceAktion {
     Lesen,
     /// Anleitung: Service über die Tasten am Kombi zurückstellen
     Anleitung,
+    /// Service-Kennungen des Fahrzeugs in die Fahrzeug-Datenbank übernehmen (für alle Kombis mit derselben Teilenummer)
+    InDatenbank,
     /// Alle Kennungen des Kombis merken (nur lesen), z. B. --name vorher / nachher / ruhe
     Merken {
         #[arg(long, default_value = "vorher")]

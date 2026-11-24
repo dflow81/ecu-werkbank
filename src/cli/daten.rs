@@ -43,6 +43,12 @@ pub(super) fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std:
                 for zeile in w.diagnose.iter().flat_map(|d| d.zeilen()) {
                     println!("  {zeile}");
                 }
+                if let Some(c) = &w.service {
+                    println!("{}", tr!("  Service-Rückstellung ({a} Kennung(en)):", a = c.werte.len()));
+                    for z in c.vorschau() {
+                        println!("    {z}");
+                    }
+                }
                 for f in &w.fehler {
                     println!("{}", tr!("  Fehler {a}: {b}", a = f.code, b = f.text));
                 }

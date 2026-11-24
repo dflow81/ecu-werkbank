@@ -587,13 +587,94 @@ pub fn bereiche(be: &Backend) -> Vec<(u16, u16)> {
     }
 }
 
-/// Einstellungen: aus dem Fahrzeug, sonst Demo bzw. Kombi-Standard ohne Kennungen.
-pub fn config_fuer(be: &Backend, v: Option<&crate::vehicle::Vehicle>) -> Config {
-    match v.and_then(|v| v.service.clone()) {
-        Some(c) => c,
-        None if ist_demo(be) => demo_config(),
-        None => Config::default(),
+/// Woher die Service-Einstellungen stammen.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Herkunft {
+    /// selbst eingerichtet, im Fahrzeug gespeichert
+    Fahrzeug,
+    /// aus der Fahrzeug-Datenbank, passend zur Kombi-Teilenummer
+    Datenbank(String),
+    Demo,
+    /// noch nichts eingerichtet
+    Keine,
+}
+
+/// Was die Fahrzeug-Datenbank zu einem Kombi weiß: Service-Kennungen und die
+/// Namen seiner Service-Anpassungen (nur zur Info, z. B. „WIV: Wegstrecke ab Inspektion“).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DbWissen {
+    pub config: Option<Config>,
+    pub namen: Vec<String>,
+}
+
+fn db_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, DbWissen>> {
+    static C: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, DbWissen>>> = std::sync::OnceLock::new();
+    C.get_or_init(Default::default)
+}
+
+/// Nach Änderungen an der Datenbank (Import, Speichern) neu nachschlagen.
+pub fn datenbank_neu_laden() {
+    db_cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+/// Service-Wissen der Datenbank zu einer Kombi-Teilenummer (zwischengespeichert).
+pub fn datenbank_wissen(teilenummer: &str) -> DbWissen {
+    let mut c = db_cache().lock().unwrap_or_else(|e| e.into_inner());
+    c.entry(teilenummer.to_string())
+        .or_insert_with(|| {
+            let Some(w) = crate::db::teile::wissen_falls_vorhanden(teilenummer) else { return DbWissen::default() };
+            let ist_service = |n: &str| {
+                let n = n.to_lowercase();
+                ["service", "inspektion", "ölwechsel", "oelwechsel", "wartungsintervall", "wiv:", "sia:"].iter().any(|s| n.contains(s))
+            };
+            let mut namen: Vec<String> = w.diagnose.iter().flat_map(|d| d.uds_anpassungen.iter()).map(|a| a.name.clone()).filter(|n| ist_service(n)).collect();
+            namen.sort();
+            namen.dedup();
+            DbWissen { config: w.service, namen }
+        })
+        .clone()
+}
+
+/// Teilenummer des Kombis aus der letzten Software-Sicherung des Fahrzeugs.
+pub fn kombi_teilenummer(v: &crate::vehicle::Vehicle) -> Option<String> {
+    let tx = v.service.as_ref().map_or_else(kombi_tx, |c| c.tx);
+    crate::swinfo::teilenummer_fuer(&v.key, tx).filter(|t| !t.trim().is_empty())
+}
+
+/// Einstellungen samt Herkunft: im Fahrzeug eingerichtet (wenn damit
+/// zurückgestellt werden kann), sonst aus der Fahrzeug-Datenbank über die
+/// Kombi-Teilenummer, sonst was im Fahrzeug steht (nur lesen) bzw. Demo.
+pub fn config_mit_herkunft(be: &Backend, v: Option<&crate::vehicle::Vehicle>) -> (Config, Herkunft) {
+    let eigen = v.and_then(|v| v.service.clone()).filter(|c| !c.werte.is_empty());
+    if let Some(c) = eigen.as_ref().filter(|c| c.kann_zuruecksetzen()) {
+        return (c.clone(), Herkunft::Fahrzeug);
     }
+    if eigen.is_none() && ist_demo(be) {
+        return (demo_config(), Herkunft::Demo);
+    }
+    if let Some(teil) = v.and_then(kombi_teilenummer) {
+        if let Some(c) = datenbank_wissen(&teil).config.filter(|c| c.kann_zuruecksetzen() || eigen.is_none()) {
+            return (c, Herkunft::Datenbank(teil));
+        }
+    }
+    match eigen {
+        Some(c) => (c, Herkunft::Fahrzeug),
+        None => (Config::default(), Herkunft::Keine),
+    }
+}
+
+/// Einstellungen: siehe [`config_mit_herkunft`].
+pub fn config_fuer(be: &Backend, v: Option<&crate::vehicle::Vehicle>) -> Config {
+    config_mit_herkunft(be, v).0
+}
+
+/// Die Einstellungen des Fahrzeugs in die Fahrzeug-Datenbank übernehmen (für
+/// alle Kombis mit derselben Teilenummer).
+pub fn in_datenbank(v: &crate::vehicle::Vehicle, c: &Config) -> Result<String> {
+    let teil = kombi_teilenummer(v).context(tr!("Kombi-Teilenummer unbekannt — erst einen Scan oder „Softwarestände“ lesen."))?;
+    crate::db::eigen::mit_db(|d| d.service_speichern(&teil, crate::trs!("Kombiinstrument"), Some(0x17), c))?;
+    datenbank_neu_laden();
+    Ok(teil)
 }
 
 /// Ordner für gemerkte Stände und Sicherungen (Fahrzeugordner; Demo: eigener Ordner).
@@ -802,5 +883,48 @@ mod tests {
         for (x, y) in v.iter().zip(&erwartet) {
             assert_eq!((x.did, &x.reset), (y.did, &y.reset));
         }
+    }
+
+    #[test]
+    fn rueckstellung_ueber_die_datenbank_fuer_gleiches_kombi() {
+        let _g = crate::history::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("ecuwb-svdb-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::env::set_var("VAG_DATA_DIR", &dir);
+        datenbank_neu_laden();
+        let kombi = |key: &str| {
+            let st = crate::swinfo::Stand {
+                created: "heute".into(),
+                timestamp: 1,
+                vin: None,
+                module: vec![crate::swinfo::ModulSw { protocol: "UDS".into(), adresse: "ID 0x714".into(), name: "Kombi".into(), teilenummer: "5K0920860F".into(), ..Default::default() }],
+            };
+            crate::swinfo::save(key, &st).unwrap();
+        };
+        let mut a = crate::vehicle::create("A-AA 1", "WVWZZZ1KZAM000001", "Golf A").unwrap();
+        let b = crate::vehicle::create("B-BB 2", "WVWZZZ1KZAM000002", "Golf B").unwrap();
+        kombi(&a.key);
+        kombi(&b.key);
+        let be = Backend::SocketCan { iface: "vcan9".into() };
+        assert_eq!(config_mit_herkunft(&be, Some(&b)).1, Herkunft::Keine);
+        // A lernt die Rückstellung und gibt sie an die Datenbank
+        let mut c = Config::default();
+        c.werte.push(Wert { art: Art::KmBisOelwechsel, did: 0x2203, offset: 0, laenge: 2, faktor: 1.0, vorzeichen: true, reset: "3A 98".into(), neu: None });
+        a.service = Some(c.clone());
+        crate::vehicle::save(&a).unwrap();
+        assert_eq!(config_mit_herkunft(&be, Some(&a)).1, Herkunft::Fahrzeug);
+        assert_eq!(in_datenbank(&a, &c).unwrap(), "5K0920860F");
+        // B (gleiches Kombi, nichts eingerichtet) findet sie automatisch
+        let (cb, h) = config_mit_herkunft(&be, Some(&b));
+        assert_eq!(h, Herkunft::Datenbank("5K0920860F".into()));
+        assert_eq!(cb, c);
+        assert!(cb.kann_zuruecksetzen());
+        // zweimal speichern ersetzt, legt nichts doppelt an
+        in_datenbank(&a, &c).unwrap();
+        let n: i64 = crate::db::eigen::mit_db(|d| Ok(d.con.query_row("SELECT COUNT(*) FROM ecu_service_config", [], |r| r.get(0))?)).unwrap();
+        assert_eq!(n, 1);
+        std::env::remove_var("VAG_DATA_DIR");
+        datenbank_neu_laden();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
