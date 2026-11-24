@@ -7,6 +7,7 @@
 //! 0x20 statt 0x09). Die Teilenummer („5K0937086“) steht in der Kennung jedes
 //! Steuergeräts und passt immer.
 
+use super::diagnosedaten::{self, DiagnoseReferenz};
 use super::paket::{PaketCodierung, PaketDid, PaketFehler};
 use super::Db;
 use anyhow::Result;
@@ -24,11 +25,12 @@ pub struct SgWissen {
     pub codierung: Vec<PaketCodierung>,
     pub dids: Vec<PaketDid>,
     pub fehler: Vec<PaketFehler>,
+    pub diagnose: Vec<DiagnoseReferenz>,
 }
 
 impl SgWissen {
     pub fn ist_leer(&self) -> bool {
-        self.anpassung.is_empty() && self.codierung.is_empty() && self.dids.is_empty() && self.fehler.is_empty()
+        self.anpassung.is_empty() && self.codierung.is_empty() && self.dids.is_empty() && self.fehler.is_empty() && self.diagnose.is_empty()
     }
 
     /// Name eines Anpassungskanals, falls bekannt.
@@ -44,6 +46,7 @@ impl SgWissen {
             (self.codierung.len(), crate::tr!("Codier-Bits")),
             (self.dids.len(), crate::tr!("Messwerte")),
             (self.fehler.len(), crate::tr!("Fehlertexte")),
+            (self.diagnose.iter().map(DiagnoseReferenz::anzahl).sum(), crate::tr!("Diagnosereferenzen")),
         ] {
             if n > 0 {
                 t.push(format!("{n} {w}"));
@@ -115,6 +118,12 @@ impl Db {
         let teilen = |s: String| -> Vec<String> { s.split(',').map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect() };
         for (_, id, teil, name) in bewertet.into_iter().filter(|(p, ..)| *p == beste) {
             w.teilenummer = norm(&teil);
+            if beste == 3 {
+                let daten = diagnosedaten::ecu_laden(&self.con, id)?;
+                if !daten.ist_leer() && !w.diagnose.contains(&daten) {
+                    w.diagnose.push(daten);
+                }
+            }
             if !name.trim().is_empty() {
                 w.name = name;
             }

@@ -130,10 +130,15 @@ impl App {
                 Ok(tp) => {
                     let uds = Uds::new(&*tp);
                     let stumm = uds.diagnostic_session(ecu_werkbank::uds::SESSION_DEFAULT).is_err();
+                    let mut teil = String::new();
                     for (did, name) in swinfo::STD_DIDS {
                         if let Ok(d) = uds.read_data_by_id(*did) {
                             if !d.is_empty() {
-                                zeilen.push((ecu_werkbank::i18n::t(name), swinfo::ident_wert(*did, &d)));
+                                let wert = swinfo::ident_wert(*did, &d);
+                                if *did == 0xF187 {
+                                    teil = wert.clone();
+                                }
+                                zeilen.push((ecu_werkbank::i18n::t(name), wert));
                             }
                         }
                     }
@@ -141,6 +146,9 @@ impl App {
                         if !d.is_empty() {
                             zeilen.push((tr!("Codierung (lang)"), ecu_werkbank::backup::hex(&d)));
                         }
+                    }
+                    if !teil.is_empty() {
+                        zeilen.extend(swinfo::datenbank_zeilen(&teil));
                     }
                     if stumm && zeilen.is_empty() {
                         tr!("Steuergerät {a} antwortet nicht (Zündung an?).", a = format!("{tx:#05x}"))

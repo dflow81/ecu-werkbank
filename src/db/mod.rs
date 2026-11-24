@@ -15,6 +15,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 pub mod api;
+pub mod diagnosedaten;
 pub mod eigen;
 pub mod import;
 pub mod inhalt;
@@ -24,7 +25,7 @@ pub mod paket;
 pub mod teile;
 
 /// Migrationen in Reihenfolge; Index + 1 = Schema-Version.
-const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql"), include_str!("schema_004.sql"), include_str!("schema_005.sql")];
+const MIGRATIONEN: &[&str] = &[include_str!("schema_001.sql"), include_str!("schema_002.sql"), include_str!("schema_003.sql"), include_str!("schema_004.sql"), include_str!("schema_005.sql"), include_str!("schema_006.sql")];
 
 /// Aktuelle Schema-Version dieses Programms.
 pub const SCHEMA_VERSION: u32 = MIGRATIONEN.len() as u32;
@@ -93,6 +94,13 @@ pub struct Quelle {
     pub herkunft: String,
     pub importiert: String,
     pub zeilen: u64,
+    pub nur_lokal: bool,
+}
+
+impl Quelle {
+    pub fn ist_teilbar(&self) -> bool {
+        !self.nur_lokal && darf_weitergeben(self.art, &self.lizenz)
+    }
 }
 
 /// Was ein Import angelegt hat.
@@ -107,6 +115,9 @@ pub struct ImportErgebnis {
     pub botschaften: usize,
     pub signale: usize,
     pub fehlerarten: usize,
+    pub diagnosereferenzen: usize,
+    pub fehleralternativen: usize,
+    pub fehlerkombinationen: usize,
 }
 
 impl ImportErgebnis {
@@ -121,6 +132,9 @@ impl ImportErgebnis {
             (self.botschaften, crate::trs!("CAN-Botschaften")),
             (self.signale, crate::trs!("CAN-Signale")),
             (self.fehlerarten, crate::trs!("Fehlerarten")),
+            (self.diagnosereferenzen, crate::trs!("Diagnosereferenzen")),
+            (self.fehleralternativen, crate::trs!("alternative Fehlertexte")),
+            (self.fehlerkombinationen, crate::trs!("Fehlerkombinationen")),
         ] {
             if n > 0 {
                 t.push(format!("{n} {was}"));
@@ -239,6 +253,8 @@ impl Db {
              + (SELECT COUNT(*) FROM coding_item WHERE source_id = s.id)
              + (SELECT COUNT(*) FROM adaptation WHERE source_id = s.id)
              + (SELECT COUNT(*) FROM can_message WHERE source_id = s.id)
+             + (SELECT COUNT(*) FROM dtc_alternative WHERE source_id = s.id)
+             + (SELECT COUNT(*) FROM dtc_combination WHERE source_id = s.id), local_only
              FROM data_source s ORDER BY id",
         )?;
         let v = st
@@ -253,6 +269,7 @@ impl Db {
                     herkunft: r.get(5)?,
                     importiert: r.get(6)?,
                     zeilen: r.get::<_, i64>(7)? as u64,
+                    nur_lokal: r.get(8)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -316,9 +333,16 @@ impl Db {
     }
 
     /// Alle Fehlertexte (Code → Text); bei mehreren Quellen gewinnt die neueste.
+    /// Codes ohne eigentlichen Text bekommen ihren (ersten) Alternativtext — die
+    /// stehen vorne, damit ein echter Text sie beim Einsammeln überschreibt.
     pub fn alle_fehlertexte(&self) -> Result<Vec<(String, String)>> {
+        let mut st = self.con.prepare(
+            "SELECT code, MIN(text) FROM dtc_alternative
+              WHERE code NOT IN (SELECT dtc_code FROM dtc WHERE title <> '') GROUP BY code",
+        )?;
+        let mut v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
         let mut st = self.con.prepare("SELECT dtc_code, title FROM dtc WHERE title <> '' ORDER BY source_id")?;
-        let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        v.extend(st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?);
         Ok(v)
     }
 
@@ -727,10 +751,14 @@ mod tests {
             db.con.execute("INSERT INTO dtc (dtc_code, title, source_id) VALUES ('P0301', 'alt', ?1)", params![q]).unwrap();
             let q2 = db.quelle_anlegen(QuellArt::User, "b", "", "", "").unwrap();
             db.con.execute("INSERT INTO dtc (dtc_code, title, source_id) VALUES ('P0301', 'neu', ?1)", params![q2]).unwrap();
+            db.con.execute("INSERT INTO dtc_alternative VALUES (?1, 'P0301', 'Alternativ 1')", params![q]).unwrap();
+            db.con.execute("INSERT INTO dtc_alternative VALUES (?1, 'P0302', 'Zyl. 2 B')", params![q]).unwrap();
+            db.con.execute("INSERT INTO dtc_alternative VALUES (?1, 'P0302', 'Zyl. 2 A')", params![q]).unwrap();
         }
         let db = Db::nur_lesen(&p).unwrap();
         let m: std::collections::HashMap<_, _> = db.alle_fehlertexte().unwrap().into_iter().collect();
         assert_eq!(m["P0301"], "neu", "neueste Quelle gewinnt");
+        assert_eq!(m["P0302"], "Zyl. 2 A", "ohne Text: Alternativtext");
         assert!(db.quelle_anlegen(QuellArt::User, "x", "", "", "").is_err(), "nur lesen");
         drop(db);
         let _ = std::fs::remove_dir_all(&dir);

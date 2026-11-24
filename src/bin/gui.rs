@@ -737,6 +737,8 @@ struct App {
     /// „Eigene Namen“: Steuergerät, dessen Blöcke gelesen werden
     tp_block_key: (u8, u8),
     mw_texte: ecu_werkbank::messwerttexte::Texte,
+    /// Teilenummern, deren Datenbank-Wissen in `mw_texte` steckt (Adresse → Teilenummer)
+    mw_teile: std::collections::BTreeMap<u8, String>,
     /// Grundeinstellung (TP 2.0): Gruppe, gelernter-aber-noch-nicht-übernommener Ablauf,
     /// Rückfrage offen, laufender Ablauf (Stopp-Schalter + Meldungen), letzte Werte/Status
     ge_gruppe: String,

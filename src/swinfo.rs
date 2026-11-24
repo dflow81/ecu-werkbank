@@ -63,6 +63,20 @@ pub const STD_DIDS: &[(u16, &str)] = &[
     (0xF186, "Aktive Diagnosesitzung"),
 ];
 
+/// Was die Fahrzeug-Datenbank zur Teilenummer weiß, als Zeilen für die
+/// Identifikation: Zusammenfassung und ASAM-Datensätze (zum Vergleich mit F19E).
+/// Leer, wenn die Datenbank die Teilenummer nicht kennt.
+pub fn datenbank_zeilen(teilenummer: &str) -> Vec<(String, String)> {
+    let Some(w) = crate::db::teile::wissen_falls_vorhanden(teilenummer) else { return Vec::new() };
+    let mut z = vec![(tr!("Fahrzeug-Datenbank"), w.zusammenfassung())];
+    for r in &w.diagnose {
+        for a in &r.asam {
+            z.push((tr!("ASAM-Datensatz (Datenbank)"), format!("{} {} · {}", a.name, a.version, a.rod)));
+        }
+    }
+    z
+}
+
 /// Ein Datum (Programmierdatum) aus BCD-Bytes JJ MM TT lesbar machen.
 fn vielleicht_datum(d: &[u8]) -> Option<String> {
     if d.len() == 3 && d.iter().all(|b| (*b >> 4) <= 9 && (*b & 0xF) <= 9) {

@@ -46,6 +46,9 @@ pub(super) fn kwp_ident(be: &Backend, address: u8) -> Result<()> {
     for s in &lines {
         println!("  {s}");
     }
+    for (a, b) in ecu_werkbank::swinfo::datenbank_zeilen(&ecu_werkbank::verbauliste::teilenummer(&lines)) {
+        println!("  {a}: {b}");
+    }
     if data.is_empty() {
         return Ok(());
     }
@@ -318,10 +321,15 @@ pub(super) fn ident_cmd(be: &Backend, geraet: u16, rx: Option<u16>) -> Result<()
     let uds = Uds::new(&*tp);
     uds.diagnostic_session(ecu_werkbank::uds::SESSION_DEFAULT).context(tr!("Steuergerät antwortet nicht (Zündung an?)"))?;
     let mut gelesen = 0;
+    let mut teil = String::new();
     for (did, name) in swinfo::STD_DIDS {
         match uds.read_data_by_id(*did) {
             Ok(d) if !d.is_empty() => {
-                println!("  {a:<32} {b}", a = name, b = swinfo::ident_wert(*did, &d));
+                let wert = swinfo::ident_wert(*did, &d);
+                println!("  {a:<32} {b}", a = name, b = wert);
+                if *did == 0xF187 {
+                    teil = wert;
+                }
                 gelesen += 1;
             }
             _ => {}
@@ -336,6 +344,9 @@ pub(super) fn ident_cmd(be: &Backend, geraet: u16, rx: Option<u16>) -> Result<()
     }
     if gelesen == 0 {
         println!("{}", tr!("Keine Kennfelder gelesen — spricht das Gerät UDS? (TP 2.0: kwp-ident nutzen)"));
+    }
+    for (a, b) in swinfo::datenbank_zeilen(&teil) {
+        println!("  {a:<32} {b}");
     }
     Ok(())
 }
@@ -516,7 +527,10 @@ pub(super) fn kwp_coding(be: &Backend, address: u8, db: &LabelDb) -> Result<()> 
 
 /// Alle Blöcke von `von` bis `bis` lesen; nicht vorhandene still überspringen.
 pub(super) fn kwp_blockscan(be: &Backend, address: u8, von: u8, bis: u8) -> Result<()> {
-    let texte = ecu_werkbank::messwerttexte::Texte::laden();
+    let texte = ecu_werkbank::messwerttexte::Texte::laden_fuer(be, address);
+    if texte.hat_wissen(address) {
+        println!("{}", tr!("Feldnamen und Sollwerte aus der Fahrzeug-Datenbank (über die Teilenummer)."));
+    }
     println!("{}", tr!("Blockscan Steuergerät {a}, Block {b}–{c} (nur lesen) …", a = format!("{address:02X}"), b = von, c = bis));
     let gefunden = kwp::blockscan(be, address, von, bis, |_| {})?;
     for (block, v) in &gefunden {
@@ -587,8 +601,12 @@ pub(super) fn kwp_block(
     interval: u64,
     db: &LabelDb,
 ) -> Result<()> {
+    // Teilenummer zuerst lesen (eigener Kanal), danach den Kanal für die Blöcke öffnen
+    let texte = ecu_werkbank::messwerttexte::Texte::laden_fuer(be, address);
+    if texte.hat_wissen(address) {
+        println!("{}", tr!("Feldnamen und Sollwerte aus der Fahrzeug-Datenbank (über die Teilenummer)."));
+    }
     let mut ch = kwp_open(be, address)?;
-    let texte = ecu_werkbank::messwerttexte::Texte::laden();
     for &block in blocks {
         let name = texte.block(address, block).map(str::to_string).or_else(|| db.measuring(u16::from(address), u16::from(block)).map(|m| m.name.clone()).filter(|n| !n.is_empty()));
         if let Some(n) = name {

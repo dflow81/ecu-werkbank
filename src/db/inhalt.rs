@@ -28,6 +28,8 @@ pub struct Inhalt {
     pub fehler: Vec<PaketFehler>,
     /// Fehlerarten („defekt“ …) je Protokoll
     pub fehlerarten: Vec<PaketFehlerart>,
+    pub fehleralternativen: usize,
+    pub fehlerkombinationen: usize,
     pub can: Vec<CanBotschaft>,
 }
 
@@ -46,6 +48,9 @@ impl Inhalt {
             (c, crate::tr!("Codier-Einträge")),
             (a, crate::tr!("Anpassungskanäle")),
             (self.fehlerarten.len(), crate::tr!("Fehlerarten")),
+            (self.steuergeraete.iter().map(|(_, _, s)| s.diagnosereferenz.anzahl()).sum(), crate::tr!("Diagnosereferenzen")),
+            (self.fehleralternativen, crate::tr!("alternative Fehlertexte")),
+            (self.fehlerkombinationen, crate::tr!("Fehlerkombinationen")),
             (self.can.len(), crate::tr!("CAN-Botschaften")),
             (sig, crate::tr!("CAN-Signale")),
         ];
@@ -231,7 +236,9 @@ impl Db {
                 .collect::<rusqlite::Result<_>>()?;
             can.push(CanBotschaft { id, can_id, name, dlc, signale });
         }
-        Ok(Inhalt { quelle: q, steuergeraete, fehler, fehlerarten, can })
+        let fehleralternativen = self.con.query_row("SELECT COUNT(*) FROM dtc_alternative WHERE source_id = ?1", [quelle], |r| r.get::<_, i64>(0))? as usize;
+        let fehlerkombinationen = self.con.query_row("SELECT COUNT(*) FROM dtc_combination WHERE source_id = ?1", [quelle], |r| r.get::<_, i64>(0))? as usize;
+        Ok(Inhalt { quelle: q, steuergeraete, fehler, fehlerarten, fehleralternativen, fehlerkombinationen, can })
     }
 }
 

@@ -31,3 +31,7 @@ Scan-*.txt
 .idea/
 *.swp
 .DS_Store
+
+# Werbevideo: nur das fertige Video ins Repo, Arbeitsdateien bleiben lokal
+/werbevideo/*
+!/werbevideo/ECUWerkbank-Werbespot.mp4

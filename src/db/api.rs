@@ -73,7 +73,7 @@ type Antwort = std::result::Result<Value, Fehler>;
 
 /// Bedingung: Zeile stammt nicht aus selbst gekauften Herstellerdaten (ODX/PDX) —
 /// die verlassen die Datenbank nie, auch nicht über diese Schnittstelle.
-const TEILBAR: &str = "source_id NOT IN (SELECT id FROM data_source WHERE source_type IN ('ODX', 'PDX'))";
+const TEILBAR: &str = "source_id NOT IN (SELECT id FROM data_source WHERE source_type IN ('ODX', 'PDX') OR local_only = 1)";
 
 fn zahl(s: &str) -> std::result::Result<i64, Fehler> {
     s.parse().map_err(|_| Fehler::Anfrage(format!("„{s}“ ist keine Nummer")))
@@ -88,6 +88,7 @@ fn quellen(db: &Db) -> Antwort {
     Ok(Value::Array(
         db.quellen()?
             .into_iter()
+            .filter(|q| !q.nur_lokal)
             .map(|q| json!({ "id": q.id, "art": q.art.text(), "name": q.name, "version": q.version, "lizenz": q.lizenz, "herkunft": q.herkunft, "importiert": q.importiert, "eintraege": q.zeilen }))
             .collect(),
     ))
@@ -139,7 +140,7 @@ fn steuergeraet(db: &Db, id: i64) -> Antwort {
 }
 
 fn fehler(db: &Db, code: &str) -> Antwort {
-    let mut st = db.con.prepare("SELECT d.dtc_code, d.title, d.ecu_id, d.source_id, s.source_name FROM dtc d JOIN data_source s ON s.id = d.source_id WHERE d.dtc_code = ?1 AND s.source_type NOT IN ('ODX', 'PDX') ORDER BY d.source_id DESC")?;
+    let mut st = db.con.prepare("SELECT d.dtc_code, d.title, d.ecu_id, d.source_id, s.source_name FROM dtc d JOIN data_source s ON s.id = d.source_id WHERE d.dtc_code = ?1 AND s.source_type NOT IN ('ODX', 'PDX') AND s.local_only = 0 ORDER BY d.source_id DESC")?;
     let v = st
         .query_map(params![code.trim().to_ascii_uppercase()], |r| {
             Ok(json!({ "code": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?, "steuergeraet": r.get::<_, Option<i64>>(2)?, "quelle": r.get::<_, i64>(3)?, "quelle_name": r.get::<_, String>(4)? }))

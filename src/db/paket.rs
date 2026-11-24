@@ -27,6 +27,7 @@
 //!
 //! Export nimmt nur Quellen, die [`super::darf_weitergeben`] erlaubt.
 
+use super::diagnosedaten::{self, DiagnoseReferenz, Fehlerkombination};
 use super::{Db, ImportErgebnis, QuellArt};
 use anyhow::{bail, Context, Result};
 use rusqlite::params;
@@ -45,6 +46,10 @@ pub struct Datenpaket {
     /// Fehlerarten („defekt“, „Kurzschluss nach Plus“ …) je Protokoll
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fehlerart: Vec<PaketFehlerart>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fehleralternative: Vec<PaketFehler>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fehlerkombination: Vec<Fehlerkombination>,
 }
 
 /// Eine Fehlerart. `protokoll`: TP20 (Nummer 0–15 aus dem Statusbyte),
@@ -59,6 +64,7 @@ pub struct PaketFehlerart {
 
 /// Sollwerte und Stellfunktionen eines Steuergeräts schreiben (Import und Editor).
 pub(crate) fn zusatz_eintragen(con: &rusqlite::Connection, ecu: i64, s: &PaketSteuergeraet, quelle: i64) -> Result<()> {
+    diagnosedaten::ecu_eintragen(con, ecu, &s.diagnosereferenz)?;
     for w in &s.sollwert {
         con.execute(
             "INSERT INTO sollwert (ecu_id, quelle, kennung, feld, min, max, name, source_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -73,6 +79,7 @@ pub(crate) fn zusatz_eintragen(con: &rusqlite::Connection, ecu: i64, s: &PaketSt
 
 /// Sollwerte und Stellfunktionen eines Steuergeräts lesen.
 pub(crate) fn zusatz_laden(con: &rusqlite::Connection, ecu: i64, s: &mut PaketSteuergeraet) -> Result<()> {
+    s.diagnosereferenz = diagnosedaten::ecu_laden(con, ecu)?;
     let mut st = con.prepare("SELECT quelle, kennung, feld, min, max, name FROM sollwert WHERE ecu_id = ?1 ORDER BY id")?;
     s.sollwert = st
         .query_map(params![ecu], |r| Ok(crate::labels::Sollwert { quelle: r.get(0)?, id: r.get(1)?, feld: r.get(2)?, min: r.get(3)?, max: r.get(4)?, name: r.get(5)? }))?
@@ -118,6 +125,8 @@ pub struct PaketQuelle {
     pub lizenz: String,
     #[serde(default)]
     pub herkunft: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nur_lokal: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -164,6 +173,8 @@ pub struct PaketSteuergeraet {
     /// Stellfunktionen (Steuergerät stellt einen Wert selbst ein)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stellfunktion: Vec<crate::control::Stellfunktion>,
+    #[serde(default, skip_serializing_if = "DiagnoseReferenz::ist_leer")]
+    pub diagnosereferenz: DiagnoseReferenz,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -257,7 +268,16 @@ impl Db {
         let tx = self.con.unchecked_transaction()?;
         tx.execute("DELETE FROM data_source WHERE source_type = ?1 AND source_name = ?2", params![art.text(), p.quelle.name])?;
         let q = self.quelle_anlegen(art, &p.quelle.name, &p.quelle.version, &p.quelle.lizenz, &p.quelle.herkunft)?;
-        let mut erg = ImportErgebnis { quelle_id: q, ..Default::default() };
+        if p.quelle.nur_lokal {
+            tx.execute("UPDATE data_source SET local_only = 1 WHERE id = ?1", [q])?;
+        }
+        diagnosedaten::fehler_eintragen(&tx, q, &p.fehleralternative, &p.fehlerkombination)?;
+        let mut erg = ImportErgebnis {
+            quelle_id: q,
+            fehleralternativen: p.fehleralternative.len(),
+            fehlerkombinationen: p.fehlerkombination.len(),
+            ..Default::default()
+        };
         for f in &p.fehler {
             tx.execute("INSERT INTO dtc (dtc_code, title, source_id) VALUES (?1, ?2, ?3)", params![norm_code(&f.code), f.text, q])?;
             erg.fehler += 1;
@@ -301,6 +321,7 @@ impl Db {
                     erg.anpassung += 1;
                 }
                 zusatz_eintragen(&tx, ecu, s, q)?;
+                erg.diagnosereferenzen += s.diagnosereferenz.anzahl();
             }
         }
         tx.commit()?;
@@ -414,13 +435,13 @@ impl Db {
         let mut weggelassen = Vec::new();
         let mut erlaubt = Vec::new();
         for q in self.quellen()? {
-            if super::darf_weitergeben(q.art, &q.lizenz) {
+            if q.ist_teilbar() {
                 erlaubt.push(q.id);
             } else {
                 weggelassen.push(format!("{} „{}“", q.art.text(), q.name));
             }
         }
-        let mut p = Datenpaket { quelle: PaketQuelle { name: name.into(), version: String::new(), lizenz: lizenz.into(), herkunft: crate::tr!("Export aus ECUWerkbank") }, ..Default::default() };
+        let mut p = Datenpaket { quelle: PaketQuelle { name: name.into(), version: String::new(), lizenz: lizenz.into(), herkunft: crate::tr!("Export aus ECUWerkbank"), nur_lokal: false }, ..Default::default() };
         let mut hst = self.con.prepare("SELECT id, name, vin_wmi FROM manufacturer ORDER BY name")?;
         let hersteller: Vec<(i64, String, String)> = hst.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<rusqlite::Result<_>>()?;
         let mut est = self.con.prepare(
@@ -470,6 +491,15 @@ impl Db {
                 p.fehlerart.push(PaketFehlerart { protokoll, nr, text });
             }
         }
+        for quell_id in erlaubt {
+            let (mut alternativ, mut kombinationen) = self.diagnose_fehlertabellen(quell_id)?;
+            p.fehleralternative.append(&mut alternativ);
+            p.fehlerkombination.append(&mut kombinationen);
+        }
+        p.fehleralternative.sort_by(|a, b| (&a.code, &a.text).cmp(&(&b.code, &b.text)));
+        p.fehleralternative.dedup();
+        p.fehlerkombination.sort_by_key(|a| (a.code.clone(), a.fehlerart, std::cmp::Reverse(a.gruppen)));
+        p.fehlerkombination.dedup_by(|a, b| a.code == b.code && a.fehlerart == b.fehlerart);
         Ok((p, weggelassen))
     }
 

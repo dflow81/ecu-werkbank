@@ -88,6 +88,12 @@ enum DbAktion {
         /// z. B. 5K0937086 oder "1K0 907 379 CD"
         teilenummer: String,
     },
+    /// Katalog zu einem Fehlercode abfragen, optional mit UDS-Fehlerart
+    Fehler {
+        code: String,
+        #[arg(long)]
+        art: Option<String>,
+    },
     /// Normdaten und die mitgelieferten Community-Daten übernehmen/aktualisieren
     Eingebaut,
     /// Beliebige Datei übernehmen — die Art wird erkannt (DBC, Datenpaket, Label, CSV, ODX/PDX)

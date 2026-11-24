@@ -120,7 +120,9 @@ impl App {
         let f = ecu_werkbank::history::data_dir().join("aktives-fahrzeug");
         let _ = ecu_werkbank::ablage::schreiben(f, self.active_vehicle.clone().unwrap_or_default());
         // Labeldateien passen zu den Steuergeräten des Fahrzeugs
-        self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
+        // anderes Auto, andere Teilenummern: Datenbank-Wissen neu zuordnen
+        self.mw_teile.clear();
+        self.mw_texte_neu_laden();
         if let Some(k) = &self.active_vehicle {
             self.hist_vehicle = k.clone();
             self.hist_refresh();

@@ -99,14 +99,20 @@ pub fn run(be: &Backend, db: &LabelDb, km_tacho: Option<u32>, mut progress: impl
     };
 
     // 4. Messwertblöcke Motor (TP 2.0)
-    if let Some(a) = modules.iter().find(|m| m.protocol == "TP 2.0" && m.name.starts_with("Motor")).and_then(|m| m.address) {
+    let motor = modules.iter().find(|m| m.protocol == "TP 2.0" && m.name.starts_with("Motor"));
+    if let Some(a) = motor.and_then(|m| m.address) {
+        // Feldnamen und Sollwerte aus der Fahrzeug-Datenbank (über die Teilenummer)
+        let mut texte = crate::messwerttexte::Texte::laden();
+        let teil = motor.map(|m| crate::verbauliste::teilenummer(&m.ident)).unwrap_or_default();
+        if !teil.is_empty() {
+            texte.teilenummer_setzen(a as u8, &teil);
+        }
         progress(crate::trs!("Messwertblöcke Motor…"));
         let mut z = Vec::new();
         match crate::kwp::open_session(be, a as u8) {
             Ok(mut ch) => {
                 let mut k = crate::kwp::Kwp::new(&mut ch);
                 let mut fehler_folge = 0;
-                let texte = crate::messwerttexte::Texte::laden();
                 for block in 1..=30u8 {
                     match k.read_block(block) {
                         Ok(vals) => {

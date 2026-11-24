@@ -5,6 +5,23 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
+- **Diagnose-Referenzen in der Fahrzeug-Datenbank:** Lokale Datenpakete können Diagnose-Referenzen
+  zu Steuergeräten, alternative Fehlertexte und UDS-Fehlerkombinationen importieren
+  (`nur_lokal = true` hält eine Quelle vom Export und der Schnittstelle fern). Die Datenbank
+  zeigt die Referenzen nach Teilenummer; „Fehler suchen“ bzw. `db fehler <code> --art <hex>`
+  sucht Fehlercode und Fehlerart zusammen.
+- **Diagnose-Referenzen werden überall genutzt:** Messwertblöcke (TP 2.0) zeigen Feldnamen und
+  Sollbereiche aus der Datenbank, passend zur Teilenummer des Steuergeräts — im Reiter TP 2.0,
+  im Blockscan, in der Live-Grafik, im Testlauf, im Fahrt-Rekorder und bei `kwp-block`/
+  `kwp-blockscan`. Eigene Texte haben Vorrang. Sollwerte mit Bedingung („Leerlauf“, „Warm“)
+  werden nur grün markiert, wenn der Wert passt — außerhalb steht nur der Hinweis, weil
+  ECUWerkbank nicht weiß, ob die Bedingung gerade erfüllt ist. Ohne vorherigen Scan liest die
+  GUI die Teilenummer beim ersten Lesen selbst (nur lesen).
+- Fehlercodes ohne eigentlichen Text bekommen den Alternativtext aus der Datenbank.
+- Fehlersuche in der Datenbank zeigt die Fehlerart mit Text („13 (Unterbrechung)“).
+- Erweiterte Identifikation (UDS und TP 2.0) zeigt, was die Datenbank zur Teilenummer weiß,
+  samt ASAM-Datensatz zum Vergleich mit dem Wert des Steuergeräts (F19E).
+- Werbevideo `werbevideo/ECUWerkbank-Werbespot.mp4`.
 - **QR-Code für die Handy-Anzeige:** Beim Einschalten von „📱 Handy-Anzeige“ (Live-Grafik)
   erscheint ein Fenster mit QR-Code — mit der Handy-Kamera scannen, schon laufen die
   Messwerte im Handy-Browser (gleiches WLAN). Knopf „▦ QR-Code“ neben der Adresse; im

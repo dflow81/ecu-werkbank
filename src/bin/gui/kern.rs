@@ -377,6 +377,7 @@ impl App {
             bn_roh_aus: true,
             tp_block_key: (0, 0),
             mw_texte: ecu_werkbank::messwerttexte::Texte::laden(),
+            mw_teile: Default::default(),
             favoriten: ecu_werkbank::favoriten::alle(),
             ge_gruppe: String::new(),
             ge_neu: None,
@@ -447,6 +448,7 @@ impl App {
         ecu_werkbank::dtc_db::fehlerarten_neu_laden();
         self.an_wissen = None;
         self.code_wissen = None;
+        self.mw_texte_neu_laden();
         *self.diesel_cache.borrow_mut() = None;
         self.dbs_zaehler_neu();
     }

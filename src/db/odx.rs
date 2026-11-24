@@ -144,10 +144,9 @@ pub fn lesen(pfad: &std::path::Path, hersteller: &str) -> Result<(Datenpaket, su
     }
     let dateiname = pfad.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let p = Datenpaket {
-        quelle: PaketQuelle { name: dateiname, version: String::new(), lizenz: crate::tr!("eigene Lizenz des Nutzers — nicht weitergeben"), herkunft: pfad.display().to_string() },
+        quelle: PaketQuelle { name: dateiname, version: String::new(), lizenz: crate::tr!("eigene Lizenz des Nutzers — nicht weitergeben"), herkunft: pfad.display().to_string(), nur_lokal: false },
         hersteller: vec![PaketHersteller { name: hersteller.to_string(), wmi: Vec::new(), steuergeraete }],
-        fehler: Vec::new(),
-        fehlerart: Vec::new(),
+        ..Default::default()
     };
     Ok((p, if pdx { super::QuellArt::Pdx } else { super::QuellArt::Odx }))
 }

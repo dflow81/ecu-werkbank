@@ -38,6 +38,8 @@ pub(super) struct DatenbankSeite {
     bearbeitung: Option<Bearbeitung>,
     teil_suche: String,
     teil_ergebnis: Vec<String>,
+    fehler_suche: String,
+    fehler_ergebnis: Vec<String>,
     /// Anzahl eigener Texte je Bereich (zwischengespeichert)
     eigene_anzahl: Option<Vec<usize>>,
 }
@@ -61,6 +63,8 @@ impl Default for DatenbankSeite {
             bearbeitung: None,
             teil_suche: String::new(),
             teil_ergebnis: Vec::new(),
+            fehler_suche: String::new(),
+            fehler_ergebnis: Vec::new(),
             eigene_anzahl: None,
         }
     }
@@ -146,7 +150,7 @@ impl App {
             for q in &quellen {
                 ui.monospace(q.art.text());
                 ui.label(&q.name);
-                if db::darf_weitergeben(q.art, &q.lizenz) {
+                if q.ist_teilbar() {
                     ui.label(if q.lizenz.is_empty() { "–".to_string() } else { q.lizenz.clone() });
                 } else {
                     ui.weak(tr!("bleibt lokal")).on_hover_text(tr!("Ohne Lizenz oder selbst gekaufte Herstellerdaten: wird nie exportiert oder über die Schnittstelle ausgegeben."));
@@ -237,6 +241,7 @@ impl App {
                         z.extend(w.anpassung.iter().map(|(k, n)| tr!("  Anpassung Kanal {a}: {b}", a = format!("{k:03}"), b = n)));
                         z.extend(w.codierung.iter().map(|c| tr!("  Codierung {a}: {b}", a = c.bit.map(|b| format!("{}.{}", c.byte, b)).unwrap_or_else(|| c.byte.to_string()), b = c.name)));
                         z.extend(w.dids.iter().map(|d| tr!("  Messwert {a}: {b} {c}", a = format!("{:#06x}", d.did), b = d.name, c = d.einheit)));
+                        z.extend(w.diagnose.iter().flat_map(|d| d.zeilen()));
                         z.extend(w.fehler.iter().map(|f| tr!("  Fehler {a}: {b}", a = f.code, b = f.text)));
                         z
                     }
@@ -244,6 +249,29 @@ impl App {
                 };
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("Fehlercode und optionale Fehlerart:"));
+            let suchfeld = ui.add(egui::TextEdit::singleline(&mut self.dbs.fehler_suche).desired_width(140.0).hint_text("B1054 13"));
+            if ui.button(tr!("Fehler suchen")).clicked() || suchfeld.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let mut teile = self.dbs.fehler_suche.split_whitespace();
+                let code = teile.next().unwrap_or_default();
+                let art = teile.next().map(|a| u8::from_str_radix(a.trim_start_matches("0x").trim_start_matches("0X"), 16)).transpose();
+                self.dbs.fehler_ergebnis = match art {
+                    Ok(art) if !code.is_empty() && teile.next().is_none() => match mit_db(|d| d.fehlerreferenz(code, art)) {
+                        Ok(treffer) => treffer.zeilen(),
+                        Err(e) => vec![format!("{e:#}")],
+                    },
+                    _ => vec![tr!("Bitte einen Fehlercode und optional eine hexadezimale Fehlerart eingeben.")],
+                };
+            }
+        });
+        if !self.dbs.fehler_ergebnis.is_empty() {
+            egui::ScrollArea::vertical().id_source("fehlerreferenz").max_height(160.0).show(ui, |ui| {
+                for zeile in &self.dbs.fehler_ergebnis {
+                    ui.monospace(zeile);
+                }
+            });
+        }
         if !self.dbs.teil_ergebnis.is_empty() {
             egui::ScrollArea::vertical().id_source("teil_ergebnis").max_height(160.0).show(ui, |ui| {
                 for z in &self.dbs.teil_ergebnis {
@@ -354,9 +382,19 @@ impl App {
     }
 }
 
+fn ui_diagnosereferenz(ui: &mut egui::Ui, s: &PaketSteuergeraet) {
+    if !s.diagnosereferenz.ist_leer() {
+        ui.collapsing(tr!("Diagnosereferenzen ({a})", a = s.diagnosereferenz.anzahl()), |ui| {
+            for zeile in s.diagnosereferenz.zeilen() {
+                ui.label(zeile);
+            }
+        });
+    }
+}
+
 /// Inhalt einer Quelle als Baum anzeigen (nur lesen) — für die Vorschau.
 fn inhalt_baum(ui: &mut egui::Ui, i: &Inhalt, schluessel: &str) {
-    let lokal = !db::darf_weitergeben(i.quelle.art, &i.quelle.lizenz);
+    let lokal = !i.quelle.ist_teilbar();
     ui.label(tr!(
         "Wird eingetragen als Quelle „{a}“ (Art {b}, Lizenz {c}){d}",
         a = i.quelle.name,
@@ -378,6 +416,7 @@ fn inhalt_baum(ui: &mut egui::Ui, i: &Inhalt, schluessel: &str) {
                 for d in &s.dids {
                     ui.monospace(tr!("Kennung {a}  {n} [{e}] ×{f} +{o}", a = format!("{:#06X}", d.did), n = d.name, e = d.einheit, f = d.faktor, o = d.offset));
                 }
+                ui_diagnosereferenz(ui, s);
                 for c in &s.codierung {
                     let bit = c.bit.map(|b| format!(" Bit {b}")).unwrap_or_default();
                     ui.monospace(tr!("Codierung Byte {b}{bit}  {n}", b = c.byte, bit = bit, n = c.name));
@@ -672,6 +711,7 @@ impl App {
                     ui.end_row();
                 });
                 ui.add_space(4.0);
+                ui_diagnosereferenz(ui, s);
                 ui.strong(tr!("Fehler ({a})", a = s.fehler.len()));
                 let mut weg = None;
                 for (i, f) in s.fehler.iter_mut().enumerate() {
@@ -969,7 +1009,7 @@ impl App {
                         *vorher = l.iter().map(|(k, _)| k.clone()).collect();
                         *liste = l;
                         self.dbs.eigene_anzahl = None;
-                        self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
+                        self.mw_texte_neu_laden();
                         self.code_texte = ecu_werkbank::codiertexte::Texte::laden();
                     }
                     r

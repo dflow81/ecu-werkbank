@@ -109,8 +109,11 @@ impl App {
         // offenen Kanal der laufenden Aufzeichnung nutzen; sonst neu öffnen
         // (wartet bis ~5 s, falls der Golf-6-Motor TP 2.0 nach OBD kurz sperrt)
         let kanal = self.scope_kwp_ch.remove(&addr);
+        let teil_lesen = kanal.is_none() && !self.mw_teile.contains_key(&addr) && self.tp_teilenummer(addr).is_none();
         let be = self.backend();
         self.im_hintergrund(tr!("Messwertblock {a} prüfen", a = format!("{block:03}")), move || {
+            // Teilenummer für Feldnamen aus der Fahrzeug-Datenbank (einmal, vor dem Block-Kanal)
+            let teil = if teil_lesen { kwp::teilenummer_lesen(&be, addr) } else { None };
             let r = (|| -> anyhow::Result<(Channel, Vec<kwp::BlockValue>)> {
                 if let Some(mut ch) = kanal {
                     if let Ok(v) = Kwp::new(&mut ch).read_block(block) {
@@ -126,6 +129,11 @@ impl App {
                     if app.scope_running {
                         app.scope_kwp_ch.entry(addr).or_insert(ch);
                     }
+                    if let Some(t) = teil {
+                        app.mw_texte.teilenummer_setzen(addr, &t);
+                        app.mw_teile.insert(addr, t);
+                    }
+                    app.mw_wissen_fuer(addr);
                     let v: Vec<Series> = values
                         .iter()
                         .enumerate()
@@ -171,7 +179,10 @@ impl App {
             s.soll_checked = true;
             s.soll = match s.kind {
                 ChanKind::Obd(pid) => self.db.sollwert("obd", None, u16::from(pid), None),
-                ChanKind::Kwp { addr, block, field } => self.db.sollwert("kwp", Some(u16::from(addr)), u16::from(block), Some(field as u8 + 1)),
+                ChanKind::Kwp { addr, block, field } => self
+                    .db
+                    .sollwert("kwp", Some(u16::from(addr)), u16::from(block), Some(field as u8 + 1))
+                    .or_else(|| self.mw_texte.db_soll(addr, block, field as u8 + 1).and_then(|s| s.immer())),
                 ChanKind::Did { did, .. } => self.db.sollwert("uds", None, did, None),
                 ChanKind::Can { .. } | ChanKind::File => None,
             };

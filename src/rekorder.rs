@@ -130,7 +130,11 @@ impl Puffer {
 
 /// Spaltennamen: „Block/Feld Name“ (eigener Text, sonst Art).
 pub fn spalten(bloecke: &[(u8, Vec<BlockValue>)]) -> Vec<(Feld, String)> {
-    let texte = crate::messwerttexte::Texte::laden();
+    spalten_mit(&crate::messwerttexte::Texte::laden(), bloecke)
+}
+
+/// Wie [`spalten`], mit vorgegebenen Texten (z. B. samt Fahrzeug-Datenbank).
+pub fn spalten_mit(texte: &crate::messwerttexte::Texte, bloecke: &[(u8, Vec<BlockValue>)]) -> Vec<(Feld, String)> {
     let mut v = Vec::new();
     for (b, werte) in bloecke {
         for (i, w) in werte.iter().enumerate() {
@@ -193,12 +197,14 @@ pub fn laufen(
     if bloecke.is_empty() {
         bail!(tr!("Keine Blöcke gewählt."));
     }
+    // Feldnamen aus der Fahrzeug-Datenbank: Teilenummer vor dem Block-Kanal lesen
+    let texte = crate::messwerttexte::Texte::laden_fuer(be, 0x01);
     let mut ch = kwp::open_session(be, 0x01)?;
     let lesen = |ch: &mut crate::tp20::Channel| -> Result<Vec<(u8, Vec<BlockValue>)>> {
         bloecke.iter().map(|&b| Ok((b, Kwp::new(ch).read_block(b).with_context(|| tr!("Block {a}", a = b))?))).collect()
     };
     let erste = lesen(&mut ch)?;
-    let sp = spalten(&erste);
+    let sp = spalten_mit(&texte, &erste);
     let codes = |ch: &mut crate::tp20::Channel| -> BTreeSet<String> {
         Kwp::new(ch).read_dtcs().unwrap_or_default().iter().map(|d| d.obd_code(Some(0x01)).unwrap_or_else(|| d.vag_code())).collect()
     };

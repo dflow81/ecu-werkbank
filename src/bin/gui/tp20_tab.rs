@@ -185,14 +185,22 @@ impl App {
             return;
         };
         let kanal = self.tp_channel.take().filter(|(a, _)| *a == addr).map(|(_, c)| c);
+        // Teilenummer unbekannt (kein Scan): einmal vom Steuergerät lesen — für Feldnamen
+        // und Sollwerte aus der Fahrzeug-Datenbank
+        let teil_lesen = kanal.is_none() && !self.mw_teile.contains_key(&addr) && self.tp_teilenummer(addr).is_none();
         let be = self.backend();
         let live = self.tp_live;
         let arbeit = move || -> hintergrund::Ergebnis {
+            let teil = if teil_lesen { kwp::teilenummer_lesen(&be, addr) } else { None };
             let r = kanal.map_or_else(|| kwp::open_session(&be, addr), Ok).and_then(|mut ch| {
                 let v = Kwp::new(&mut ch).read_block(block)?;
                 Ok((ch, v))
             });
             Box::new(move |app: &mut App| {
+                if let Some(t) = teil {
+                    app.mw_texte.teilenummer_setzen(addr, &t);
+                    app.mw_teile.insert(addr, t);
+                }
                 let r = r.and_then(|(ch, values)| {
                     if app.tp_live {
                         app.tp_channel = Some((addr, ch));
@@ -225,6 +233,7 @@ impl App {
             self.mw_edit = None;
         }
         self.tp_block_key = (addr, block);
+        self.mw_wissen_fuer(addr);
         self.tp_block_raw = values.clone();
         self.tp_block_values = values
             .iter()
@@ -232,7 +241,13 @@ impl App {
             .map(|(i, v)| {
                 let st = v
                     .decode()
-                    .and_then(|(x, _)| self.db.sollwert("kwp", Some(u16::from(addr)), u16::from(block), Some(i as u8 + 1)).map(|r| r.check(x)));
+                    .and_then(|(x, _)| {
+                        let feld = i as u8 + 1;
+                        match self.db.sollwert("kwp", Some(u16::from(addr)), u16::from(block), Some(feld)) {
+                            Some(r) => Some(r.check(x)),
+                            None => self.mw_texte.db_soll(addr, block, feld).and_then(|s| s.pruefen(x)),
+                        }
+                    });
                 (v.display(), st)
             })
             .collect();
@@ -265,6 +280,7 @@ impl App {
                     self.status = tr!("Blockscan fertig: {a} Block/Blöcke mit Werten.", a = v.len());
                     let addr = self.bs_result.as_ref().map(|r| r.0).unwrap_or(0);
                     self.bs_result = Some((addr, v));
+                    self.mw_wissen_fuer(addr);
                     self.bs_job = None;
                 }
                 Some(Err(e)) => {
@@ -389,7 +405,7 @@ impl App {
         if ui.add_enabled(!geaendert.is_empty(), egui::Button::new(tr!("💾 Namen speichern ({a})", a = geaendert.len()))).clicked() {
             self.status = match ecu_werkbank::messwerttexte::mehrere_setzen(&geaendert) {
                 Ok(()) => {
-                    self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
+                    self.mw_texte_neu_laden();
                     tr!("{a} Name(n) gespeichert.", a = geaendert.len())
                 }
                 Err(e) => format!("{e:#}"),
@@ -428,7 +444,7 @@ impl App {
                             ui.set_min_width(210.0);
                             ui.add(egui::Label::new(egui::RichText::new(&wert).monospace()).truncate()).on_hover_text(&wert);
                         });
-                        let hint = tr!("Name eintragen …");
+                        let hint = texte.db_name(addr, *b, feld).map(str::to_string).unwrap_or_else(|| tr!("Name eintragen …"));
                         if let Some(f) = namen.get_mut(&schluessel(addr, *b, Some(feld))) {
                             ui.add_sized([300.0, 20.0], egui::TextEdit::singleline(f).hint_text(hint));
                         }
@@ -522,6 +538,28 @@ impl App {
             .map(|f| ecu_werkbank::verbauliste::teilenummer(&f.ident))
             .filter(|t| !t.is_empty())
             .or_else(|| self.active_vehicle.as_deref().and_then(|v| ecu_werkbank::swinfo::teilenummer_fuer(v, u16::from(addr))))
+    }
+
+    /// Feldnamen und Sollwerte der Fahrzeug-Datenbank für das Steuergerät an
+    /// `addr` in die Messwert-Texte holen (einmal je Adresse, über die Teilenummer).
+    pub(super) fn mw_wissen_fuer(&mut self, addr: u8) {
+        if self.mw_teile.contains_key(&addr) {
+            return;
+        }
+        if let Some(teil) = self.tp_teilenummer(addr) {
+            self.mw_texte.teilenummer_setzen(addr, &teil);
+            self.mw_teile.insert(addr, teil);
+        }
+    }
+
+    /// Messwert-Texte neu laden (eigene Texte) und das Datenbank-Wissen der
+    /// schon bekannten Steuergeräte wieder dazunehmen.
+    pub(super) fn mw_texte_neu_laden(&mut self) {
+        let mut t = ecu_werkbank::messwerttexte::Texte::laden();
+        for (addr, teil) in &self.mw_teile {
+            t.teilenummer_setzen(*addr, teil);
+        }
+        self.mw_texte = t;
     }
 
     /// Anpassung (Funktion 10) am gewählten TP-2.0-Steuergerät lesen (nur lesen).
@@ -1131,6 +1169,8 @@ impl App {
                             let name = raw.map(|r| self.mw_texte.feld(addr, block, feld, r)).unwrap_or_else(|| tr!("Feld {a}", a = feld));
                             if self.mw_texte.eigen(addr, block, feld).is_some() {
                                 ui.label(name);
+                            } else if self.mw_texte.db_name(addr, block, feld).is_some() {
+                                ui.label(name).on_hover_text(tr!("Name aus der Fahrzeug-Datenbank (über die Teilenummer). Mit ✏ eigenen Text eintragen."));
                             } else {
                                 ui.weak(name).on_hover_text(tr!("Feld {a} — „~“ = nur die Art aus der Umrechnung. Mit ✏ eigenen Text eintragen.", a = feld));
                             }
@@ -1142,6 +1182,9 @@ impl App {
                             Some(s) => ui.label(egui::RichText::new(v).heading().color(stufe_color(*s))),
                             None => ui.heading(v),
                         };
+                        if let Some(soll) = self.mw_texte.db_soll(addr, block, feld) {
+                            ui.weak(tr!("Soll {a}", a = soll.text()));
+                        }
                     });
                     if feld.is_multiple_of(4) {
                         ui.end_row();
@@ -1172,7 +1215,7 @@ impl App {
                     self.mw_edit = None;
                     self.status = match ecu_werkbank::messwerttexte::setzen(addr, block, feld, &text) {
                         Ok(()) => {
-                            self.mw_texte = ecu_werkbank::messwerttexte::Texte::laden();
+                            self.mw_texte_neu_laden();
                             tr!("Text gespeichert.")
                         }
                         Err(e) => tr!("Speichern: {e}", e = format!("{:#}", e)),

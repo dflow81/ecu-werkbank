@@ -8,7 +8,7 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 pub(super) fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std::path::Path) -> Result<()> {
-    use ecu_werkbank::db::{darf_weitergeben, standard_pfad, Db};
+    use ecu_werkbank::db::{standard_pfad, Db};
     let pfad = datei.unwrap_or_else(standard_pfad);
     let db = Db::oeffnen(&pfad)?;
     match aktion {
@@ -40,18 +40,29 @@ pub(super) fn db_cmd(aktion: DbAktion, datei: Option<PathBuf>, labels_dir: &std:
                 for d in &w.dids {
                     println!("{}", tr!("  Messwert {a}: {b} {c}", a = format!("{:#06x}", d.did), b = d.name, c = d.einheit));
                 }
+                for zeile in w.diagnose.iter().flat_map(|d| d.zeilen()) {
+                    println!("  {zeile}");
+                }
                 for f in &w.fehler {
                     println!("{}", tr!("  Fehler {a}: {b}", a = f.code, b = f.text));
                 }
             }
         },
+        DbAktion::Fehler { code, art } => {
+            let art = art.as_deref().map(|a| {
+                u8::from_str_radix(a.trim_start_matches("0x").trim_start_matches("0X"), 16)
+            }).transpose().context(tr!("Fehlerart als Hexzahl angeben, z. B. 13."))?;
+            for zeile in db.fehlerreferenz(&code, art)?.zeilen() {
+                println!("{zeile}");
+            }
+        }
         DbAktion::Quellen => {
             let q = db.quellen()?;
             if q.is_empty() {
                 println!("{}", tr!("Keine Quellen."));
             }
             for q in q {
-                let teilen = if darf_weitergeben(q.art, &q.lizenz) { "" } else { " [bleibt lokal]" };
+                let teilen = if q.ist_teilbar() { "" } else { " [bleibt lokal]" };
                 println!("{:>3}  {:<9} {}  {}  Lizenz: {}  {} Einträge  ({}){teilen}", q.id, q.art.text(), q.name, q.version, if q.lizenz.is_empty() { "–" } else { &q.lizenz }, q.zeilen, q.importiert);
                 if !q.herkunft.is_empty() {
                     println!("       {}", q.herkunft);
