@@ -1022,11 +1022,25 @@ pub enum StellSchritt {
 impl StellSchritt {
     pub fn text(&self) -> String {
         match self {
-            StellSchritt::Bauteil(n) => tr!("Bauteil {a} wird angesteuert", a = format!("{n:05}")),
+            StellSchritt::Bauteil(n) => match bauteil_name(*n) {
+                Some(name) => tr!("Bauteil {a} wird angesteuert: {b}", a = format!("{n:05}"), b = name),
+                None => tr!("Bauteil {a} wird angesteuert", a = format!("{n:05}")),
+            },
             StellSchritt::Wert(v) => tr!("Rückmeldung: {a}", a = v.display()),
             StellSchritt::Roh(r) => tr!("Antwort: {a}", a = r.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")),
         }
     }
+}
+
+/// Name eines Bauteils der Stellglieddiagnose. Die Bauteilnummern sind dieselben
+/// 5-stelligen VAG-Nummern wie bei den Fehlercodes (00532 = Versorgungsspannung),
+/// darum aus den Fehlertexten der Fahrzeug-Datenbank (nur lesend).
+pub fn bauteil_name(n: u16) -> Option<String> {
+    let p = crate::db::standard_pfad();
+    if !p.exists() {
+        return None;
+    }
+    crate::db::Db::nur_lesen(&p).ok()?.fehlertext(&format!("{n:05}")).ok().flatten().filter(|t| !t.trim().is_empty())
 }
 
 /// Antwort auf 31 BA 01 02 (ohne SID) zerlegen. Am Golf 6 (Tür 1K0 959 701 AE)

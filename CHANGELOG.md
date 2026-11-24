@@ -18,6 +18,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   ECUWerkbank nicht weiß, ob die Bedingung gerade erfüllt ist. Ohne vorherigen Scan liest die
   GUI die Teilenummer beim ersten Lesen selbst (nur lesen).
 - Fehlercodes ohne eigentlichen Text bekommen den Alternativtext aus der Datenbank.
+- Stellglieddiagnose (TP 2.0) nennt das angesteuerte Bauteil beim Namen (Bauteilnummern =
+  VAG-Fehlernummern, Text aus der Fahrzeug-Datenbank), z. B. „01482: Motoren für Zentralverriegelung“.
 - Fehlersuche in der Datenbank zeigt die Fehlerart mit Text („13 (Unterbrechung)“).
 - Erweiterte Identifikation (UDS und TP 2.0) zeigt, was die Datenbank zur Teilenummer weiß,
   samt ASAM-Datensatz zum Vergleich mit dem Wert des Steuergeräts (F19E).
