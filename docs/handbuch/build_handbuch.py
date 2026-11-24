@@ -41,8 +41,8 @@ from reportlab.platypus.tableofcontents import TableOfContents
 HIER = Path(__file__).resolve().parent
 BILDER = HIER / "bilder"
 AUSGABE = HIER / "ecu-werkbank-Handbuch.pdf"
-STAND = "22.11.2026"
-VERSION = "0.4.0"
+STAND = "24.11.2026"
+VERSION = "0.5.0"
 
 FONTS = Path("/usr/share/fonts/truetype/dejavu")
 pdfmetrics.registerFont(TTFont("DV", str(FONTS / "DejaVuSans.ttf")))

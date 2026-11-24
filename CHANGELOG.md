@@ -2,7 +2,10 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
-## Unveröffentlicht
+## 0.5.0 — 24.11.2026
+
+> **Hinweis:** Die Fahrzeug-Datenbank wird beim ersten Start auf Schema 7 umgestellt (mit
+> Sicherungskopie vorher). Ältere Versionen können sie danach nicht mehr öffnen.
 
 ### Neu
 - **Diagnose-Referenzen in der Fahrzeug-Datenbank:** Lokale Datenpakete können Diagnose-Referenzen
