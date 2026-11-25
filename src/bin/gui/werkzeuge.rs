@@ -478,13 +478,18 @@ impl App {
             }
             ui.horizontal(|ui| {
                 if auto || ui.add_enabled(!busy, egui::Button::new(tr!("⬇ Service-Werte lesen"))).clicked() {
-                    match sv::lesen(&be, &cfg) {
-                        Ok(v) => {
-                            self.svz_vals = v;
-                            self.status = tr!("Service-Werte gelesen.");
-                        }
-                        Err(e) => self.status = tr!("Service: {e}", e = format!("{:#}", e)),
-                    }
+                    // über die Bus-Warteschlange — nicht gleichzeitig mit anderen Anfragen (z. B. Fahrzeug erkennen beim Start)
+                    let (be, cfg) = (be.clone(), cfg.clone());
+                    self.im_hintergrund(tr!("Service-Werte lesen"), move || {
+                        let r = sv::lesen(&be, &cfg);
+                        Box::new(move |app: &mut App| match r {
+                            Ok(v) => {
+                                app.svz_vals = v;
+                                app.status = tr!("Service-Werte gelesen.");
+                            }
+                            Err(e) => app.status = tr!("Service: {e}", e = format!("{:#}", e)),
+                        })
+                    });
                 }
             });
             if !self.svz_vals.is_empty() {

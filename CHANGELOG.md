@@ -2,6 +2,17 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
+## Unveröffentlicht
+
+### Behoben
+- „Andere Marken“ mit CAN-Adapter: Die VW-Sammeladresse 0x700 (alle UDS-Steuergeräte antworten)
+  wird erkannt, jedes Gerät mit seiner eigenen Adresse gelesen; Motoren, die nur OBD sprechen,
+  werden gefunden; Systemnamen als Text statt Hex; herstellerspezifische Fehlercodes (P1xxx …)
+  bekommen nur einen Text, der zur Teilenummer passt.
+- Service-Anzeige: Lesen läuft über die Bus-Warteschlange (stieß beim Start mit der
+  Fahrzeugerkennung zusammen).
+- GUI: Ergebnisse aus dem Hintergrund erscheinen sofort, nicht erst nach einer Mausbewegung.
+
 ## 0.5.0 — 24.11.2026
 
 > **Hinweis:** Die Fahrzeug-Datenbank wird beim ersten Start auf Schema 7 umgestellt (mit

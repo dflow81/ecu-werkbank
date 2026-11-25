@@ -171,7 +171,12 @@ impl App {
 
     /// Fertige Aufträge übernehmen. Einmal je Bild aufrufen.
     pub(super) fn hintergrund_tick(&mut self, ctx: &egui::Context) {
-        for e in self.bus.abholen() {
+        let fertig = self.bus.abholen();
+        // neue Ergebnisse auch zeigen, ohne dass erst die Maus bewegt wird
+        if !fertig.is_empty() {
+            ctx.request_repaint();
+        }
+        for e in fertig {
             e(self);
         }
         if self.bus_beschaeftigt() {

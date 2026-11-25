@@ -84,6 +84,46 @@ fn nur_obd(tp: &dyn crate::transport::Transport) -> bool {
     crate::obd::Obd::new(tp).read_pid(0x00).is_ok()
 }
 
+/// Anfrage-IDs, auf die mehrere Steuergeräte geantwortet haben (Sammeladresse,
+/// beim VW-Konzern 0x700). Über die lässt sich kein Gerät einzeln lesen.
+fn sammeladressen(roh: &[(u16, u16)]) -> BTreeSet<u16> {
+    let mut je: std::collections::BTreeMap<u16, BTreeSet<u16>> = Default::default();
+    for (t, r) in roh {
+        je.entry(*t).or_default().insert(*r);
+    }
+    je.into_iter().filter(|(_, r)| r.len() > 1).map(|(t, _)| t).collect()
+}
+
+/// Mögliche eigene Anfrage-IDs zu einer Antwort-ID, in der Reihenfolge, in der
+/// sie probiert werden: gesehene Anfragen (auch die 3 davor — späte Antworten
+/// landen bei der nächsten ID), dann die üblichen Abstände (VW-Konzern:
+/// Antwort = Anfrage + 0x6A, OBD: + 8), ganz zuletzt eine Sammeladresse.
+fn kandidaten_fuer(roh: &[(u16, u16)], sammel: &BTreeSet<u16>, rx: u16) -> Vec<u16> {
+    let gesehen: Vec<u16> = roh.iter().filter(|(_, r)| *r == rx).map(|(t, _)| *t).collect();
+    let mut k: Vec<u16> = Vec::new();
+    let dazu = |t: u16, k: &mut Vec<u16>| {
+        if t != rx && !k.contains(&t) {
+            k.push(t);
+        }
+    };
+    for t in gesehen.iter().filter(|t| !sammel.contains(t)) {
+        for d in 0..4u16 {
+            if let Some(x) = t.checked_sub(d).filter(|x| !sammel.contains(x)) {
+                dazu(x, &mut k);
+            }
+        }
+    }
+    for abstand in [0x6A, 8] {
+        if let Some(x) = rx.checked_sub(abstand).filter(|x| !sammel.contains(x)) {
+            dazu(x, &mut k);
+        }
+    }
+    for t in gesehen.iter().filter(|t| sammel.contains(t)) {
+        dazu(*t, &mut k);
+    }
+    k
+}
+
 /// Steuergeräte suchen. Dauert mit SocketCAN etwa 30 s.
 pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> {
     let Backend::SocketCan { iface } = be else {
@@ -141,7 +181,9 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
             // Einzel-Frame: 7E 00 (positiv) oder 7F 3E xx (negativ)
             let d = f.data();
             let ok = matches!(d, [l, 0x7E, ..] if *l & 0xF0 == 0) || matches!(d, [l, 0x7F, 0x3E, ..] if *l & 0xF0 == 0);
-            if ok && !roh.iter().any(|(_, r)| *r == rx) {
+            // alle Paare merken: eine Sammeladresse (VW 0x700) beantworten viele Geräte,
+            // die eigene Anfrage-ID kommt später noch einmal
+            if ok && !roh.contains(&(zuletzt, rx)) {
                 roh.push((zuletzt, rx));
             }
         }
@@ -191,14 +233,20 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
     drop(sock);
 
     // 3. nachprüfen (späte Antworten können der nächsten ID zugeordnet sein)
-    fortschritt(&tr!("Prüfe {a} gefundene Steuergeräte nach…", a = roh.len()));
+    let antworten: BTreeSet<u16> = roh.iter().map(|(_, r)| *r).collect();
+    fortschritt(&tr!("Prüfe {a} gefundene Steuergeräte nach…", a = antworten.len()));
+    let sammel = sammeladressen(&roh);
     let mut geraete: Vec<(u32, u32)> = Vec::new();
-    for (tx, rx) in roh {
-        let treffer = (0..4u16).filter_map(|d| tx.checked_sub(d)).find(|&t| !belegt.contains(&t) && antwortet(be, u32::from(t), u32::from(rx)));
+    for rx in antworten {
+        let treffer = kandidaten_fuer(&roh, &sammel, rx).into_iter().find(|&t| !belegt.contains(&t) && antwortet(be, u32::from(t), u32::from(rx)));
         if let Some(t) = treffer {
-            if !geraete.iter().any(|(_, r)| *r == u32::from(rx)) {
-                geraete.push((u32::from(t), u32::from(rx)));
-            }
+            geraete.push((u32::from(t), u32::from(rx)));
+        }
+    }
+    // 3b. OBD-Adressen, die nur OBD sprechen (Golf-6-Motor MED17 antwortet nicht auf Tester Present)
+    for (t, r) in obd_paare() {
+        if !geraete.iter().any(|(_, x)| *x == r) && !belegt.contains(&(t as u16)) && !belegt.contains(&(r as u16)) && antwortet(be, t, r) {
+            geraete.push((t, r));
         }
     }
     for z in roh29 {
@@ -227,11 +275,35 @@ const KENNUNGEN: [(u16, &str); 9] = [
 fn lesbar(d: &[u8]) -> String {
     let t: String = d.iter().map(|&b| if (0x20..0x7F).contains(&b) { b as char } else { ' ' }).collect();
     let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
-    // überwiegend Text? sonst Hex
-    if !t.is_empty() && t.len() * 2 >= d.len() {
+    // überwiegend Text (Leerzeichen zum Auffüllen zählen mit)? sonst Hex
+    let lesbare = d.iter().filter(|b| (0x20..0x7F).contains(*b)).count();
+    if !t.is_empty() && lesbare * 2 >= d.len() {
         t
     } else {
         d.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")
+    }
+}
+
+/// Herstellerspezifischer Fehlercode nach SAE J2012 (P1xxx, P30–P33, B1/B2,
+/// C1/C2, U1/U2)? Dieselbe Nummer bedeutet dann je Steuergerät etwas anderes.
+fn herstellerspezifisch(code: &str) -> bool {
+    let b = code.as_bytes();
+    match (b.first(), b.get(1), b.get(2)) {
+        (Some(b'P'), Some(b'1'), _) => true,
+        (Some(b'P'), Some(b'3'), Some(c)) => (b'0'..=b'3').contains(c),
+        (Some(b'B' | b'C' | b'U'), Some(b'1' | b'2'), _) => true,
+        _ => false,
+    }
+}
+
+/// Fehlertext: genormte Codes aus allen Quellen, herstellerspezifische nur,
+/// wenn die Fahrzeug-Datenbank sie für genau diese Teilenummer kennt.
+fn fehlertext(db: &LabelDb, code: &str, wissen: Option<&crate::db::teile::SgWissen>) -> String {
+    let eigen = wissen.and_then(|w| w.fehler.iter().find(|f| f.code.eq_ignore_ascii_case(code)).map(|f| f.text.clone()));
+    match eigen {
+        Some(t) => t,
+        None if herstellerspezifisch(code) => String::new(),
+        None => db.dtc_description(code).unwrap_or("").to_string(),
     }
 }
 
@@ -295,6 +367,9 @@ pub fn lesen(be: &Backend, db: &LabelDb, tx: u32, rx: u32) -> Result<ModuleRepor
             }
         }
     }
+    // Teilenummer → Wissen der Fahrzeug-Datenbank (für herstellerspezifische Fehlertexte)
+    let teil = ident.iter().find_map(|i| i.split_once(": ").filter(|(n, _)| *n == crate::i18n::t("Teilenummer")).map(|(_, v)| v.to_string()));
+    let wissen = teil.as_deref().and_then(crate::db::teile::wissen_falls_vorhanden);
     // Fehlerspeicher
     let dtcs = if protokoll == "UDS" {
         u.read_dtcs(0xFF).ok().map(|list| {
@@ -302,7 +377,7 @@ pub fn lesen(be: &Backend, db: &LabelDb, tx: u32, rx: u32) -> Result<ModuleRepor
                 .map(|d| {
                     let code = d.code();
                     DtcEntry {
-                        text: db.dtc_description(&code).unwrap_or("").to_string(),
+                        text: fehlertext(db, &code, wissen.as_ref()),
                         code: format!("{code}-{:02X}", d.fehlerart()),
                         alt: crate::dtc_db::fehlerart_kurz(d.fehlerart()),
                         status: crate::report::uds_status_text(d.status),
@@ -321,7 +396,7 @@ pub fn lesen(be: &Backend, db: &LabelDb, tx: u32, rx: u32) -> Result<ModuleRepor
                 .map(|c| {
                     let code = crate::uds::Dtc { raw: (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8), status: c[2], hersteller: false }.code();
                     DtcEntry {
-                        text: db.dtc_description(&code).unwrap_or("").to_string(),
+                        text: fehlertext(db, &code, wissen.as_ref()),
                         code,
                         alt: None,
                         status: format!("Status {:#04x}", c[2]),
@@ -396,6 +471,37 @@ pub fn loeschen(be: &Backend, tx: u32, rx: u32, protokoll: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn herstellerspezifische_codes_und_text() {
+        for c in ["P1000", "P3012", "B1054", "C2100", "U1100"] {
+            assert!(herstellerspezifisch(c), "{c}");
+        }
+        for c in ["P0300", "P2293", "P3400", "B0050", "C0031", "U0100"] {
+            assert!(!herstellerspezifisch(c), "{c}");
+        }
+        assert_eq!(lesbar(b"KOMBI        "), "KOMBI", "aufgefüllt mit Leerzeichen");
+        assert_eq!(lesbar(&[0x01, 0x02, 0x03, 0x41]), "01 02 03 41");
+    }
+
+    #[test]
+    fn sammeladresse_wird_aufgeloest() {
+        // Golf 6: 0x700 beantworten Gateway (0x77B), Kombi (0x77E) und Airbag (0x77F);
+        // die Kombi-Antwort auf 0x700 kam zu spät und hängt an 0x701
+        let roh = [(0x700, 0x77B), (0x700, 0x77F), (0x701, 0x77E), (0x714, 0x77E), (0x715, 0x77F)];
+        let sammel = sammeladressen(&roh);
+        assert_eq!(sammel.into_iter().collect::<Vec<_>>(), [0x700]);
+        let s = sammeladressen(&roh);
+        // Kombi: zuerst die gesehenen Anfragen, die Sammeladresse nie davor
+        let k = kandidaten_fuer(&roh, &s, 0x77E);
+        assert_eq!(k.first(), Some(&0x701));
+        assert!(k.contains(&0x714));
+        assert!(!k.contains(&0x700) || k.iter().position(|t| *t == 0x700) > k.iter().position(|t| *t == 0x714));
+        // Gateway kam nur über 0x700: übliche VW-Paarung 0x77B − 0x6A = 0x711 vor der Sammeladresse
+        let g = kandidaten_fuer(&roh, &s, 0x77B);
+        assert_eq!(g.first(), Some(&0x711));
+        assert_eq!(g.last(), Some(&0x700));
+    }
 
     #[test]
     fn text_oder_hex() {
