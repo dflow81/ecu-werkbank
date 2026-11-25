@@ -103,6 +103,124 @@ pub fn other_vehicle_repairs(exclude_key: &str, code: &str) -> Vec<String> {
         .collect()
 }
 
+/// Was die eigene Historie über einen Fehlercode weiß (alle eigenen
+/// Fahrzeuge, nur normale Scans). Ein **Fall** = der Code steht in
+/// aufeinanderfolgenden Scans; ist er in einem späteren Scan weg, gilt er als
+/// behoben — mit den Reparatur-Notizen aus dieser Zeit als Maßnahme.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Erfahrung {
+    pub faelle: usize,
+    pub fahrzeuge: usize,
+    /// behoben, mit Maßnahme (Notiz) → Anzahl; häufigste zuerst
+    pub massnahmen: Vec<(String, usize)>,
+    /// behoben ohne Notiz
+    pub behoben_ohne_notiz: usize,
+    /// nach „behoben“ wiedergekommen
+    pub wiederkehr: usize,
+    /// beim letzten Scan noch vorhanden
+    pub offen: usize,
+}
+
+impl Erfahrung {
+    pub fn behoben(&self) -> usize {
+        self.massnahmen.iter().map(|(_, n)| n).sum::<usize>() + self.behoben_ohne_notiz
+    }
+
+    /// Eine Zeile für Listen (ab zwei Fällen, sonst sagen die Notizen genug).
+    pub fn kurz(&self) -> Option<String> {
+        if self.faelle < 2 {
+            return None;
+        }
+        let mit = self.behoben() - self.behoben_ohne_notiz;
+        let top = self.massnahmen.first().map(|(m, n)| crate::tr!(" — am häufigsten weg nach „{m}“ ({n} von {g})", m = m, n = n, g = mit)).unwrap_or_default();
+        Some(crate::tr!("Statistik: {a}× aufgetreten, {b}× wieder weg, {c}× wiedergekommen{t}", a = self.faelle, b = self.behoben(), c = self.wiederkehr, t = top))
+    }
+
+    /// Klartext-Zeilen für Prüfplan, GUI und Bericht; leer ohne Fälle.
+    pub fn zeilen(&self) -> Vec<String> {
+        if self.faelle == 0 {
+            return Vec::new();
+        }
+        let mut z = vec![crate::tr!(
+            "Eigene Historie: {a}× aufgetreten ({b} Fahrzeug(e)), {c}× wieder weg, {d}× noch vorhanden",
+            a = self.faelle,
+            b = self.fahrzeuge,
+            c = self.behoben(),
+            d = self.offen
+        )];
+        let mit = self.behoben() - self.behoben_ohne_notiz;
+        for (m, n) in &self.massnahmen {
+            let anteil = if mit > 0 { n * 100 / mit } else { 0 };
+            z.push(crate::tr!("  weg nach „{m}“: {n} von {g} ({p} %)", m = m, n = n, g = mit, p = anteil));
+        }
+        if self.behoben_ohne_notiz > 0 {
+            z.push(crate::tr!("  {a}× ohne Reparatur-Notiz weg (gelöscht oder von selbst?)", a = self.behoben_ohne_notiz));
+        }
+        if self.wiederkehr > 0 {
+            z.push(crate::tr!("  {a}× danach wiedergekommen — Ursache evtl. nicht behoben", a = self.wiederkehr));
+        }
+        z
+    }
+}
+
+/// Erfahrung zu einem Code aus den Scans eines Fahrzeugs (älteste zuerst).
+pub fn erfahrung_aus(scans: &[ScanReport], code: &str, e: &mut Erfahrung) -> bool {
+    let has = |r: &ScanReport| r.modules.iter().flat_map(|m| m.dtcs.iter().flatten()).any(|d| d.code == code || d.alt.as_deref() == Some(code));
+    let mut im_fall = false;
+    let mut notizen: Vec<String> = Vec::new();
+    let mut schon_behoben = false;
+    let mut gefunden = false;
+    for r in scans.iter().filter(|r| !ist_fremd(r)) {
+        let da = has(r);
+        if da && !im_fall {
+            e.faelle += 1;
+            gefunden = true;
+            if schon_behoben {
+                e.wiederkehr += 1;
+            }
+            im_fall = true;
+            notizen.clear();
+        }
+        if !r.reparatur.trim().is_empty() && (im_fall || da) {
+            let n = r.reparatur.trim().to_string();
+            if !notizen.contains(&n) {
+                notizen.push(n);
+            }
+        }
+        if !da && im_fall {
+            // weg: Maßnahme = Notizen aus dem Fall (inkl. dieses Scans)
+            im_fall = false;
+            schon_behoben = true;
+            if notizen.is_empty() {
+                e.behoben_ohne_notiz += 1;
+            }
+            for n in notizen.drain(..) {
+                match e.massnahmen.iter_mut().find(|(m, _)| m.eq_ignore_ascii_case(&n)) {
+                    Some((_, k)) => *k += 1,
+                    None => e.massnahmen.push((n, 1)),
+                }
+            }
+        }
+    }
+    if im_fall {
+        e.offen += 1;
+    }
+    gefunden
+}
+
+/// Erfahrung zu einem Code über alle eigenen Fahrzeuge.
+pub fn erfahrung(code: &str) -> Erfahrung {
+    let mut e = Erfahrung::default();
+    for v in crate::vehicle::list() {
+        let scans: Vec<ScanReport> = list(&v.key).into_iter().map(|(_, r)| r).collect();
+        if erfahrung_aus(&scans, code, &mut e) {
+            e.fahrzeuge += 1;
+        }
+    }
+    e.massnahmen.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    e
+}
+
 /// Reparatur-Notiz eines gespeicherten Scans ändern.
 pub fn set_repair_note(path: &Path, note: &str) -> Result<()> {
     let mut r = load(path)?;
@@ -339,6 +457,32 @@ pub fn uebersicht_aus(all: &[ScanReport]) -> Option<Uebersicht> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn erfahrung_mit_massnahme_und_wiederkehr() {
+        let mk = |ts: u64, codes: &[&str], notiz: &str| {
+            let mut r = scan(ts, codes);
+            r.reparatur = notiz.into();
+            r
+        };
+        let scans = [
+            mk(1, &["P0300"], ""),
+            mk(2, &["P0300"], "Zündspule Zyl. 3 getauscht"),
+            mk(3, &[], ""),
+            mk(4, &["P0300"], ""),
+            mk(5, &[], "Kerzen neu"),
+            mk(6, &["P0300"], ""),
+        ];
+        let mut e = Erfahrung::default();
+        assert!(erfahrung_aus(&scans, "P0300", &mut e));
+        assert_eq!((e.faelle, e.wiederkehr, e.offen, e.behoben()), (3, 2, 1, 2));
+        assert_eq!(e.massnahmen, vec![("Zündspule Zyl. 3 getauscht".to_string(), 1), ("Kerzen neu".to_string(), 1)]);
+        let z = e.zeilen().join("\n");
+        assert!(z.contains("3× aufgetreten") && z.contains("wiedergekommen"), "{z}");
+        let mut leer = Erfahrung::default();
+        assert!(!erfahrung_aus(&scans, "P0171", &mut leer));
+        assert!(leer.zeilen().is_empty());
+    }
 
     #[test]
     fn fremd_scan_verdraengt_den_normalen_nicht() {

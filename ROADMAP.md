@@ -59,7 +59,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 40 | Skripte (Lua oder Rhai, eingebettet) | – | mittel | mittel | mittel | niedrig | 2.0 | ✅ Rhai: `skript`, GUI Werkzeuge → Skripte; nur lesende Funktionen |
 | 41 | Python-Anbindung (pyo3 oder REST) | – | mittel | mittel | niedrig | niedrig | Vision | 🟡 über REST, Beispiel `beispiele/api_abfrage.py` |
 | 42 | Plugin-Schnittstelle für Fahrzeug-Funktionen | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |
-| 43 | Fehler-Erklärung lokal (eigene Wissensbasis + Wahrscheinlichkeit aus eigener Historie) | Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 Fehlerbilder, Prüfpläne |
+| 43 | Fehler-Erklärung lokal (eigene Wissensbasis + Wahrscheinlichkeit aus eigener Historie) | Autel | mittel | mittel | niedrig | mittel | 2.0 | ✅ Fehlerbilder, Prüfpläne und Statistik aus der eigenen Historie (alle eigenen Fahrzeuge): wie oft aufgetreten, nach welcher Maßnahme weg (Anteil), wie oft wiedergekommen — im Prüfplan und an jedem Fehler in der GUI |
 | 44 | Mitschnitt-Analyse mit Auffälligkeiten (Zeitüberschreitungen, NRC-Häufung) | – | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `auffaelligkeiten.rs` im Prüfbericht (`decode-log`, GUI) |
 | 45 | MDF4-/BLF-Export | CANalyzer | niedrig | hoch | niedrig | niedrig | Vision | ⏳ |
 | 46 | Dashboard / frei belegbare Instrumente | Autel | mittel | mittel | niedrig | mittel | 2.0 | ✅ Armaturen: Rundinstrument, große Zahl, Balken (Rechtsklick); Ansichten speichern/laden |

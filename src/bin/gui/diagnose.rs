@@ -15,6 +15,7 @@ impl App {
             .or_insert_with(|| {
                 let mut v = ecu_werkbank::history::earlier_repairs(&key, code);
                 v.extend(ecu_werkbank::history::other_vehicle_repairs(&key, code));
+                v.extend(ecu_werkbank::history::erfahrung(code).kurz());
                 v
             })
             .clone()

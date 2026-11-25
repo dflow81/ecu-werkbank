@@ -1872,6 +1872,13 @@ fn main() -> Result<()> {
                 let w = st.werkzeug.map(|w| format!("   [{}]", w.name())).unwrap_or_default();
                 println!("  {}. {}{w}", i + 1, st.text);
             }
+            let e = ecu_werkbank::history::erfahrung(&code);
+            if !e.zeilen().is_empty() {
+                println!();
+                for z in e.zeilen() {
+                    println!("{z}");
+                }
+            }
             Ok(())
         }
         Command::FehlerLoeschen { ja } => {
