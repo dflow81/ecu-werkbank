@@ -55,7 +55,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 36 | ECU-Sicherung (Speicher auslesen, wo erlaubt) | Autel, Flash-Tools | mittel | mittel | mittel | mittel | 2.0 | 🟡 `speicher-lesen` (UDS 0x23, nur lesen): Bereich in Blöcken, Lücken mit Grund, Abbild .bin + Beschreibung; Simulation geprüft, echtes Steuergerät offen |
 | 37 | Flash-Ablauf (siehe Abschnitt Flashing) | ODIS, E-Sys, Xentry | hoch | hoch | **hoch** | niedrig | Vision | ⏳ |
 | 38 | Spannungsüberwachung während langer Abläufe | ODIS, ISTA+ | hoch | niedrig | niedrig | hoch | 1.0 | ✅ Prüfung vor jedem Schreiben (≥ 12,0 V) und Spannungswächter bei langen Abläufen (Anpassungen zurückschreiben: vor jedem weiteren Schreiben höchstens alle 10 s; Steuergerät stellt Wert: alle 10 s, sonst Kontrolle zurück) — beim Motor selbst keine Zwischenmessung (gleiche OBD-IDs / TP-2.0-Sperre) |
-| 39 | REST-Schnittstelle (lokal, mit Schlüssel) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `ecu-werkbank api` (Datenbank, nur lesen); Live-Daten vom Auto fehlen noch |
+| 39 | REST-Schnittstelle (lokal, mit Schlüssel) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `ecu-werkbank api` (Datenbank, nur lesen); mit `--live` auch Live-Werte vom Auto (`/api/v1/live/obd?pids=0C,0D`, OBD-II, nur lesen) |
 | 40 | Skripte (Lua oder Rhai, eingebettet) | – | mittel | mittel | mittel | niedrig | 2.0 | ✅ Rhai: `skript`, GUI Werkzeuge → Skripte; nur lesende Funktionen |
 | 41 | Python-Anbindung (pyo3 oder REST) | – | mittel | mittel | niedrig | niedrig | Vision | 🟡 über REST, Beispiel `beispiele/api_abfrage.py` |
 | 42 | Plugin-Schnittstelle für Fahrzeug-Funktionen | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |

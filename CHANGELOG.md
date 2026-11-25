@@ -18,6 +18,7 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
 - **Einzelmesswert**: 🔍 an einem Feld des Messwertblocks zeigt diesen Wert groß an (gut ablesbar, läuft live mit).
 - **Speicher lesen** (`speicher-lesen`, nur lesen): Steuergeräte-Speicher über UDS 0x23 in Blöcken auslesen und als `.bin` sichern; gesperrte Bereiche werden als Lücke mit Grund vermerkt.
+- **REST-Schnittstelle mit Live-Werten**: `api --live` liefert zusätzlich OBD-Werte vom Auto unter `/api/v1/live/obd?pids=0C,0D` (nur lesen, nur dieser Rechner, mit Schlüssel).
 - **Konfiguration vergleichen in der GUI**: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ (vorher/nachher oder anderes Fahrzeug).
 
 ### Behoben

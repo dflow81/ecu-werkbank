@@ -1036,6 +1036,9 @@ enum Command {
     Api {
         #[arg(long, default_value_t = 8787)]
         port: u16,
+        /// Zusätzlich Live-Werte vom Auto unter /api/v1/live/obd?pids=0C,0D (OBD-II, nur lesen)
+        #[arg(long)]
+        live: bool,
         /// andere Datenbank-Datei (Standard: im Datenordner)
         #[arg(long)]
         datei: Option<PathBuf>,
@@ -1556,16 +1559,19 @@ fn main() -> Result<()> {
             let stopp = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             ecu_werkbank::skript::ausfuehren(be.clone(), std::sync::Arc::new(db), &code, |s| println!("{s}"), stopp)
         }
-        Command::Api { port, datei } => {
+        Command::Api { port, datei, live } => {
             use ecu_werkbank::db;
             let pfad = datei.unwrap_or_else(db::standard_pfad);
             if !pfad.exists() {
                 anyhow::bail!(tr!("Noch keine Datenbank ({a}). Erst: ecu-werkbank db eingebaut", a = pfad.display()));
             }
             let schluessel = db::api::schluessel();
-            db::api::dienen(&pfad, port, &schluessel, |url| {
+            db::api::dienen(&pfad, port, &schluessel, live.then_some(&be), |url| {
                 println!("{}", tr!("Schnittstelle läuft (nur lesen, nur dieser Rechner):"));
                 println!("  {url}status");
+                if live {
+                    println!("  {url}live/obd?pids=0C,0D,05,42");
+                }
                 println!("{}", tr!("Die Adresse enthält den Schlüssel — nicht weitergeben. Strg-C beendet."));
             })
         }

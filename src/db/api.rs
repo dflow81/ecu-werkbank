@@ -193,8 +193,44 @@ pub fn schluessel() -> String {
     s
 }
 
+/// Live-Werte vom Auto (OBD-II Modus 01, nur lesen): `pids=0C,0D` (hex),
+/// ohne Angabe Drehzahl, Geschwindigkeit, Kühlmittel, Spannung.
+pub fn live_obd(be: &crate::transport::Backend, abfrage: &str) -> (u16, Value) {
+    let r = (|| -> Antwort {
+        let liste = abfrage.split('&').find_map(|p| p.strip_prefix("pids=")).unwrap_or("0C,0D,05,42");
+        let pids: Vec<u8> = liste
+            .split(',')
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| u8::from_str_radix(p.trim().trim_start_matches("0x"), 16).map_err(|_| Fehler::Anfrage(format!("PID „{p}“ ist keine Hexzahl"))))
+            .collect::<std::result::Result<_, _>>()?;
+        if pids.is_empty() || pids.len() > 16 {
+            return Err(Fehler::Anfrage("1 bis 16 PIDs".into()));
+        }
+        let tp = be.open(crate::obd::DEFAULT_TX, crate::obd::DEFAULT_RX)?;
+        let o = crate::obd::Obd::new(&*tp);
+        let werte: Vec<Value> = pids
+            .iter()
+            .map(|&pid| {
+                let (name, einheit) = crate::obd::pid_info(pid).unwrap_or(("", ""));
+                match o.read_value(pid) {
+                    Ok(w) => json!({ "pid": format!("{pid:02X}"), "name": name, "wert": w, "einheit": einheit }),
+                    Err(e) => json!({ "pid": format!("{pid:02X}"), "name": name, "fehler": format!("{e:#}") }),
+                }
+            })
+            .collect();
+        Ok(json!({ "zeit": crate::report::now_local(), "werte": werte }))
+    })();
+    match r {
+        Ok(v) => (200, v),
+        Err(Fehler::NichtGefunden) => (404, json!({ "fehler": "nicht gefunden" })),
+        Err(Fehler::Anfrage(t)) => (400, json!({ "fehler": t })),
+        Err(Fehler::Intern(t)) => (500, json!({ "fehler": t })),
+    }
+}
+
 /// Server starten (blockiert). Nur 127.0.0.1. `bereit` bekommt die Adresse mit Schlüssel.
-pub fn dienen(db_pfad: &std::path::Path, port: u16, schluessel: &str, bereit: impl FnOnce(&str)) -> Result<()> {
+/// Mit `live` gibt es zusätzlich `/api/v1/live/obd` (Werte vom Auto, nur lesen).
+pub fn dienen(db_pfad: &std::path::Path, port: u16, schluessel: &str, live: Option<&crate::transport::Backend>, bereit: impl FnOnce(&str)) -> Result<()> {
     let db = Db::nur_lesen(db_pfad)?;
     let listener = TcpListener::bind(("127.0.0.1", port)).with_context(|| crate::tr!("Port {port} belegt?", port = port))?;
     let port = listener.local_addr()?.port();
@@ -215,6 +251,11 @@ pub fn dienen(db_pfad: &std::path::Path, port: u16, schluessel: &str, bereit: im
         let mut zeile = anfrage.split_whitespace();
         let (methode, pfad) = (zeile.next().unwrap_or(""), zeile.next().unwrap_or("/"));
         let (code, wert) = match pfad.strip_prefix(&praefix) {
+            Some(rest) if rest.split('?').next().unwrap_or("").trim_end_matches('/') == "/api/v1/live/obd" => match (methode, live) {
+                ("GET", Some(be)) => live_obd(be, rest.split_once('?').map(|x| x.1).unwrap_or("")),
+                ("GET", None) => (404, json!({ "fehler": "Live-Daten nur mit „api --live“" })),
+                _ => (405, json!({ "fehler": "nur GET (die Schnittstelle liest nur)" })),
+            },
             Some(rest) => antworten(&db, methode, rest),
             None => (404, json!({ "fehler": "nicht gefunden" })),
         };
@@ -238,6 +279,21 @@ pub fn dienen(db_pfad: &std::path::Path, port: u16, schluessel: &str, bereit: im
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_obd_aus_der_simulation() {
+        let _g = crate::sim::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::sim::set_modell(crate::sim::Modell::Demo);
+        let (c, v) = live_obd(&crate::transport::Backend::Demo, "pids=0C,0D");
+        assert_eq!(c, 200, "{v}");
+        let w = v["werte"].as_array().unwrap();
+        assert_eq!(w.len(), 2);
+        assert_eq!(w[0]["pid"], "0C");
+        assert!(w[0]["wert"].as_f64().is_some(), "{v}");
+        assert_eq!(live_obd(&crate::transport::Backend::Demo, "pids=zz").0, 400);
+        let (c, v) = live_obd(&crate::transport::Backend::Demo, "");
+        assert_eq!((c, v["werte"].as_array().unwrap().len()), (200, 4));
+    }
 
     fn db() -> Db {
         let db = Db::im_speicher().unwrap();
@@ -295,7 +351,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = p.clone();
         std::thread::spawn(move || {
-            let _ = dienen(&p2, 0, "geheim", |url| tx.send(url.to_string()).unwrap());
+            let _ = dienen(&p2, 0, "geheim", None, |url| tx.send(url.to_string()).unwrap());
         });
         let url = rx.recv().unwrap();
         let port = url.split(':').nth(2).unwrap().split('/').next().unwrap().to_string();
