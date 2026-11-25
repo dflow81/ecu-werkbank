@@ -29,14 +29,14 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 10 | Handy-Anzeige mit Zugangsschlüssel | – | mittel | niedrig | niedrig | hoch | Quick Win | ✅ |
 | 11 | TP 2.0: lange Codierung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 eingebaut, Probelauf bis Mitschnitt |
 | 12 | TP 2.0: Anpassung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 eingebaut, Probelauf bis Mitschnitt |
-| 13 | TP 2.0: Einzelmesswerte (Funktion 09) | VCDS | niedrig | niedrig | niedrig | mittel | 1.0 | ⏳ |
+| 13 | TP 2.0: Einzelmesswerte (Funktion 09) | VCDS | niedrig | niedrig | niedrig | mittel | 1.0 | ✅ Einzelmesswert: 🔍 an jedem Feld des Messwertblocks zeigt den Wert groß (Ampel, Sollbereich, läuft mit „Live“) |
 | 14 | TP 2.0: Umgebungsbedingungen direkt | VCDS | mittel | mittel | niedrig | mittel | 1.0 | ✅ Freeze-Frame `12 00 04 <Code>` (am Golf 6 mit Werkstattgerät-Mitschnitt geprüft): Status, Priorität, Häufigkeit, Verlernzähler, km, Datum/Zeit, weitere Messwerte; Rückfall 0x17 |
 | 15 | UDS: Anpassungskanäle mit Namen + Schreiben ohne Login, wo erlaubt | VCDS, ODIS | hoch | mittel | mittel | hoch | 1.0 | 🟡 lesen/sichern |
 | 16 | UDS: Gateway-Verbauliste (neuere Gateways) | VCDS, ODIS | hoch | mittel | niedrig | hoch | 1.0 | ⏳ Mitschnitt nötig |
 | 17 | Geführte Funktionen (Bremsbelag-Wechselstellung, Lenkwinkel-Grundeinstellung, Drosselklappe) | VCDS, Autel | hoch | mittel | hoch | hoch | 1.0 | 🟡 Drosselklappe/KWP |
 | 18 | Service-Rückstellung für weitere Modelle | Autel, VCDS | hoch | mittel | mittel | hoch | 1.0 | 🟡 Golf 6 lesen; Rückstellwerte je Kombi-Teilenummer in der Fahrzeug-Datenbank (einmal am Auto lernen, dann für alle mit gleichem Kombi) |
 | 19 | Batterie anlernen (BEM/Batteriewechsel) | Autel, ISTA+ | hoch | mittel | mittel | hoch | 1.0 | ⏳ |
-| 20 | Herstellerdaten als Daten-Ordner (`manufacturers/<marke>/`) | alle | hoch | mittel | niedrig | hoch | 1.0 | ⏳ Plan unten |
+| 20 | Herstellerdaten als Daten-Ordner (`manufacturers/<marke>/`) | alle | hoch | mittel | niedrig | hoch | 1.0 | ✅ abgelöst durch die Fahrzeug-Datenbank: Herstellerwissen als Datenpaket (TOML/JSON/CSV) je Quelle, Community-Daten in `daten/community/<hersteller>/`, ohne Neubau erweiterbar |
 | 21 | Steuergerätebaum (Bus → Gateway → Steuergeräte) in der GUI | ODIS, ISTA+ | mittel | mittel | niedrig | mittel | 1.0 | ✅ aus der Gateway-Verbauliste, mit Abgleich zum letzten Scan (GUI + `gateway-verbauliste`); Bus 06 = Kombi-CAN, 14 = Gateway selbst (am Golf bestätigt) |
 | 22 | Live-CAN-Monitor in der GUI (IDs, Rate, Änderungen) | SavvyCAN, Autel | hoch | mittel | niedrig | hoch | 1.0 | ✅ Werkzeuge → CAN-Monitor, mit Rauschfilter |
 | 23 | DBC in der GUI (Signale live, ins Scope) | CANalyzer | hoch | mittel | niedrig | mittel | 1.0 | ✅ CAN-Monitor → 📈 → Live-Grafik |
@@ -46,7 +46,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 27 | CLI in Gruppen-Dateien aufteilen | – | mittel | mittel | niedrig | mittel | 1.0 | ✅ `src/cli/` (7 Bereiche, main.rs 4 600 → 2 700 Zeilen); Befehlsliste bleibt in main.rs |
 | 28 | Integrationstests über `vcan0` + `mockecu` | – | mittel | mittel | niedrig | mittel | 1.0 | 🟡 mockecu vorhanden |
 | 29 | Codierung: Klartext-Assistent mit Abhängigkeiten (Bit A nur mit Bit B) | ODIS, E-Sys | hoch | mittel | mittel | mittel | 2.0 | ✅ `benoetigt`/`schliesst_aus` in Labels, Datenpaketen und Datenbank (Schema 2); Warnung im Codier-Helfer und in der CLI |
-| 30 | Fahrzeug-Konfiguration als Ganzes vergleichen (vorher/nachher, zwei Autos) | E-Sys | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `konfig-vergleich` (CLI); GUI fehlt noch |
+| 30 | Fahrzeug-Konfiguration als Ganzes vergleichen (vorher/nachher, zwei Autos) | E-Sys | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `konfig-vergleich` (CLI) und GUI: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ |
 | 31 | DoIP (Diagnose über Ethernet, neuere VW/BMW) | ODIS, ISTA+, E-Sys | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
 | 32 | 29-Bit-CAN-IDs und CAN FD | Xentry, Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 29 Bit: ISO-TP (SocketCAN), ELM327 (ATSP7), Simulation, Marken-Suche; CAN FD fehlt; am echten 29-Bit-Auto noch nicht geprüft |
 | 33 | K-Line (KWP1281/KWP2000 vor ~2004) | VCDS | mittel | hoch | mittel | niedrig | 2.0 | ⏳ braucht anderen Adapter. Fehlerarten bei KW1281 haben eigene Nummern (z. B. 37 = defekt statt 14 bei TP 2.0); die Datenbank kennt dafür schon das Protokoll `KW1281` — Texte in eigenen Worten anlegen, keine fremden Listen abschreiben |

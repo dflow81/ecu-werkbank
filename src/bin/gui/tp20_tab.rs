@@ -231,6 +231,7 @@ impl App {
     fn block_uebernehmen(&mut self, addr: u8, block: u8, values: Vec<kwp::BlockValue>) -> anyhow::Result<()> {
         if self.tp_block_key != (addr, block) {
             self.mw_edit = None;
+            self.tp_einzel = None;
         }
         self.tp_block_key = (addr, block);
         self.mw_wissen_fuer(addr);
@@ -1160,6 +1161,33 @@ impl App {
                     self.favoriten = ecu_werkbank::favoriten::alle();
                 }
             });
+            // Einzelmesswert: ein Feld groß (gut ablesbar, läuft mit „Live“ mit)
+            if let Some(f) = self.tp_einzel {
+                if let Some((v, st)) = self.tp_block_values.get(usize::from(f).saturating_sub(1)) {
+                    let name = self.tp_block_raw.get(usize::from(f) - 1).map(|r| self.mw_texte.feld(addr, block, f, r)).unwrap_or_else(|| tr!("Feld {a}", a = f));
+                    egui::Frame::group(ui.style()).show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(name).size(18.0));
+                            if ui.small_button("✕").on_hover_text(tr!("Wieder alle Felder")).clicked() {
+                                self.tp_einzel = None;
+                            }
+                        });
+                        let t = egui::RichText::new(v).size(56.0).strong();
+                        ui.label(match st {
+                            Some(s) => t.color(stufe_color(*s)),
+                            None => t,
+                        });
+                        if let Some(soll) = self.mw_texte.db_soll(addr, block, f) {
+                            ui.weak(tr!("Soll {a}", a = soll.text()));
+                        }
+                        if !self.tp_live {
+                            ui.weak(tr!("Tipp: „Live“ einschalten, dann läuft der Wert mit."));
+                        }
+                    });
+                    ui.add_space(6.0);
+                }
+            }
+            let mut einzel_neu = None;
             egui::Grid::new("tpblock").spacing([24.0, 4.0]).show(ui, |ui| {
                 for (i, (v, st)) in self.tp_block_values.iter().enumerate() {
                     let feld = i as u8 + 1;
@@ -1177,6 +1205,9 @@ impl App {
                             if ui.small_button("✏").on_hover_text(tr!("Text für dieses Feld eintragen")).clicked() {
                                 self.mw_edit = Some((Some(feld), self.mw_texte.eigen(addr, block, feld).unwrap_or_default().to_string()));
                             }
+                            if ui.small_button("🔍").on_hover_text(tr!("Nur diesen Wert groß anzeigen (Einzelmesswert)")).clicked() {
+                                einzel_neu = Some(feld);
+                            }
                         });
                         match st {
                             Some(s) => ui.label(egui::RichText::new(v).heading().color(stufe_color(*s))),
@@ -1192,6 +1223,9 @@ impl App {
                 }
                 ui.end_row();
             });
+            if einzel_neu.is_some() {
+                self.tp_einzel = einzel_neu;
+            }
             if let Some((feld, text)) = &mut self.mw_edit {
                 ui.horizontal(|ui| {
                     let wo = match feld {

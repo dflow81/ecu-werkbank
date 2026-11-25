@@ -736,6 +736,11 @@ struct App {
     bn_roh_aus: bool,
     /// „Eigene Namen“: Steuergerät, dessen Blöcke gelesen werden
     tp_block_key: (u8, u8),
+    /// Einzelmesswert (Funktion 09): dieses Feld des Blocks groß anzeigen
+    tp_einzel: Option<u8>,
+    /// Konfigurations-Vergleich: anderes Fahrzeug (None = vorherige Sicherungen), Ergebnis
+    kv_ziel: Option<String>,
+    kv_text: String,
     mw_texte: ecu_werkbank::messwerttexte::Texte,
     /// Teilenummern, deren Datenbank-Wissen in `mw_texte` steckt (Adresse → Teilenummer)
     mw_teile: std::collections::BTreeMap<u8, String>,

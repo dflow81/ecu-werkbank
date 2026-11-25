@@ -145,6 +145,47 @@ impl App {
         ui.separator();
         ui.scope(|ui| self.ui_sicherung_codierung(ui));
         self.ui_anpassungen(ui);
+        ui.separator();
+        self.ui_konfig_vergleich(ui);
+    }
+
+    /// Ganze Konfiguration (Codierung, Anpassungen, Software) vergleichen:
+    /// vorherige → neueste Sicherungen oder mit einem anderen Fahrzeug. Liest das Auto nicht.
+    pub(super) fn ui_konfig_vergleich(&mut self, ui: &mut egui::Ui) {
+        use ecu_werkbank::konfigvergleich;
+        egui::CollapsingHeader::new(tr!("🔀 Ganze Konfiguration vergleichen")).id_source("konfig-vergleich").show(ui, |ui| {
+            let Some(key) = self.active_vehicle.clone() else {
+                ui.weak(tr!("Oben ein Fahrzeug wählen."));
+                return;
+            };
+            ui.weak(tr!("Codierung, Anpassungen und Softwarestände aus den gespeicherten Sicherungen — z. B. vor/nach einer Reparatur oder „was ist beim anderen Auto anders?“. Liest das Auto nicht."));
+            let andere: Vec<ecu_werkbank::vehicle::Vehicle> = ecu_werkbank::vehicle::list().into_iter().filter(|v| v.key != key).collect();
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr!("Vergleichen mit:"));
+                let jetzt = match &self.kv_ziel {
+                    None => tr!("vorherigen Sicherungen dieses Fahrzeugs"),
+                    Some(k) => andere.iter().find(|v| &v.key == k).map(|v| v.label()).unwrap_or_else(|| k.clone()),
+                };
+                egui::ComboBox::from_id_source("kv_ziel").selected_text(jetzt).width(280.0).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.kv_ziel, None, tr!("vorherigen Sicherungen dieses Fahrzeugs"));
+                    for v in &andere {
+                        ui.selectable_value(&mut self.kv_ziel, Some(v.key.clone()), v.label());
+                    }
+                });
+                if ui.button(tr!("Vergleichen")).clicked() {
+                    let (a, b) = match &self.kv_ziel {
+                        None => (konfigvergleich::laden(&key, 1), konfigvergleich::laden(&key, 0)),
+                        Some(k) => (konfigvergleich::laden(&key, 0), konfigvergleich::laden(k, 0)),
+                    };
+                    self.kv_text = konfigvergleich::text(&a, &b, &self.db);
+                }
+            });
+            if !self.kv_text.is_empty() {
+                egui::ScrollArea::vertical().id_source("kv_text").max_height(360.0).show(ui, |ui| {
+                    ui.monospace(&self.kv_text);
+                });
+            }
+        });
     }
 
     pub(super) fn ui_sicherung_codierung(&mut self, ui: &mut egui::Ui) {

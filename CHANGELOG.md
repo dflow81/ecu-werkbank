@@ -16,6 +16,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   abgebrochen, wenn sie unter 12,0 V fällt. „Steuergerät stellt Wert“ prüft sie ebenfalls und
   gibt sonst die Kontrolle zurück.
 
+- **Einzelmesswert**: 🔍 an einem Feld des Messwertblocks zeigt diesen Wert groß an (gut ablesbar, läuft live mit).
+- **Konfiguration vergleichen in der GUI**: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ (vorher/nachher oder anderes Fahrzeug).
+
 ### Behoben
 - „Andere Marken“ mit CAN-Adapter: Die VW-Sammeladresse 0x700 (alle UDS-Steuergeräte antworten)
   wird erkannt, jedes Gerät mit seiner eigenen Adresse gelesen; Motoren, die nur OBD sprechen,
