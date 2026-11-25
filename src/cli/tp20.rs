@@ -67,7 +67,9 @@ pub(super) fn kwp_dtc(be: &Backend, address: u8, db: &LabelDb) -> Result<()> {
         for (d, env) in &dtcs {
             println!("  {}", kwp_dtc_line(d, address, db));
             if let Some(e) = env {
-                println!("{}", tr!("      Umgebungsdaten (roh): {a}", a = kwp::umgebung_hex(e)));
+                for (k, v) in kwp::umgebung_werte(e) {
+                    println!("      {k}: {v}");
+                }
             }
         }
     }

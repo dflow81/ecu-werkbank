@@ -4,6 +4,14 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
 ## Unveröffentlicht
 
+### Neu
+- **Umgebungsbedingungen bei TP 2.0 im Klartext**: Fehlerstatus, Priorität, Häufigkeit,
+  Verlernzähler, km-Stand, Datum/Uhrzeit und weitere Messwerte (z. B. Temperatur) zu jedem
+  Fehler — in GUI, Terminal, PDF und Historie. Gelesen wie ein Werkstattgerät (Freeze-Frame
+  `12 00 04 <Code>`); am Golf 6 Byte für Byte mit einem Werkstattgerät verglichen. Vorher
+  waren die Umgebungsdaten bei diesen Steuergeräten leer.
+- Mitschnitt-Übersetzer benennt die KWP-Dienste 0x12, 0x17 und 0x22.
+
 ### Behoben
 - „Andere Marken“ mit CAN-Adapter: Die VW-Sammeladresse 0x700 (alle UDS-Steuergeräte antworten)
   wird erkannt, jedes Gerät mit seiner eigenen Adresse gelesen; Motoren, die nur OBD sprechen,

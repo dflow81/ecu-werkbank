@@ -91,7 +91,7 @@ impl App {
         for (d, env) in dtcs {
             out.push(self.tp_dtc_line(d, address));
             if let Some(e) = env {
-                out.push(tr!("      Umgebungsdaten (roh): {a}", a = kwp::umgebung_hex(e)));
+                out.extend(kwp::umgebung_werte(e).into_iter().map(|(k, v)| format!("      {k}: {v}")));
             }
         }
         out

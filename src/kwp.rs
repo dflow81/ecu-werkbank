@@ -29,6 +29,7 @@ pub const ECU_ID_VERBAULISTE: u8 = 0x9F;
 /// TP-2.0-Adresse des Gateways (Golf 6)
 pub const GATEWAY: u8 = 0x1F;
 pub const SID_READ_DTC_STATUS: u8 = 0x17;
+pub const SID_READ_FREEZE_FRAME: u8 = 0x12;
 
 const NEGATIVE_RESPONSE: u8 = 0x7F;
 const NRC_RESPONSE_PENDING: u8 = 0x78;
@@ -137,6 +138,20 @@ impl<'a> Kwp<'a> {
     /// (0x17, ISO 14230-3) für genau diesen Code. Liefert die Daten hinter
     /// Code und Status (Aufbau herstellerabhängig, daher roh). Nur lesend.
     pub fn read_umgebung(&mut self, code: u16) -> Result<Vec<u8>> {
+        // VAG (Golf 6, mitgeschnitten): ReadFreezeFrameData 12 00 04 <Code> —
+        // Freeze-Frame 0, Zugriff „nach Fehlercode“. Kennt ein Gerät das nicht: 0x17.
+        let [hi, lo] = code.to_be_bytes();
+        match self.request(SID_READ_FREEZE_FRAME, &[0x00, 0x04, hi, lo]) {
+            Ok(r) => {
+                return match r.as_slice() {
+                    [0x00, body @ .., 0x04, h, l] if [*h, *l] == [hi, lo] && !body.is_empty() => Ok(body.to_vec()),
+                    _ => Err(UmgebungFehlt::PasstNicht.into()),
+                };
+            }
+            // „keine Daten zu diesem Code“ → nicht noch einmal anders fragen
+            Err(e) if format!("{e:#}").contains("NRC 0x31") => return Err(UmgebungFehlt::Keine.into()),
+            Err(_) => {}
+        }
         let r = self.request(SID_READ_DTC_STATUS, &code.to_be_bytes())?;
         // Antwort: Anzahl, Code (2), Status, Umgebungsdaten …
         match r.as_slice() {
@@ -742,10 +757,51 @@ pub fn sweep_addrs(be: &crate::transport::Backend, addrs: &[u8], mut progress: i
     Ok(found)
 }
 
-/// Umgebungsdaten als Anzeige. Der Aufbau ist je Steuergerät verschieden und
-/// für VAG-KWP nicht offen dokumentiert — darum vorerst als Rohdaten.
+/// Umgebungsdaten als Anzeige. VAG-Freeze-Frame (Dienst 0x12, beginnt mit
+/// `6C 01`) wird übersetzt — Aufbau am Golf 6 mitgeschnitten und mit einem
+/// Werkstattgerät am selben Fehlerstand verglichen (25.11.2026):
+///
+/// `6C 01 | Status | Priorität | Häufigkeit | Verlernzähler | km (3 Byte) |
+/// Zeitangabe | Datum+Zeit (5 Byte, FF = keins) | weitere Messwerte je 3 Byte`
+///
+/// Datum+Zeit: 8 Bit Kennung, Jahr 6 Bit (+2000), Monat 4, Tag 5, Stunde 5,
+/// Minute 6, Sekunde 6 (+1 — so zeigt es auch das Werkstattgerät). Ist die Uhr
+/// im Kombi nie gestellt worden, steht dort z. B. Monat 14. Unbekannter
+/// Aufbau (z. B. Dienst 0x17) bleibt als Rohdaten.
 pub fn umgebung_werte(env: &[u8]) -> Vec<(String, String)> {
-    vec![("Umgebungsdaten (roh)".into(), umgebung_hex(env))]
+    match env {
+        [0x6C, 0x01, st, prio, haeuf, verlern, k1, k2, k3, zeit, dt @ ..] if dt.len() >= 5 => {
+            let mut v = vec![
+                (tr!("Fehlerstatus"), format!("{st:08b}")),
+                (tr!("Fehlerpriorität"), prio.to_string()),
+                (tr!("Fehlerhäufigkeit"), haeuf.to_string()),
+                (tr!("Verlernzähler"), verlern.to_string()),
+                (tr!("Kilometerstand"), format!("{} km", u32::from_be_bytes([0, *k1, *k2, *k3]))),
+                (tr!("Zeitangabe"), zeit.to_string()),
+            ];
+            let (datum, rest) = dt.split_at(5);
+            if datum.iter().any(|b| *b != 0xFF) {
+                let x = u32::from_be_bytes([datum[1], datum[2], datum[3], datum[4]]);
+                let feld = |ab: u32, bits: u32| (x >> (32 - ab - bits)) & ((1 << bits) - 1);
+                let (jahr, monat, tag) = (2000 + feld(0, 6), feld(6, 4), feld(10, 5));
+                let (std, min, sek) = (feld(15, 5), feld(20, 6), feld(26, 6) + 1);
+                v.push((tr!("Datum"), format!("{jahr}.{monat:02}.{tag:02}")));
+                v.push((tr!("Zeit"), format!("{std:02}:{min:02}:{sek:02}")));
+            }
+            for (i, c) in rest.chunks(3).enumerate() {
+                match c {
+                    [f, a, b] => {
+                        let w = BlockValue { formula: *f, a: *a, b: *b, text: None };
+                        let name = crate::messwerttexte::art(*f).map(str::to_string).unwrap_or_else(|| tr!("Wert {a}", a = i + 1));
+                        v.push((name, w.display()));
+                    }
+                    rest => v.push((tr!("Umgebungsdaten (roh)"), umgebung_hex(rest))),
+                }
+            }
+            v
+        }
+        _ => vec![(tr!("Umgebungsdaten (roh)"), umgebung_hex(env))],
+    }
 }
 
 pub fn umgebung_hex(env: &[u8]) -> String {
@@ -1236,6 +1292,31 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn vag_freeze_frame_wie_werkstattgeraet() {
+        // Golf 6, 25.11.2026: Einparkhilfe 01627 und Tür Beifahrer 00929/00097
+        let einpark = [0x6C, 0x01, 0x6E, 0x03, 0x07, 0x00, 0x03, 0xB5, 0xEA, 0x00, 0x01, 0x13, 0x8A, 0xC1, 0x35, 0x1A, 0x32, 0x3E];
+        let w: std::collections::HashMap<String, String> = umgebung_werte(&einpark).into_iter().collect();
+        assert_eq!(w["Fehlerstatus"], "01101110");
+        assert_eq!(w["Fehlerpriorität"], "3");
+        assert_eq!(w["Fehlerhäufigkeit"], "7");
+        assert_eq!(w["Verlernzähler"], "0");
+        assert_eq!(w["Kilometerstand"], "243178 km");
+        assert_eq!(w["Zeitangabe"], "0");
+        assert_eq!(w["Datum"], "2004.14.05");
+        assert_eq!(w["Zeit"], "12:04:54");
+        assert!(w["Temperatur"].starts_with("12"), "{}", w["Temperatur"]);
+        let tuer = [0x6C, 0x01, 0x68, 0x03, 0x02, 0x09, 0x03, 0xB7, 0x20, 0x00, 0x01, 0x13, 0x99, 0x08, 0xC3];
+        let w: std::collections::HashMap<String, String> = umgebung_werte(&tuer).into_iter().collect();
+        assert_eq!((w["Kilometerstand"].as_str(), w["Datum"].as_str(), w["Zeit"].as_str()), ("243488 km", "2004.14.12", "16:35:04"));
+        let ohne = [0x6C, 0x01, 0x6C, 0x03, 0x25, 0x09, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        let w = umgebung_werte(&ohne);
+        assert!(w.iter().all(|(k, _)| k != "Datum"), "ohne Datum");
+        assert!(w.contains(&("Fehlerhäufigkeit".into(), "37".into())));
+        // unbekannter Aufbau bleibt roh
+        assert_eq!(umgebung_werte(&[0x01, 0x02])[0].1, "01 02");
+    }
 
     #[test]
     fn umgebung_fehlt_als_fehlerart() {

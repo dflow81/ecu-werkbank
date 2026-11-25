@@ -30,14 +30,14 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 11 | TP 2.0: lange Codierung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 eingebaut, Probelauf bis Mitschnitt |
 | 12 | TP 2.0: Anpassung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 eingebaut, Probelauf bis Mitschnitt |
 | 13 | TP 2.0: Einzelmesswerte (Funktion 09) | VCDS | niedrig | niedrig | niedrig | mittel | 1.0 | ⏳ |
-| 14 | TP 2.0: Umgebungsbedingungen direkt | VCDS | mittel | mittel | niedrig | mittel | 1.0 | ⏳ |
+| 14 | TP 2.0: Umgebungsbedingungen direkt | VCDS | mittel | mittel | niedrig | mittel | 1.0 | ✅ Freeze-Frame `12 00 04 <Code>` (am Golf 6 mit Werkstattgerät-Mitschnitt geprüft): Status, Priorität, Häufigkeit, Verlernzähler, km, Datum/Zeit, weitere Messwerte; Rückfall 0x17 |
 | 15 | UDS: Anpassungskanäle mit Namen + Schreiben ohne Login, wo erlaubt | VCDS, ODIS | hoch | mittel | mittel | hoch | 1.0 | 🟡 lesen/sichern |
 | 16 | UDS: Gateway-Verbauliste (neuere Gateways) | VCDS, ODIS | hoch | mittel | niedrig | hoch | 1.0 | ⏳ Mitschnitt nötig |
 | 17 | Geführte Funktionen (Bremsbelag-Wechselstellung, Lenkwinkel-Grundeinstellung, Drosselklappe) | VCDS, Autel | hoch | mittel | hoch | hoch | 1.0 | 🟡 Drosselklappe/KWP |
-| 18 | Service-Rückstellung für weitere Modelle | Autel, VCDS | hoch | mittel | mittel | hoch | 1.0 | 🟡 Golf 6 |
+| 18 | Service-Rückstellung für weitere Modelle | Autel, VCDS | hoch | mittel | mittel | hoch | 1.0 | 🟡 Golf 6 lesen; Rückstellwerte je Kombi-Teilenummer in der Fahrzeug-Datenbank (einmal am Auto lernen, dann für alle mit gleichem Kombi) |
 | 19 | Batterie anlernen (BEM/Batteriewechsel) | Autel, ISTA+ | hoch | mittel | mittel | hoch | 1.0 | ⏳ |
 | 20 | Herstellerdaten als Daten-Ordner (`manufacturers/<marke>/`) | alle | hoch | mittel | niedrig | hoch | 1.0 | ⏳ Plan unten |
-| 21 | Steuergerätebaum (Bus → Gateway → Steuergeräte) in der GUI | ODIS, ISTA+ | mittel | mittel | niedrig | mittel | 1.0 | ✅ aus der Gateway-Verbauliste, mit Abgleich zum letzten Scan (GUI + `gateway-verbauliste`); Busnamen 06/14 am Auto offen |
+| 21 | Steuergerätebaum (Bus → Gateway → Steuergeräte) in der GUI | ODIS, ISTA+ | mittel | mittel | niedrig | mittel | 1.0 | ✅ aus der Gateway-Verbauliste, mit Abgleich zum letzten Scan (GUI + `gateway-verbauliste`); Bus 06 = Kombi-CAN, 14 = Gateway selbst (am Golf bestätigt) |
 | 22 | Live-CAN-Monitor in der GUI (IDs, Rate, Änderungen) | SavvyCAN, Autel | hoch | mittel | niedrig | hoch | 1.0 | ✅ Werkzeuge → CAN-Monitor, mit Rauschfilter |
 | 23 | DBC in der GUI (Signale live, ins Scope) | CANalyzer | hoch | mittel | niedrig | mittel | 1.0 | ✅ CAN-Monitor → 📈 → Live-Grafik |
 | 24 | Mitschnitt abspielen (Replay auf vcan) | CANalyzer | mittel | niedrig | mittel | mittel | 1.0 | 🟡 `replay` (lehnt echte Adapter ab); Lauf auf vcan noch nicht ausprobiert |
