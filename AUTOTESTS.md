@@ -83,6 +83,7 @@ setzt die echte Service-Anzeige zurück — darum nur nach einem echten Service.
 | D4 | CAN FD über vcan (Roadmap 32) | `sudo ip link add vcan1 type vcan && sudo ip link set vcan1 mtu 72 up`, dann `VAG_CANFD=1 ecu-werkbank -i vcan1 …` gegen `mockecu` | ⏳ |
 | D5 | DoIP (Roadmap 31) | nur mit einem DoIP-Fahrzeug (z. B. Golf 8) und OBD-Ethernet-Kabel: `ecu-werkbank -t doip --port 169.254.x.x ident --geraet 0x4010` | ⏳ |
 | D6 | K-Leitung (Roadmap 33) | nur mit KKL-Kabel und Auto bis ~2004: `ecu-werkbank kline --port /dev/ttyUSB0 --adresse 0x01 --gruppe 1` | ⏳ |
+| D7 | J2534 unter Windows (Roadmap 34) | Windows-Rechner mit J2534-Adapter (64-Bit-Treiber): `ecu-werkbank.exe -t j2534 --port <Name> obd-info` | ⏳ |
 | D2 | Integrationstests über vcan (Roadmap 28) | wie D1, dann `mockecu` auf vcan0 | ⏳ |
 
 Nach dem Termin: Ergebnisse hier eintragen, Konstanten in `src/kwp.rs` nur

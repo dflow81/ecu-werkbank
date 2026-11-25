@@ -442,6 +442,9 @@ impl App {
             "doip" => Backend::Doip {
                 addr: self.port.clone(),
             },
+            "j2534" => Backend::J2534 {
+                port: self.port.clone(),
+            },
             "demo" => Backend::Demo,
             _ => Backend::SocketCan {
                 iface: self.iface.clone(),

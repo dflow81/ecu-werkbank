@@ -1149,6 +1149,7 @@ dependencies = [
  "eframe",
  "egui_plot",
  "libc",
+ "libloading 0.8.9",
  "miniz_oxide 0.8.9",
  "qrcode",
  "rfd",

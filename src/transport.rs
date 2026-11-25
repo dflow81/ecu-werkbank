@@ -41,6 +41,8 @@ pub enum Backend {
     /// DoIP (Diagnose über Ethernet, ISO 13400) zum Gateway "IP" oder "IP:Port";
     /// die Anfrage-ID ist die logische Adresse des Steuergeräts.
     Doip { addr: String },
+    /// J2534-Pass-Thru-Adapter (nur Windows): DLL-Pfad oder Adaptername.
+    J2534 { port: String },
     /// Eingebautes Demo-Fahrzeug (ohne Adapter), siehe [`crate::sim`].
     Demo,
 }
@@ -71,6 +73,7 @@ impl Backend {
                 let ziel = u16::try_from(tx).map_err(|_| anyhow::anyhow!(crate::tr!("DoIP: logische Adresse höchstens 16 Bit")))?;
                 Ok(Box::new(crate::doip::DoIp::verbinden(addr, ziel)?))
             }
+            Backend::J2534 { port } => Ok(Box::new(crate::j2534::J2534::oeffnen(port, tx, rx)?)),
             Backend::Demo => Ok(Box::new(crate::sim::DemoUds::new(crate::sim::demo_tx(tx)))),
         }
     }
@@ -101,6 +104,7 @@ impl Backend {
             Backend::Elm327Serial { port, baud } => format!("ELM327 seriell ({port} @ {baud})"),
             Backend::Elm327Tcp { addr } => format!("ELM327 TCP ({addr})"),
             Backend::Doip { addr } => format!("DoIP ({addr})"),
+            Backend::J2534 { port } => format!("J2534 ({port})"),
             Backend::Demo => match crate::sim::modell() {
                 crate::sim::Modell::Demo => crate::tr!("Demo-Fahrzeug (ohne Adapter)"),
                 m => crate::tr!("Simulation {a} (ohne Adapter)", a = m.name()),

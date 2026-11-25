@@ -38,6 +38,7 @@ pub mod guide;
 pub mod history;
 pub mod i18n;
 pub mod isotp;
+pub mod j2534;
 pub mod kalender;
 pub mod kennungstexte;
 pub mod km;

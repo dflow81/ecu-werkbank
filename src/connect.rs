@@ -130,6 +130,17 @@ pub fn check(be: &Backend) -> Vec<(Stufe, String)> {
     let mut out = Vec::new();
     match be {
         Backend::Demo => out.push((Stufe::Gut, tr!("Demo-Fahrzeug — keine Hardware nötig."))),
+        Backend::J2534 { port } => {
+            let liste = crate::j2534::adapter();
+            match crate::j2534::dll_fuer(port) {
+                Some(d) => out.push((Stufe::Gut, tr!("J2534-Treiber: {a}", a = d))),
+                None => {
+                    let namen: Vec<String> = liste.into_iter().map(|(n, _)| n).collect();
+                    out.push((Stufe::Warnung, if namen.is_empty() { tr!("Kein J2534-Treiber installiert (nur Windows).") } else { tr!("„{a}“ nicht gefunden — installiert: {b}", a = port, b = namen.join(", ")) }));
+                    return out;
+                }
+            }
+        }
         Backend::Doip { addr } => {
             let a = if addr.contains(':') { addr.clone() } else { format!("{addr}:{}", crate::doip::PORT) };
             match a.parse::<std::net::SocketAddr>().ok().map(|x| std::net::TcpStream::connect_timeout(&x, std::time::Duration::from_secs(2))) {

@@ -999,6 +999,8 @@ impl eframe::App for App {
                     .selected_text(match self.transport.as_str() {
                         "elm327" => tr!("ELM327 (USB/BT)"),
                         "wifi" => tr!("ELM327 WiFi"),
+                        "doip" => tr!("DoIP (Ethernet)"),
+                        "j2534" => tr!("J2534-Adapter"),
                         "demo" => tr!("🚗 Demo-Fahrzeug"),
                         _ => tr!("SocketCAN"),
                     })
@@ -1008,6 +1010,10 @@ impl eframe::App for App {
                         }
                         ui.selectable_value(&mut self.transport, "elm327".into(), tr!("ELM327 (USB/BT)"));
                         ui.selectable_value(&mut self.transport, "wifi".into(), tr!("ELM327 WiFi"));
+                        ui.selectable_value(&mut self.transport, "doip".into(), tr!("DoIP (Ethernet)"));
+                        if cfg!(windows) {
+                            ui.selectable_value(&mut self.transport, "j2534".into(), tr!("J2534-Adapter"));
+                        }
                         ui.selectable_value(&mut self.transport, "demo".into(), tr!("🚗 Demo-Fahrzeug"));
                     });
                 match self.transport.as_str() {
@@ -1024,6 +1030,14 @@ impl eframe::App for App {
                     "wifi" => {
                         ui.label("host:port:");
                         ui.add(egui::TextEdit::singleline(&mut self.port).desired_width(130.0));
+                    }
+                    "doip" => {
+                        ui.label(tr!("Gateway-IP:"));
+                        ui.add(egui::TextEdit::singleline(&mut self.port).desired_width(130.0).hint_text("169.254.1.10"));
+                    }
+                    "j2534" => {
+                        ui.label(tr!("Adapter/DLL:"));
+                        ui.add(egui::TextEdit::singleline(&mut self.port).desired_width(160.0).hint_text("openport"));
                     }
                     "demo" => {
                         let cur = ecu_werkbank::sim::modell();

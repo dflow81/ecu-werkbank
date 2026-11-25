@@ -25,6 +25,8 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - **ODX-Import mit Umrechnung**: Messwerte aus ODX bekommen Faktor, Offset und Einheit (lineare Umrechnung).
 - „Andere Marken“ erkennt die Marke an der Fahrgestellnummer und sagt, was bei ihr geht.
 - **K-Leitung (KW1281)** für Autos bis etwa 2004 mit KKL-Kabel: `kline --adresse 01 [--gruppe 1]` liest Identifikation, Fehlerspeicher und Messwertgruppen (nur lesen; gegen ein simuliertes Steuergerät getestet).
+- **J2534-Adapter unter Windows** (Tactrix, Mongoose …): Transport `j2534`, Adapter aus der Registry oder DLL-Pfad (64-Bit-Treiber nötig; ungetestet).
+- GUI: Verbindungsarten „DoIP (Ethernet)“ und — unter Windows — „J2534-Adapter“.
 - **Konfiguration vergleichen in der GUI**: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ (vorher/nachher oder anderes Fahrzeug).
 
 ### Behoben
