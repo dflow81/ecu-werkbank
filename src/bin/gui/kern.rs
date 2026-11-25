@@ -439,6 +439,9 @@ impl App {
             "wifi" => Backend::Elm327Tcp {
                 addr: self.port.clone(),
             },
+            "doip" => Backend::Doip {
+                addr: self.port.clone(),
+            },
             "demo" => Backend::Demo,
             _ => Backend::SocketCan {
                 iface: self.iface.clone(),

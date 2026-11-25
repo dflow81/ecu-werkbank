@@ -20,6 +20,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - **Speicher lesen** (`speicher-lesen`, nur lesen): Steuergeräte-Speicher über UDS 0x23 in Blöcken auslesen und als `.bin` sichern; gesperrte Bereiche werden als Lücke mit Grund vermerkt.
 - **REST-Schnittstelle mit Live-Werten**: `api --live` liefert zusätzlich OBD-Werte vom Auto unter `/api/v1/live/obd?pids=0C,0D` (nur lesen, nur dieser Rechner, mit Schlüssel).
 - **Fehler-Statistik aus der eigenen Historie**: Prüfplan und Fehleranzeige sagen, wie oft ein Fehler bei deinen Autos auftrat, nach welcher Reparatur er weg war (mit Anteil) und wie oft er wiederkam.
+- **DoIP** (Diagnose über Ethernet, ISO 13400): neuer Transport `doip` für neuere Fahrzeuge — Fahrzeugsuche, Routing-Aktivierung, UDS über das Gateway (gegen ein simuliertes Gateway getestet).
+- **CAN FD** für ISO-TP: Frames bis 64 Byte und Nachrichten über 4095 Byte (`VAG_CANFD=1`, Schnittstelle mit MTU 72).
+- **ODX-Import mit Umrechnung**: Messwerte aus ODX bekommen Faktor, Offset und Einheit (lineare Umrechnung).
 - **Konfiguration vergleichen in der GUI**: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ (vorher/nachher oder anderes Fahrzeug).
 
 ### Behoben

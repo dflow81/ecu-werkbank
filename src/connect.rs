@@ -130,6 +130,20 @@ pub fn check(be: &Backend) -> Vec<(Stufe, String)> {
     let mut out = Vec::new();
     match be {
         Backend::Demo => out.push((Stufe::Gut, tr!("Demo-Fahrzeug — keine Hardware nötig."))),
+        Backend::Doip { addr } => {
+            let a = if addr.contains(':') { addr.clone() } else { format!("{addr}:{}", crate::doip::PORT) };
+            match a.parse::<std::net::SocketAddr>().ok().map(|x| std::net::TcpStream::connect_timeout(&x, std::time::Duration::from_secs(2))) {
+                Some(Ok(_)) => out.push((Stufe::Gut, tr!("DoIP-Gateway {a} erreichbar", a = a))),
+                Some(Err(e)) => {
+                    out.push((Stufe::Warnung, tr!("DoIP-Gateway {a} nicht erreichbar ({e}) — Ethernet-Kabel gesteckt, Zündung an, Rechner im selben Netz (oft 169.254.x.x)?", a = a, e = e)));
+                    return out;
+                }
+                None => {
+                    out.push((Stufe::Warnung, tr!("Adresse '{a}' ungültig (Format 169.254.1.10 oder 169.254.1.10:13400)", a = addr)));
+                    return out;
+                }
+            }
+        }
         Backend::SocketCan { iface } => {
             let all = can_interfaces();
             let virt = read(&crate::platzhalter!("/sys/class/net/{iface}/type", iface = iface)).is_some() && iface.starts_with("vcan");

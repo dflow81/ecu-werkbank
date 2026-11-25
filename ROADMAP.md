@@ -47,8 +47,8 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 28 | Integrationstests über `vcan0` + `mockecu` | – | mittel | mittel | niedrig | mittel | 1.0 | 🟡 mockecu vorhanden |
 | 29 | Codierung: Klartext-Assistent mit Abhängigkeiten (Bit A nur mit Bit B) | ODIS, E-Sys | hoch | mittel | mittel | mittel | 2.0 | ✅ `benoetigt`/`schliesst_aus` in Labels, Datenpaketen und Datenbank (Schema 2); Warnung im Codier-Helfer und in der CLI |
 | 30 | Fahrzeug-Konfiguration als Ganzes vergleichen (vorher/nachher, zwei Autos) | E-Sys | mittel | niedrig | niedrig | mittel | 1.0 | ✅ `konfig-vergleich` (CLI) und GUI: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ |
-| 31 | DoIP (Diagnose über Ethernet, neuere VW/BMW) | ODIS, ISTA+, E-Sys | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
-| 32 | 29-Bit-CAN-IDs und CAN FD | Xentry, Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 29 Bit: ISO-TP (SocketCAN), ELM327 (ATSP7), Simulation, Marken-Suche; CAN FD fehlt; am echten 29-Bit-Auto noch nicht geprüft |
+| 31 | DoIP (Diagnose über Ethernet, neuere VW/BMW) | ODIS, ISTA+, E-Sys | hoch | hoch | mittel | mittel | 2.0 | 🟡 `doip.rs` (ISO 13400-2): Fahrzeugsuche per UDP, Routing Activation, Diagnose-Nachrichten mit Bestätigung, Alive-Check; Transport `-t doip --port <IP>`; gegen simuliertes Gateway getestet — echtes DoIP-Fahrzeug offen |
+| 32 | 29-Bit-CAN-IDs und CAN FD | Xentry, Autel | mittel | mittel | niedrig | mittel | 2.0 | 🟡 29 Bit: ISO-TP (SocketCAN), ELM327 (ATSP7), Simulation, Marken-Suche. CAN FD: ISO-TP mit 64-Byte-Frames, Längen-Escape und 32-Bit-Länge (ISO 15765-2:2016), eingeschaltet mit `VAG_CANFD=1` bei MTU 72; Zerlegung getestet — vcan-/Fahrzeugtest offen |
 | 33 | K-Line (KWP1281/KWP2000 vor ~2004) | VCDS | mittel | hoch | mittel | niedrig | 2.0 | ⏳ braucht anderen Adapter. Fehlerarten bei KW1281 haben eigene Nummern (z. B. 37 = defekt statt 14 bei TP 2.0); die Datenbank kennt dafür schon das Protokoll `KW1281` — Texte in eigenen Worten anlegen, keine fremden Listen abschreiben |
 | 34 | J2534 Pass-Thru-Adapter (Windows) | ODIS, Xentry | hoch | hoch | mittel | mittel | 2.0 | ⏳ |
 | 35 | Weitere Marken: Basis-Diagnose Opel/Ford/Mercedes/BMW über UDS + OBD | Autel | hoch | hoch | mittel | mittel | 2.0 | 🟡 `fremd.rs` findet Steuergeräte mit 11 und 29 Bit (ISO 15765-4) |
@@ -80,7 +80,7 @@ Plan siehe unten „Plan: Fahrzeug-Datenbank“. Baut auf Punkt 20 (Herstellerda
 | 54 | Importer DBC, JSON, CSV, TOML | CANalyzer | hoch | mittel | niedrig | hoch | 1.0 | ✅ `db dbc/paket/csv/labels`, Export `db export` |
 | 55 | Community-Daten als Textdateien im Repo, beim Start in die Datenbank | – | hoch | mittel | niedrig | mittel | 2.0 | ✅ `daten/community/`, `db eingebaut` |
 | 56 | REST-Schnittstelle auf die Datenbank (lesen) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `db::api`; ODX/PDX-Zeilen werden nie ausgegeben |
-| 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | 🟡 `db odx`: Steuergeräte, Fehler, 0x22-DIDs; Skalierung/Codierung fehlen; mit echter Datei noch nicht geprüft |
+| 57 | ODX-Import (selbst gekaufte Daten, bleiben lokal) | ODIS | hoch | hoch | mittel | mittel | 2.0 | 🟡 `db odx`: Steuergeräte, Fehler, 0x22-DIDs mit linearer Umrechnung (COMPU-METHOD LINEAR/IDENTICAL) und Einheit; Tabellen-Umrechnungen und Codierung fehlen; mit echter Datei noch nicht geprüft |
 | 58 | PDX-Import (ODX-Paket als ZIP) | ODIS | mittel | mittel | mittel | niedrig | 2.0 | ✅ `db odx` erkennt PDX (gespeichert/deflate) |
 | 59 | ~~Rollen und Rechte (lesen, codieren, flashen, verwalten)~~ | ODIS | – | – | – | **gestrichen** | – | ❌ nicht gebraucht (Entscheidung 18.11.2026); Ein-Personen-Programm, Schnittstelle nur lesend |
 | 60 | Plugin-Ordner `plugins/` (Hersteller, Importer, Decoder, Codierer, Flasher, Analyse) | – | mittel | hoch | mittel | niedrig | Vision | ⏳ |

@@ -98,7 +98,7 @@ pub fn versuch_lohnt(be: &Backend, vorher: Option<(u64, u64)>, seit: Duration) -
     match be {
         Backend::Demo => true,
         // ELM327: die Verbindung gehört der jeweiligen Aufgabe, nicht dazwischenfunken
-        Backend::Elm327Serial { .. } | Backend::Elm327Tcp { .. } => false,
+        Backend::Elm327Serial { .. } | Backend::Elm327Tcp { .. } | Backend::Doip { .. } => false,
         Backend::SocketCan { iface } => {
             let aktiv = crate::connect::can_interfaces().into_iter().any(|(n, up, _)| &n == iface && up);
             if !aktiv {

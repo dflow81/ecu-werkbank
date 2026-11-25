@@ -27,6 +27,7 @@ pub mod db;
 pub mod dbc;
 pub mod firmenkopf;
 pub mod dpf;
+pub mod doip;
 pub mod dtc_db;
 pub mod elm327;
 pub mod favoriten;

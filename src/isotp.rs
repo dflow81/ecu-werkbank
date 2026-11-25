@@ -4,6 +4,13 @@
 //! `can-isotp` kernel module being present. Supports classic 8-byte CAN frames
 //! with 11-bit identifiers (VAG) and 29-bit identifiers (ISO 15765-4, e.g.
 //! 0x18DA10F1) — an ID above 0x7FF is sent as an extended frame.
+//!
+//! **CAN FD** (ISO 15765-2:2016): Frames bis 64 Byte, Einzel-Frame mit
+//! Längen-Escape (`00 LL`), Erst-Frame mit 32-Bit-Länge (`10 00 LLLLLLLL`)
+//! für Nutzlasten über 4095 Byte. Eingeschaltet nur ausdrücklich
+//! (`VAG_CANFD=1`) und nur, wenn die Schnittstelle CAN FD kann (MTU 72) —
+//! ältere Autos wie der Golf 6 sprechen kein FD. Empfangen werden immer beide
+//! Arten.
 
 use anyhow::{anyhow, bail, Context, Result};
 use crate::can::{CanFrame, CanSocket, EmbeddedFrame, ExtendedId, Id, Socket, StandardId};
@@ -14,86 +21,207 @@ use std::time::Duration;
 /// present. Change here if a controller is observed to be picky.
 const PAD: u8 = 0xAA;
 
+/// Gültige CAN-FD-Nutzlängen (DLC 9–15 = 12 … 64 Byte).
+const FD_LAENGEN: [usize; 8] = [8, 12, 16, 20, 24, 32, 48, 64];
+
+/// Auf die nächste gültige Frame-Länge auffüllen (klassisch immer 8).
+fn auffuellen(mut f: Vec<u8>, dl: usize) -> Vec<u8> {
+    let ziel = if dl <= 8 { 8 } else { FD_LAENGEN.iter().copied().find(|l| *l >= f.len()).unwrap_or(64) };
+    f.resize(ziel, PAD);
+    f
+}
+
+/// Erster Frame einer Nachricht: (Frame, verbrauchte Nutzbytes, Einzel-Frame?).
+/// `dl` = Frame-Größe (8 klassisch, 64 bei CAN FD).
+pub fn erster_frame(data: &[u8], dl: usize) -> Result<(Vec<u8>, usize, bool)> {
+    let n = data.len();
+    if n == 0 {
+        bail!("leere ISO-TP-Nutzlast");
+    }
+    if n <= 7 {
+        let mut f = vec![n as u8];
+        f.extend_from_slice(data);
+        return Ok((auffuellen(f, dl), n, true));
+    }
+    if dl > 8 && n <= dl - 2 {
+        // FD-Einzel-Frame mit Längen-Escape
+        let mut f = vec![0x00, n as u8];
+        f.extend_from_slice(data);
+        return Ok((auffuellen(f, dl), n, true));
+    }
+    if n <= 0xFFF {
+        let mut f = vec![0x10 | ((n >> 8) & 0x0F) as u8, (n & 0xFF) as u8];
+        let k = dl - 2;
+        f.extend_from_slice(&data[..k]);
+        return Ok((f, k, false));
+    }
+    if dl <= 8 {
+        bail!(crate::tr!("Nutzlast {len} B überschreitet ISO-TP-Klassik-Limit (4095 B)", len = n));
+    }
+    // Erst-Frame mit 32-Bit-Länge (nur sinnvoll mit FD)
+    let mut f = vec![0x10, 0x00];
+    f.extend_from_slice(&(n as u32).to_be_bytes());
+    let k = dl - 6;
+    f.extend_from_slice(&data[..k]);
+    Ok((f, k, false))
+}
+
+/// Folge-Frame ab `offset` mit Sequenznummer `sn`: (Frame, neuer Offset).
+pub fn folge_frame(data: &[u8], offset: usize, sn: u8, dl: usize) -> (Vec<u8>, usize) {
+    let ende = (offset + dl - 1).min(data.len());
+    let mut f = vec![0x20 | (sn & 0x0F)];
+    f.extend_from_slice(&data[offset..ende]);
+    // letzter Folge-Frame bei FD: nur bis zur nächsten gültigen Länge auffüllen
+    (auffuellen(f, dl), ende)
+}
+
+/// Was der erste empfangene Frame sagt.
+#[derive(Debug, PartialEq)]
+pub enum Anfang {
+    Einzel(Vec<u8>),
+    /// Gesamtlänge, schon enthaltene Daten
+    Erster(usize, Vec<u8>),
+}
+
+pub fn anfang_lesen(f: &[u8]) -> Result<Anfang> {
+    let b = |i: usize| f.get(i).copied().ok_or_else(|| anyhow!("ISO-TP-Frame zu kurz"));
+    match b(0)? & 0xF0 {
+        0x00 => {
+            let l = usize::from(b(0)? & 0x0F);
+            if l == 0 && f.len() > 8 {
+                // FD-Einzel-Frame mit Escape
+                let l = usize::from(b(1)?);
+                Ok(Anfang::Einzel(f.get(2..2 + l).ok_or_else(|| anyhow!("ISO-TP-Einzel-Frame zu kurz"))?.to_vec()))
+            } else {
+                Ok(Anfang::Einzel(f.get(1..1 + l).ok_or_else(|| anyhow!("ISO-TP-Einzel-Frame zu kurz"))?.to_vec()))
+            }
+        }
+        0x10 => {
+            let l12 = (usize::from(b(0)? & 0x0F) << 8) | usize::from(b(1)?);
+            if l12 == 0 {
+                let l = u32::from_be_bytes([b(2)?, b(3)?, b(4)?, b(5)?]) as usize;
+                Ok(Anfang::Erster(l, f[6..].to_vec()))
+            } else {
+                Ok(Anfang::Erster(l12, f[2..].to_vec()))
+            }
+        }
+        other => bail!("unerwarteter ISO-TP PCI-Typ {other:#04x}"),
+    }
+}
+
+enum Sock {
+    Klassisch(CanSocket),
+    #[cfg(target_os = "linux")]
+    Fd(socketcan::CanFdSocket),
+}
+
 pub struct IsoTp {
-    sock: CanSocket,
+    sock: Sock,
     tx_id: u32,
     rx_id: u32,
+    /// Frame-Größe beim Senden: 8 (klassisch) oder 64 (CAN FD)
+    dl: usize,
     _belegt: crate::bus::Belegt,
+}
+
+/// CAN FD gewünscht (`VAG_CANFD=1`) und kann die Schnittstelle es (MTU 72)?
+pub fn fd_aktiv(iface: &str) -> bool {
+    let gewuenscht = std::env::var("VAG_CANFD").is_ok_and(|v| v == "1");
+    gewuenscht && std::fs::read_to_string(format!("/sys/class/net/{iface}/mtu")).is_ok_and(|m| m.trim() == "72")
 }
 
 impl IsoTp {
     pub fn open(iface: &str, tx_id: u32, rx_id: u32) -> Result<Self> {
-        let sock = CanSocket::open(iface)
-            .with_context(|| crate::tr!("CAN-Interface '{iface}' konnte nicht geöffnet werden", iface = iface))?;
+        let fehler = || crate::tr!("CAN-Interface '{iface}' konnte nicht geöffnet werden", iface = iface);
+        #[cfg(target_os = "linux")]
+        if fd_aktiv(iface) {
+            let sock = socketcan::CanFdSocket::open(iface).with_context(fehler)?;
+            sock.set_read_timeout(Duration::from_millis(1000))?;
+            sock.set_write_timeout(Duration::from_millis(1000))?;
+            return Ok(Self { sock: Sock::Fd(sock), tx_id, rx_id, dl: 64, _belegt: crate::bus::Belegt::neu() });
+        }
+        let sock = CanSocket::open(iface).with_context(fehler)?;
         crate::connect::fix_hw_loopback(iface, &sock);
         sock.set_read_timeout(Duration::from_millis(1000))?;
         sock.set_write_timeout(Duration::from_millis(1000))?;
-        Ok(Self { sock, tx_id, rx_id, _belegt: crate::bus::Belegt::neu() })
+        Ok(Self { sock: Sock::Klassisch(sock), tx_id, rx_id, dl: 8, _belegt: crate::bus::Belegt::neu() })
+    }
+
+    /// Sendet über CAN FD?
+    pub fn ist_fd(&self) -> bool {
+        self.dl > 8
     }
 
     /// (ID, 29 Bit?) eines empfangenen Frames.
-    fn raw_id(frame: &CanFrame) -> (u32, bool) {
-        match frame.id() {
+    fn raw_id(id: Id) -> (u32, bool) {
+        match id {
             Id::Standard(s) => (u32::from(s.as_raw()), false),
             Id::Extended(e) => (e.as_raw(), true),
         }
     }
 
-    fn write(&self, id: u32, payload: &[u8]) -> Result<()> {
-        let mut data = [PAD; 8];
-        data[..payload.len()].copy_from_slice(payload);
+    fn id(id: u32) -> Result<Id> {
         let ungueltig = || anyhow!(crate::tr!("ungültige CAN-ID {id}", id = format!("{id:#x}")));
-        let frame = if id > 0x7FF {
-            CanFrame::new(ExtendedId::new(id).ok_or_else(ungueltig)?, &data)
-        } else {
-            CanFrame::new(StandardId::new(id as u16).ok_or_else(ungueltig)?, &data)
-        };
-        let frame = frame.ok_or_else(|| anyhow!(crate::trs!("Frame-Bau fehlgeschlagen")))?;
-        self.sock.write_frame(&frame).context(crate::trs!("CAN-Senden fehlgeschlagen"))?;
+        Ok(if id > 0x7FF { Id::Extended(ExtendedId::new(id).ok_or_else(ungueltig)?) } else { Id::Standard(StandardId::new(id as u16).ok_or_else(ungueltig)?) })
+    }
+
+    fn write(&self, id: u32, payload: &[u8]) -> Result<()> {
+        let data = auffuellen(payload.to_vec(), self.dl);
+        match &self.sock {
+            Sock::Klassisch(s) => {
+                let frame = CanFrame::new(Self::id(id)?, &data).ok_or_else(|| anyhow!(crate::trs!("Frame-Bau fehlgeschlagen")))?;
+                s.write_frame(&frame).context(crate::trs!("CAN-Senden fehlgeschlagen"))?;
+            }
+            #[cfg(target_os = "linux")]
+            Sock::Fd(s) => {
+                let frame = socketcan::CanFdFrame::new(Self::id(id)?, &data).ok_or_else(|| anyhow!(crate::trs!("Frame-Bau fehlgeschlagen")))?;
+                s.write_frame(&frame).context(crate::trs!("CAN-Senden fehlgeschlagen"))?;
+            }
+        }
         Ok(())
     }
 
     /// Read the next CAN frame addressed to our rx_id, ignoring unrelated traffic.
-    fn read_rx(&self) -> Result<[u8; 8]> {
+    fn read_rx(&self) -> Result<Vec<u8>> {
+        let gesucht = (self.rx_id, self.rx_id > 0x7FF);
         loop {
-            let frame = self
-                .sock
-                .read_frame()
-                .context(crate::trs!("Keine Antwort (Timeout) vom Steuergerät"))?;
-            if Self::raw_id(&frame) == (self.rx_id, self.rx_id > 0x7FF) {
-                let mut buf = [0u8; 8];
-                let d = frame.data();
-                buf[..d.len()].copy_from_slice(d);
-                return Ok(buf);
+            match &self.sock {
+                Sock::Klassisch(s) => {
+                    let frame = s.read_frame().context(crate::trs!("Keine Antwort (Timeout) vom Steuergerät"))?;
+                    if Self::raw_id(frame.id()) == gesucht {
+                        let mut d = frame.data().to_vec();
+                        d.resize(8, 0);
+                        return Ok(d);
+                    }
+                }
+                #[cfg(target_os = "linux")]
+                Sock::Fd(s) => {
+                    use socketcan::CanAnyFrame;
+                    let frame = s.read_frame().context(crate::trs!("Keine Antwort (Timeout) vom Steuergerät"))?;
+                    let (id, d) = match &frame {
+                        CanAnyFrame::Normal(f) => (f.id(), f.data().to_vec()),
+                        CanAnyFrame::Fd(f) => (f.id(), f.data().to_vec()),
+                        _ => continue,
+                    };
+                    if Self::raw_id(id) == gesucht {
+                        let mut d = d;
+                        if d.len() < 8 {
+                            d.resize(8, 0);
+                        }
+                        return Ok(d);
+                    }
+                }
             }
         }
     }
 
     /// Send a complete service payload (SF or FF+CF with flow control).
     pub fn send(&self, data: &[u8]) -> Result<()> {
-        if data.is_empty() {
-            bail!("leere ISO-TP-Nutzlast");
-        }
-        if data.len() <= 7 {
-            // Single Frame
-            let mut sf = Vec::with_capacity(8);
-            sf.push(data.len() as u8); // PCI: 0x0L
-            sf.extend_from_slice(data);
-            self.write(self.tx_id, &sf)?;
+        let (erster, mut offset, einzel) = erster_frame(data, self.dl)?;
+        self.write(self.tx_id, &erster)?;
+        if einzel {
             return Ok(());
         }
-
-        // First Frame
-        let len = data.len();
-        if len > 0xFFF {
-            bail!(crate::tr!("Nutzlast {len} B überschreitet ISO-TP-Klassik-Limit (4095 B)", len = len));
-        }
-        let mut ff = Vec::with_capacity(8);
-        ff.push(0x10 | ((len >> 8) & 0x0F) as u8);
-        ff.push((len & 0xFF) as u8);
-        ff.extend_from_slice(&data[..6]);
-        self.write(self.tx_id, &ff)?;
-
         // Wait for Flow Control from the ECU
         let fc = self.read_rx()?;
         if fc[0] & 0xF0 != 0x30 {
@@ -107,21 +235,14 @@ impl IsoTp {
 
         // Consecutive Frames
         let mut sn = 1u8;
-        let mut offset = 6usize;
         let mut sent_in_block = 0u8;
-        while offset < len {
-            let end = (offset + 7).min(len);
-            let mut cf = Vec::with_capacity(8);
-            cf.push(0x20 | (sn & 0x0F));
-            cf.extend_from_slice(&data[offset..end]);
+        while offset < data.len() {
+            let (cf, neu) = folge_frame(data, offset, sn, self.dl);
             self.write(self.tx_id, &cf)?;
-            offset = end;
+            offset = neu;
             sn = sn.wrapping_add(1) & 0x0F;
-            if sn == 0 {
-                sn = 0; // SN wraps 0..15, but after 15 goes to 0 per spec
-            }
             sent_in_block += 1;
-            if block_size != 0 && sent_in_block == block_size && offset < len {
+            if block_size != 0 && sent_in_block == block_size && offset < data.len() {
                 let fc = self.read_rx()?;
                 if fc[0] & 0xF0 != 0x30 {
                     bail!("Flow Control erwartet, {:#04x} erhalten", fc[0]);
@@ -136,17 +257,11 @@ impl IsoTp {
     /// Receive a complete service payload (SF or FF+CF), sending Flow Control.
     pub fn recv(&self) -> Result<Vec<u8>> {
         let first = self.read_rx()?;
-        match first[0] & 0xF0 {
-            0x00 => {
-                // Single Frame
-                let len = (first[0] & 0x0F) as usize;
-                Ok(first[1..1 + len].to_vec())
-            }
-            0x10 => {
-                // First Frame
-                let len = (((first[0] & 0x0F) as usize) << 8) | first[1] as usize;
+        match anfang_lesen(&first)? {
+            Anfang::Einzel(d) => Ok(d),
+            Anfang::Erster(len, schon) => {
                 let mut out = Vec::with_capacity(len);
-                out.extend_from_slice(&first[2..8]);
+                out.extend_from_slice(&schon[..schon.len().min(len)]);
                 // Send Flow Control: CTS, BS=0 (all at once), STmin=0
                 self.write(self.tx_id, &[0x30, 0x00, 0x00])?;
                 let mut expect_sn = 1u8;
@@ -159,13 +274,12 @@ impl IsoTp {
                     if sn != expect_sn {
                         bail!("Sequenzfehler: {sn} erwartet {expect_sn}");
                     }
-                    let take = (len - out.len()).min(7);
+                    let take = (len - out.len()).min(cf.len() - 1);
                     out.extend_from_slice(&cf[1..1 + take]);
                     expect_sn = (expect_sn + 1) & 0x0F;
                 }
                 Ok(out)
             }
-            other => bail!("unerwarteter ISO-TP PCI-Typ {other:#04x}"),
         }
     }
 }
@@ -176,5 +290,75 @@ fn decode_stmin(b: u8) -> Duration {
         0x00..=0x7F => Duration::from_millis(b as u64),
         0xF1..=0xF9 => Duration::from_micros(((b - 0xF0) as u64) * 100),
         _ => Duration::from_millis(1),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nachricht in Frames zerlegen und wieder zusammensetzen (ohne Bus).
+    fn hin_und_zurueck(data: &[u8], dl: usize) -> (Vec<Vec<u8>>, Vec<u8>) {
+        let (erster, mut off, einzel) = erster_frame(data, dl).unwrap();
+        let mut frames = vec![erster];
+        let mut sn = 1u8;
+        while !einzel && off < data.len() {
+            let (f, n) = folge_frame(data, off, sn, dl);
+            frames.push(f);
+            off = n;
+            sn = (sn + 1) & 0x0F;
+        }
+        let zurueck = match anfang_lesen(&frames[0]).unwrap() {
+            Anfang::Einzel(d) => d,
+            Anfang::Erster(len, schon) => {
+                let mut out = schon[..schon.len().min(len)].to_vec();
+                for f in &frames[1..] {
+                    let take = (len - out.len()).min(f.len() - 1);
+                    out.extend_from_slice(&f[1..1 + take]);
+                }
+                out
+            }
+        };
+        (frames, zurueck)
+    }
+
+    #[test]
+    fn klassisch_und_fd_rund() {
+        for dl in [8usize, 64] {
+            for n in [1usize, 7, 8, 20, 62, 63, 64, 100, 300, 4095] {
+                let data: Vec<u8> = (0..n).map(|i| (i * 7 + 3) as u8).collect();
+                let (frames, zurueck) = hin_und_zurueck(&data, dl);
+                assert_eq!(zurueck, data, "dl {dl}, {n} Byte");
+                for f in &frames {
+                    if dl == 8 {
+                        assert_eq!(f.len(), 8);
+                    } else {
+                        assert!(FD_LAENGEN.contains(&f.len()), "ungültige FD-Länge {}", f.len());
+                    }
+                }
+            }
+        }
+        // klassisch: 20 Byte = Erst-Frame (6) + 2 Folge-Frames
+        assert_eq!(hin_und_zurueck(&[1; 20], 8).0.len(), 3);
+        // FD: 20 Byte passen in einen Einzel-Frame mit Escape (00 14 …), auf 24 aufgefüllt
+        let (f, _) = hin_und_zurueck(&[1; 20], 64);
+        assert_eq!((f.len(), f[0][0], f[0][1], f[0].len()), (1, 0x00, 20, 24));
+        // bis 7 Byte bleibt es auch bei FD der klassische Einzel-Frame
+        assert_eq!(hin_und_zurueck(&[9; 5], 64).0[0][0], 0x05);
+    }
+
+    #[test]
+    fn grosse_nachricht_nur_mit_fd() {
+        let data = vec![0x55; 5000];
+        assert!(erster_frame(&data, 8).is_err(), "klassisch max. 4095");
+        let (frames, zurueck) = hin_und_zurueck(&data, 64);
+        assert_eq!(zurueck, data);
+        assert_eq!(&frames[0][..6], &[0x10, 0x00, 0x00, 0x00, 0x13, 0x88], "32-Bit-Länge");
+    }
+
+    #[test]
+    fn fd_nur_auf_wunsch() {
+        std::env::remove_var("VAG_CANFD");
+        assert!(!fd_aktiv("lo"), "ohne VAG_CANFD nie");
     }
 }

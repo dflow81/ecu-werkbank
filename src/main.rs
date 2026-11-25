@@ -63,6 +63,9 @@ impl Cli {
             "wifi" | "tcp" => Backend::Elm327Tcp {
                 addr: self.port.clone(),
             },
+            "doip" => Backend::Doip {
+                addr: self.port.clone(),
+            },
             t if ecu_werkbank::sim::Modell::parse(t).is_some() => {
                 ecu_werkbank::sim::set_modell(ecu_werkbank::sim::Modell::parse(t).unwrap_or_default());
                 eprintln!("{}", ecu_werkbank::tr!("Hinweis: Simulation ({a}) — es wird kein echtes Auto gefragt.", a = t));

@@ -150,7 +150,7 @@ impl Erfahrung {
         )];
         let mit = self.behoben() - self.behoben_ohne_notiz;
         for (m, n) in &self.massnahmen {
-            let anteil = if mit > 0 { n * 100 / mit } else { 0 };
+            let anteil = (n * 100).checked_div(mit).unwrap_or(0);
             z.push(crate::tr!("  weg nach „{m}“: {n} von {g} ({p} %)", m = m, n = n, g = mit, p = anteil));
         }
         if self.behoben_ohne_notiz > 0 {

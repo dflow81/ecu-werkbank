@@ -58,6 +58,7 @@ pub fn steuergeraete_aus_odx(xml: &str) -> Result<Vec<PaketSteuergeraet>> {
             }
         }
     }
+    let skalierung = Skalierung::aus(&doc);
     let mut out = Vec::new();
     for schicht in doc.descendants().filter(|n| n.has_tag_name("BASE-VARIANT") || n.has_tag_name("ECU-VARIANT")) {
         let mut sg = PaketSteuergeraet { name: name(schicht), protokoll: "UDS".into(), ..Default::default() };
@@ -77,13 +78,83 @@ pub fn steuergeraete_aus_odx(xml: &str) -> Result<Vec<PaketSteuergeraet>> {
             let Some(r) = dienst.children().find(|c| c.has_tag_name("REQUEST-REF")).and_then(|r| r.attribute("ID-REF")) else { continue };
             if let Some(&did) = did_von_anfrage.get(r) {
                 if !sg.dids.iter().any(|d| d.did == did) {
-                    sg.dids.push(PaketDid { did, name: name(dienst), einheit: String::new(), faktor: 1.0, offset: 0.0 });
+                    // Umrechnung aus der positiven Antwort (erster Datenparameter)
+                    let antwort = dienst.descendants().find(|c| c.has_tag_name("POS-RESPONSE-REF")).and_then(|r| r.attribute("ID-REF"));
+                    let (faktor, offset, einheit) = antwort.and_then(|a| skalierung.fuer_antwort(a)).unwrap_or((1.0, 0.0, String::new()));
+                    sg.dids.push(PaketDid { did, name: name(dienst), einheit, faktor, offset });
                 }
             }
         }
         out.push(sg);
     }
     Ok(out)
+}
+
+/// Umrechnungen aus ODX: Antwort → Datenobjekt (DOP) → COMPU-METHOD (linear)
+/// und Einheit. `physikalisch = (V0 + V1 · roh) / D` → faktor = V1/D, offset = V0/D.
+/// Andere Umrechnungsarten (Tabellen, Texttabellen) bleiben roh (Faktor 1).
+struct Skalierung<'a> {
+    /// Antwort-ID → DOP-ID (erster Parameter mit DOP-REF)
+    antwort_dop: HashMap<&'a str, &'a str>,
+    /// DOP-ID → (faktor, offset, Einheiten-ID)
+    dop: HashMap<&'a str, (f64, f64, Option<&'a str>)>,
+    /// Einheiten-ID → Anzeigename
+    einheit: HashMap<&'a str, String>,
+}
+
+impl<'a> Skalierung<'a> {
+    fn aus(doc: &'a roxmltree::Document<'a>) -> Self {
+        let mut s = Skalierung { antwort_dop: HashMap::new(), dop: HashMap::new(), einheit: HashMap::new() };
+        for u in doc.descendants().filter(|n| n.has_tag_name("UNIT")) {
+            if let (Some(id), Some(t)) = (u.attribute("ID"), kind_text(u, "DISPLAY-NAME")) {
+                s.einheit.insert(id, t.trim().to_string());
+            }
+        }
+        for a in doc.descendants().filter(|n| n.has_tag_name("POS-RESPONSE")) {
+            let Some(id) = a.attribute("ID") else { continue };
+            let dop = a
+                .descendants()
+                .filter(|p| p.has_tag_name("PARAM") && p.attribute("SEMANTIC").is_none_or(|x| x == "DATA"))
+                .find_map(|p| p.children().find(|c| c.has_tag_name("DOP-REF")).and_then(|r| r.attribute("ID-REF")));
+            if let Some(d) = dop {
+                s.antwort_dop.insert(id, d);
+            }
+        }
+        for d in doc.descendants().filter(|n| n.has_tag_name("DATA-OBJECT-PROP")) {
+            let Some(id) = d.attribute("ID") else { continue };
+            let einheit = d.descendants().find(|c| c.has_tag_name("UNIT-REF")).and_then(|r| r.attribute("ID-REF"));
+            let (faktor, offset) = d.descendants().find(|c| c.has_tag_name("COMPU-METHOD")).and_then(linear).unwrap_or((1.0, 0.0));
+            s.dop.insert(id, (faktor, offset, einheit));
+        }
+        s
+    }
+
+    fn fuer_antwort(&self, antwort: &str) -> Option<(f64, f64, String)> {
+        let dop = self.antwort_dop.get(antwort)?;
+        let (f, o, e) = self.dop.get(dop)?;
+        let einheit = e.and_then(|e| self.einheit.get(e)).cloned().unwrap_or_default();
+        Some((*f, *o, einheit))
+    }
+}
+
+/// Lineare Umrechnung einer COMPU-METHOD (CATEGORY LINEAR oder IDENTICAL).
+fn linear(m: roxmltree::Node) -> Option<(f64, f64)> {
+    match kind_text(m, "CATEGORY")?.trim() {
+        "IDENTICAL" => Some((1.0, 0.0)),
+        "LINEAR" => {
+            let werte = |tag: &str| -> Vec<f64> {
+                m.descendants()
+                    .find(|c| c.has_tag_name(tag))
+                    .map(|n| n.children().filter(|c| c.has_tag_name("V")).filter_map(|v| v.text()?.trim().parse().ok()).collect())
+                    .unwrap_or_default()
+            };
+            let zaehler = werte("COMPU-NUMERATOR");
+            let nenner = werte("COMPU-DENOMINATOR").first().copied().unwrap_or(1.0);
+            let (v0, v1) = (*zaehler.first()?, *zaehler.get(1)?);
+            (nenner != 0.0).then(|| (v1 / nenner, v0 / nenner))
+        }
+        _ => None,
+    }
 }
 
 /// Dateien aus einem ZIP (PDX) lesen: (Name, Inhalt). Unterstützt „stored“ und „deflate“.
@@ -174,12 +245,23 @@ mod tests {
               </DTCS>
             </DTC-DOP>
           </DTC-DOPS>
+          <DATA-OBJECT-PROPS>
+            <DATA-OBJECT-PROP ID="DOP_Temp">
+              <SHORT-NAME>DOP_Temp</SHORT-NAME>
+              <COMPU-METHOD><CATEGORY>LINEAR</CATEGORY><COMPU-INTERNAL-TO-PHYS><COMPU-SCALES><COMPU-SCALE>
+                <COMPU-RATIONAL-COEFFS><COMPU-NUMERATOR><V>-400</V><V>1</V></COMPU-NUMERATOR><COMPU-DENOMINATOR><V>10</V></COMPU-DENOMINATOR></COMPU-RATIONAL-COEFFS>
+              </COMPU-SCALE></COMPU-SCALES></COMPU-INTERNAL-TO-PHYS></COMPU-METHOD>
+              <UNIT-REF ID-REF="U_Grad"/>
+            </DATA-OBJECT-PROP>
+          </DATA-OBJECT-PROPS>
+          <UNIT-SPEC><UNITS><UNIT ID="U_Grad"><SHORT-NAME>degC</SHORT-NAME><DISPLAY-NAME>°C</DISPLAY-NAME></UNIT></UNITS></UNIT-SPEC>
         </DIAG-DATA-DICTIONARY-SPEC>
         <DIAG-COMMS>
           <DIAG-SERVICE ID="DS_Lesen_Test" SEMANTIC="DATA">
             <SHORT-NAME>DS_Lesen_Test</SHORT-NAME>
             <LONG-NAME>Testwert lesen</LONG-NAME>
             <REQUEST-REF ID-REF="RQ_Lesen_Test"/>
+            <POS-RESPONSE-REFS><POS-RESPONSE-REF ID-REF="PR_Lesen_Test"/></POS-RESPONSE-REFS>
           </DIAG-SERVICE>
           <DIAG-SERVICE ID="DS_Reset">
             <SHORT-NAME>DS_Reset</SHORT-NAME>
@@ -201,6 +283,15 @@ mod tests {
             </PARAMS>
           </REQUEST>
         </REQUESTS>
+        <POS-RESPONSES>
+          <POS-RESPONSE ID="PR_Lesen_Test">
+            <SHORT-NAME>PR_Lesen_Test</SHORT-NAME>
+            <PARAMS>
+              <PARAM SEMANTIC="SERVICE-ID"><SHORT-NAME>SID</SHORT-NAME><CODED-VALUE>98</CODED-VALUE></PARAM>
+              <PARAM SEMANTIC="DATA"><SHORT-NAME>Wert</SHORT-NAME><BYTE-POSITION>3</BYTE-POSITION><DOP-REF ID-REF="DOP_Temp"/></PARAM>
+            </PARAMS>
+          </POS-RESPONSE>
+        </POS-RESPONSES>
       </BASE-VARIANT>
     </BASE-VARIANTS>
   </DIAG-LAYER-CONTAINER>
@@ -216,6 +307,8 @@ mod tests {
         assert_eq!(s[0].fehler[1].code, "9A0B11");
         assert_eq!(s[0].dids.len(), 1, "nur 0x22-Dienste");
         assert_eq!((s[0].dids[0].did, s[0].dids[0].name.as_str()), (0xF10C, "Testwert lesen"));
+        // lineare Umrechnung (−400 + 1·roh) / 10 und Einheit
+        assert_eq!((s[0].dids[0].faktor, s[0].dids[0].offset, s[0].dids[0].einheit.as_str()), (0.1, -40.0, "°C"));
         assert!(steuergeraete_aus_odx("<kein/>").is_err());
         assert!(steuergeraete_aus_odx("kaputt <").is_err());
     }
