@@ -42,6 +42,7 @@ pub mod kalender;
 pub mod kennungstexte;
 pub mod km;
 pub mod kosten;
+pub mod kw1281;
 pub mod kwp;
 pub mod marken;
 pub mod kwp_grund;

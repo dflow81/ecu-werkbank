@@ -430,6 +430,15 @@ enum Command {
         #[arg(long)]
         ja: bool,
     },
+    /// K-Leitung (KW1281, Autos bis ~2004) mit KKL-Kabel an --port: Identifikation, Fehler, Messwertgruppe (nur lesen)
+    Kline {
+        /// Steuergeräte-Adresse, z. B. 0x01 Motor, 0x17 Kombi
+        #[arg(long, value_parser = parse_hex)]
+        adresse: u16,
+        /// zusätzlich diese Messwertgruppe lesen
+        #[arg(long)]
+        gruppe: Option<u8>,
+    },
     /// Steuergeräte-Speicher auslesen (UDS ReadMemoryByAddress, nur lesen) und als .bin sichern
     SpeicherLesen {
         /// Anfrage-ID, z. B. 0x7E0
@@ -1420,6 +1429,40 @@ fn main() -> Result<()> {
         Command::AnpassungVergleich { alt, neu } => anpassung_vergleich(alt.as_deref(), neu.as_deref(), cli.fahrzeug.as_deref()),
         Command::AnpassungZurueck { datei, geraet, kennung, alle, ja } => anpassung_zurueck(&be, datei.as_deref(), geraet, &kennung, alle, ja, cli.fahrzeug.as_deref()),
         Command::Ident { geraet, rx } => ident_cmd(&be, geraet, rx),
+        Command::Kline { adresse, gruppe } => {
+            use ecu_werkbank::kw1281::{self, DemoLeitung, Kkl, Kw1281, Leitung};
+            fn ablauf<L: Leitung>(l: L, adresse: u8, gruppe: Option<u8>, db: &ecu_werkbank::labels::LabelDb) -> Result<()> {
+                let mut k = Kw1281::verbinden(l, adresse)?;
+                println!("{}", tr!("Steuergerät {a} (K-Leitung, KW1281):", a = format!("{adresse:02X}")));
+                for z in &k.ident {
+                    println!("  {z}");
+                }
+                let f = k.fehler_lesen()?;
+                if f.is_empty() {
+                    println!("{}", tr!("Keine Fehlercodes gespeichert."));
+                } else {
+                    println!("{}", tr!("{a} Fehlercode(s):", a = f.len()));
+                    for (code, st) in f {
+                        let c = format!("{code:05}");
+                        println!("  {c}  {}  ({})", db.dtc_description(&c).unwrap_or(""), kw1281::fehlerart(st));
+                    }
+                }
+                if let Some(g) = gruppe {
+                    let w = k.gruppe_lesen(g)?;
+                    let texte = ecu_werkbank::messwerttexte::Texte::laden();
+                    println!("{g:03}: {}", texte.zeile(adresse, g, &w));
+                }
+                k.beenden();
+                Ok(())
+            }
+            let a = u8::try_from(adresse).map_err(|_| anyhow::anyhow!(tr!("Adresse höchstens 0xFF")))?;
+            if matches!(be, Backend::Demo) {
+                ablauf(DemoLeitung::default(), a, gruppe, &db)
+            } else {
+                println!("{}", tr!("Anmeldung mit 5 Baud an {a} über {b} (dauert ~2 s) …", a = format!("{a:02X}"), b = cli.port));
+                ablauf(Kkl::oeffnen(&cli.port)?, a, gruppe, &db)
+            }
+        }
         Command::SpeicherLesen { geraet, rx, von, laenge, block, sitzung, out } => {
             use ecu_werkbank::speicher;
             let a = speicher::Auftrag { tx: geraet, rx: rx.unwrap_or_else(|| ecu_werkbank::uds::antwort_id(geraet)), von, laenge, block, sitzung: sitzung.map(|s| s as u8) };
