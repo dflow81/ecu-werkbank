@@ -427,6 +427,7 @@ pub fn scan(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> Re
         }
     }
     let vin = modules.iter().find_map(|m| m.vin.clone()).or_else(|| crate::profil::quick_vin(be));
+    let marke = vin.as_deref().and_then(crate::marken::aus_vin);
     let mut transport = tr!("{a}, andere Marke (UDS/KWP2000)", a = be.describe());
     if s.nur_obd {
         transport.push_str(&tr!(" — nur OBD-Adressen"));
@@ -441,7 +442,7 @@ pub fn scan(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> Re
         note: String::new(),
         vehicle: String::new(),
         kennzeichen: String::new(),
-        fahrzeug: String::new(),
+        fahrzeug: marke.map(str::to_string).unwrap_or_default(),
         km: None,
         reparatur: String::new(),
         freeze: None,

@@ -162,6 +162,10 @@ impl App {
         }
         if let Some(v) = &r.vin {
             ui.label(tr!("Fahrgestellnummer: {a}", a = v));
+            if let Some(m) = ecu_werkbank::marken::aus_vin(v) {
+                ui.label(egui::RichText::new(tr!("Marke: {a}", a = m)).strong());
+                ui.weak(ecu_werkbank::marken::hinweis(m));
+            }
         }
         if r.modules.is_empty() {
             ui.label(tr!("Kein Steuergerät hat geantwortet. Zündung an? Bitrate 500 kbit/s? Ältere Autos (K-Leitung) gehen mit diesem Adapter nicht."));

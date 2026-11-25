@@ -23,6 +23,7 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - **DoIP** (Diagnose über Ethernet, ISO 13400): neuer Transport `doip` für neuere Fahrzeuge — Fahrzeugsuche, Routing-Aktivierung, UDS über das Gateway (gegen ein simuliertes Gateway getestet).
 - **CAN FD** für ISO-TP: Frames bis 64 Byte und Nachrichten über 4095 Byte (`VAG_CANFD=1`, Schnittstelle mit MTU 72).
 - **ODX-Import mit Umrechnung**: Messwerte aus ODX bekommen Faktor, Offset und Einheit (lineare Umrechnung).
+- „Andere Marken“ erkennt die Marke an der Fahrgestellnummer und sagt, was bei ihr geht.
 - **Konfiguration vergleichen in der GUI**: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ (vorher/nachher oder anderes Fahrzeug).
 
 ### Behoben

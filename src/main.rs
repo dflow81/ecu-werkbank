@@ -1839,6 +1839,9 @@ fn main() -> Result<()> {
         Command::Fremd { out } => {
             let (mut r, s) = ecu_werkbank::fremd::scan(&be, &db, |p| eprint!("\r{p:<70}"))?;
             eprint!("\r{:<70}\r", "");
+            if let Some(m) = r.vin.as_deref().and_then(ecu_werkbank::marken::aus_vin) {
+                println!("{}", tr!("Marke: {a} — {b}", a = m, b = ecu_werkbank::marken::hinweis(m)));
+            }
             if s.nur_obd {
                 println!("{}", tr!("Nur OBD-Adressen gefragt ({a} CAN-IDs mit Verkehr gesehen).", a = s.verkehr));
             }

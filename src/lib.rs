@@ -43,6 +43,7 @@ pub mod kennungstexte;
 pub mod km;
 pub mod kosten;
 pub mod kwp;
+pub mod marken;
 pub mod kwp_grund;
 pub mod konfigvergleich;
 pub mod labels;
