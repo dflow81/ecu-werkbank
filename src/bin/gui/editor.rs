@@ -13,7 +13,7 @@ impl App {
             self.status = tr!("Kein Fahrzeug gewählt — oben ein Fahrzeug wählen und einen Scan machen.");
             return;
         };
-        let Some((_, last)) = ecu_werkbank::history::list(&key).pop() else {
+        let Some((_, last)) = ecu_werkbank::history::letzter(&key) else {
             self.status = tr!("Noch kein Scan für dieses Fahrzeug gespeichert.");
             return;
         };

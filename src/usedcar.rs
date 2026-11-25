@@ -229,7 +229,7 @@ pub fn run(be: &Backend, db: &LabelDb, progress: impl FnMut(&str)) -> Result<Erg
 /// Letzter gespeicherter Scan eines Fahrzeugs mit Abgasdaten (Readiness /
 /// Prüfwerte, z. B. ein Schnell-Check); sonst der letzte überhaupt.
 pub fn letzter_scan(vehicle_key: &str) -> Option<ScanReport> {
-    let scans = crate::history::list(vehicle_key);
+    let scans: Vec<_> = crate::history::list(vehicle_key).into_iter().filter(|(_, r)| !crate::history::ist_fremd(r)).collect();
     let mit_abgas = |r: &ScanReport| !r.pruefwerte.is_empty() || !r.readiness.is_empty() || r.check.iter().any(|(_, t)| t.starts_with("Readiness"));
     scans.iter().rev().find(|(_, r)| mit_abgas(r)).or_else(|| scans.last()).map(|(_, r)| r.clone())
 }

@@ -1068,6 +1068,10 @@ pub enum StellBefehl {
     Ende,
 }
 
+/// Bauteilnummer, mit der VAG-Steuergeräte das Ende der Stellglieddiagnose melden
+/// (am Golf 6 nach dem letzten Bauteil der Tür gesehen).
+pub const BAUTEIL_ENDE: u16 = 1195;
+
 /// Stellglieddiagnose (Funktion 03) eines TP-2.0-Steuergeräts, wie ein
 /// Werkstatt-Diagnosegerät sie macht: Routine 0x0102 starten (31 B8 01 02),
 /// laufend den Stand abfragen (31 BA 01 02), auf Wunsch zum nächsten Bauteil
@@ -1086,6 +1090,10 @@ pub fn stellglieddiagnose(be: &crate::transport::Backend, adresse: u8, mut steue
             let s = stell_ergebnis(&r);
             let neu = s.is_some() && s != letzter;
             let befehl = steuer(if neu { s.as_ref() } else { None });
+            // „01195 Ende“: das Steuergerät beendet die Reihe selbst und antwortet danach nicht mehr
+            if s == Some(StellSchritt::Bauteil(BAUTEIL_ENDE)) {
+                return Ok(());
+            }
             if neu {
                 letzter = s;
             }

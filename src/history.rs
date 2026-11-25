@@ -127,6 +127,22 @@ pub fn list(vehicle_key: &str) -> Vec<(PathBuf, ScanReport)> {
     v
 }
 
+/// Ist das ein Scan über „Andere Marken“? Auch ältere Scans ohne Merkmal
+/// (an der Verbindungsangabe zu erkennen).
+pub fn ist_fremd(r: &ScanReport) -> bool {
+    r.fremd || r.transport.contains("andere Marke") || r.transport.contains("other make")
+}
+
+/// Der aktuelle Steuergeräte-Stand eines Fahrzeugs: der neueste normale Scan;
+/// nur wenn es keinen gibt, der neueste über „Andere Marken“.
+pub fn letzter(vehicle_key: &str) -> Option<(PathBuf, ScanReport)> {
+    let mut alle = list(vehicle_key);
+    match alle.iter().rposition(|(_, r)| !ist_fremd(r)) {
+        Some(i) => Some(alle.swap_remove(i)),
+        None => alle.pop(),
+    }
+}
+
 /// Fahrzeuge mit gespeicherten Scans: (Fahrzeug, Anzahl, Datum des letzten).
 pub fn vehicles() -> Vec<(crate::vehicle::Vehicle, usize, String)> {
     crate::vehicle::list()
@@ -143,7 +159,8 @@ pub fn vehicles() -> Vec<(crate::vehicle::Vehicle, usize, String)> {
 pub fn previous(r: &ScanReport) -> Option<ScanReport> {
     list(&key_of(r))
         .into_iter()
-        .map(|(_, s)| s).rfind(|s| s.timestamp < r.timestamp)
+        .map(|(_, s)| s)
+        .rfind(|s| s.timestamp < r.timestamp && ist_fremd(s) == ist_fremd(r))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -264,7 +281,7 @@ pub fn compare_with_previous(r: &ScanReport) -> Option<Comparison> {
     let all: Vec<ScanReport> = list(&key_of(r))
         .into_iter()
         .map(|(_, s)| s)
-        .filter(|s| s.timestamp < r.timestamp)
+        .filter(|s| s.timestamp < r.timestamp && ist_fremd(s) == ist_fremd(r))
         .collect();
     let (prev, earlier) = all.split_last()?;
     Some(Comparison { since: prev.created.clone(), diff: diff(prev, r, earlier) })
@@ -286,7 +303,11 @@ pub struct Uebersicht {
 }
 
 pub fn uebersicht(vehicle_key: &str) -> Option<Uebersicht> {
-    let all: Vec<ScanReport> = list(vehicle_key).into_iter().map(|(_, s)| s).collect();
+    let mut all: Vec<ScanReport> = list(vehicle_key).into_iter().map(|(_, s)| s).collect();
+    // normale Scans nicht mit „Andere Marken“ mischen
+    if all.iter().any(|s| !ist_fremd(s)) {
+        all.retain(|s| !ist_fremd(s));
+    }
     uebersicht_aus(&all)
 }
 
@@ -318,10 +339,27 @@ pub fn uebersicht_aus(all: &[ScanReport]) -> Option<Uebersicht> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fremd_scan_verdraengt_den_normalen_nicht() {
+        let mut a = scan(100, &["P0300"]);
+        a.vehicle = "x".into();
+        let mut f = scan(200, &[]);
+        f.vehicle = "x".into();
+        f.transport = "SocketCAN (can0), andere Marke (UDS/KWP2000)".into();
+        assert!(ist_fremd(&f) && !ist_fremd(&a));
+        let mut neu = scan(300, &["P0300"]);
+        neu.vehicle = "x".into();
+        // Vergleich mit dem vorigen Scan gleicher Art: der Fremd-Scan zählt nicht
+        let alle = [a.clone(), f.clone()];
+        let vor = alle.iter().rfind(|s| s.timestamp < neu.timestamp && ist_fremd(s) == ist_fremd(&neu)).unwrap();
+        assert_eq!(vor.timestamp, 100);
+    }
     use crate::report::{DtcEntry, ModuleReport};
 
     fn scan(ts: u64, codes: &[&str]) -> ScanReport {
         ScanReport {
+            fremd: false,
             readiness: Vec::new(),
             created: format!("Scan {ts}"),
             timestamp: ts,

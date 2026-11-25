@@ -12,6 +12,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Service-Anzeige: Lesen läuft über die Bus-Warteschlange (stieß beim Start mit der
   Fahrzeugerkennung zusammen).
 - GUI: Ergebnisse aus dem Hintergrund erscheinen sofort, nicht erst nach einer Mausbewegung.
+- Ein Scan über „Andere Marken“ verdrängt nicht mehr den normalen Steuergeräte-Stand eines
+  VW-Konzern-Fahrzeugs (Steuergeräte-Seite, Vergleich mit dem vorigen Scan, Fehlerübersicht,
+  Reparatur-Modus, Gebrauchtwagen-Check nehmen den letzten normalen Scan).
+- Stellglieddiagnose (TP 2.0) endet beim Bauteil „01195 Ende“ ohne Fehlermeldung.
 
 ## 0.5.0 — 24.11.2026
 

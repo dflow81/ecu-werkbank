@@ -31,7 +31,7 @@ impl App {
         }
         let mut l: Vec<(u8, String)> = self.tp_found.iter().map(|f| (f.address, f.name.clone())).collect();
         if let Some(k) = self.active_vehicle.as_deref() {
-            if let Some((_, r)) = ecu_werkbank::history::list(k).into_iter().last() {
+            if let Some((_, r)) = ecu_werkbank::history::letzter(k) {
                 for m in r.modules.iter().filter(|m| m.protocol == "TP 2.0") {
                     if let Some(a) = m.address.and_then(|a| u8::try_from(a).ok()) {
                         if !l.iter().any(|(x, _)| *x == a) {

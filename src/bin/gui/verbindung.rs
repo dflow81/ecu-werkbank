@@ -269,8 +269,7 @@ impl App {
     /// Codes aus dem letzten Scan des aktiven Fahrzeugs (für die Fehlersuche).
     pub(super) fn recent_codes(&self) -> Vec<(String, String)> {
         let Some(k) = &self.active_vehicle else { return vec![] };
-        ecu_werkbank::history::list(k)
-            .pop()
+        ecu_werkbank::history::letzter(k)
             .map(|(_, r)| {
                 r.modules
                     .iter()
@@ -465,7 +464,7 @@ impl App {
                 if ui.button(tr!("💾 Als Reparatur-Notiz speichern")).on_hover_text(tr!("Erledigte Schritte + Notiz zum letzten Scan des aktiven Fahrzeugs")).clicked() {
                     let done: Vec<String> = plan.schritte.iter().zip(&self.gf_done).filter(|(_, d)| **d).map(|(s, _)| s.text.split(['.', ':', '—']).next().unwrap_or(s.text).to_string()).collect();
                     let note = format!("{code}: {}{}", self.gf_note.trim(), if done.is_empty() { String::new() } else { tr!(" (geprüft: {a})", a = done.join("; ")) });
-                    match self.active_vehicle.clone().and_then(|k| ecu_werkbank::history::list(&k).pop()) {
+                    match self.active_vehicle.clone().and_then(|k| ecu_werkbank::history::letzter(&k)) {
                         Some((p, _)) => match ecu_werkbank::history::set_repair_note(&p, &note) {
                             Ok(()) => {
                                 self.status = tr!("Notiz gespeichert.");

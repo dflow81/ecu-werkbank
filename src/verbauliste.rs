@@ -321,6 +321,7 @@ mod tests {
     #[test]
     fn gruppen_und_zaehlung() {
         let r = ScanReport {
+            fremd: false,
             modules: vec![
                 modul("TP 2.0", Some(0x01), "Motor", "03C906016  5049", Some(1)),
                 modul("UDS", Some(0x715), "Airbag", "5K0959655", Some(0)),

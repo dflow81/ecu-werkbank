@@ -432,6 +432,7 @@ pub fn scan(be: &Backend, db: &LabelDb, mut fortschritt: impl FnMut(&str)) -> Re
         transport.push_str(&tr!(" — nur OBD-Adressen"));
     }
     let r = ScanReport {
+        fremd: true,
         readiness: Vec::new(),
         created: crate::report::now_local(),
         timestamp: crate::report::unix_now(),

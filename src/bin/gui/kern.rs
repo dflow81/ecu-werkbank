@@ -604,7 +604,7 @@ impl App {
     /// oder TP 2.0): Klick » Fehler / Identifikation lesen.
     pub(super) fn ui_fahrzeug_module(&mut self, ui: &mut egui::Ui) {
         let Some(key) = self.active_vehicle.clone() else { return };
-        let Some((_, last)) = ecu_werkbank::history::list(&key).pop() else {
+        let Some((_, last)) = ecu_werkbank::history::letzter(&key) else {
             ui.heading(tr!("Steuergeräte dieses Fahrzeugs"));
             ui.label(tr!("Noch kein Scan gespeichert. Einmal alle Steuergeräte auslesen — danach stehen sie hier, und ein Klick auf eines zeigt alle Funktionen (Fehler, Messwerte, Codierung …)."));
             if ui.add_enabled(self.pdf_job.is_none(), egui::Button::new(egui::RichText::new(tr!("🔎 Alle Steuergeräte auslesen")).size(16.0))).clicked() {

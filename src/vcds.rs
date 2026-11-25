@@ -352,6 +352,7 @@ pub fn als_scan(p: &Protokoll, vehicle: &str) -> ScanReport {
         })
         .collect();
     ScanReport {
+        fremd: false,
         created: p.datum.clone(),
         timestamp: p.timestamp,
         transport: tr!("Auto-Scan-Protokoll (importiert)"),

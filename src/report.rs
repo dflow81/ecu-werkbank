@@ -88,6 +88,10 @@ pub struct ScanReport {
     /// Reparatur-Notiz (nachträglich in der Historie eintragbar)
     #[serde(default)]
     pub reparatur: String,
+    /// Scan über „Andere Marken“ (allgemeines UDS/OBD). Beim VW-Konzern ersetzt so
+    /// ein Scan nicht den normalen Steuergeräte-Stand des Fahrzeugs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fremd: bool,
     /// OBD-II-Freeze-Frame: (auslösender Code, Werte)
     #[serde(default)]
     pub freeze: Option<(String, Vec<(String, String)>)>,
@@ -409,6 +413,7 @@ pub fn scan_opts(be: &Backend, db: &LabelDb, with_tp20: bool, voll: bool, mut pr
     }
 
     Ok(ScanReport {
+        fremd: false,
         readiness: Vec::new(),
         created: now_local(),
         timestamp: unix_now(),
@@ -897,6 +902,7 @@ mod tests {
             })
             .collect();
         ScanReport {
+            fremd: false,
             readiness: Vec::new(),
             created: "27.10.2026 16:45".into(),
             timestamp: 1,

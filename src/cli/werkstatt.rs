@@ -254,7 +254,7 @@ pub(super) fn reparaturbericht(be: &Backend, db: &LabelDb, arbeiten: &str, fahrz
     let active = active_vehicle(fahrzeug)?;
     let mut after = ecu_werkbank::report::scan(be, db, true, |_| {})?;
     let v = after.assign_vehicle(active.as_deref())?;
-    let before = history::list(&v.key).pop().map(|(_, r)| r).context(tr!("Kein früherer Scan als „vorher“ — vor der Reparatur `report` oder `check` ausführen"))?;
+    let before = history::letzter(&v.key).map(|(_, r)| r).context(tr!("Kein früherer Scan als „vorher“ — vor der Reparatur `report` oder `check` ausführen"))?;
     after.reparatur = arbeiten.trim().to_string();
     after.comparison = history::compare_with_previous(&after);
     let offen: Vec<String> = be
@@ -415,7 +415,7 @@ pub(super) fn gateway_verbauliste(be: &Backend) -> Result<()> {
     let l = kwp::gateway_verbauliste(be)?;
     let verbaut: Vec<_> = l.iter().filter(|e| e.verbaut()).collect();
     // mit dem letzten gespeicherten Scan des aktiven Fahrzeugs abgleichen
-    let scan = load_active().and_then(|k| ecu_werkbank::history::list(&k).pop()).map(|(_, r)| r);
+    let scan = load_active().and_then(|k| ecu_werkbank::history::letzter(&k)).map(|(_, r)| r);
     let aeste = ecu_werkbank::verbauliste::baum(&l, scan.as_ref());
     print!("{}", ecu_werkbank::verbauliste::baum_text(&aeste, scan.is_some()));
     let fehler = verbaut.iter().filter(|e| e.fehler()).count();

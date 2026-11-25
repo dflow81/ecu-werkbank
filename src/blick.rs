@@ -153,6 +153,7 @@ mod tests {
             .collect();
         let m = ModuleReport { protocol: "TP 2.0".into(), address: Some(1), name: "Motor".into(), can: String::new(), ident: vec![], vin: None, dtcs: Some(dtcs) };
         ScanReport {
+            fremd: false,
             readiness: Vec::new(),
             created: format!("{datum} 12:00"),
             timestamp: 0,

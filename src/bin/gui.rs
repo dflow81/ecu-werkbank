@@ -897,7 +897,7 @@ impl eframe::App for App {
             "steuergeraete-wahl" => {
                 // erstes älteres Steuergerät aus dem letzten Scan wählen (für Bilder)
                 if let Some(k) = self.active_vehicle.clone() {
-                    if let Some((_, r)) = ecu_werkbank::history::list(&k).into_iter().last() {
+                    if let Some((_, r)) = ecu_werkbank::history::letzter(&k) {
                         self.fz_sel = r.modules.iter().position(|m| m.protocol == "TP 2.0");
                     }
                 }

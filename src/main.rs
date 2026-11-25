@@ -2112,7 +2112,7 @@ fn main() -> Result<()> {
                 Some(p) => p,
                 None => {
                     let v = need_vehicle(cli.fahrzeug.as_deref())?;
-                    ecu_werkbank::history::list(&v.key).pop().map(|(p, _)| p).context(tr!("Noch kein Scan für dieses Fahrzeug"))?
+                    ecu_werkbank::history::letzter(&v.key).map(|(p, _)| p).context(tr!("Noch kein Scan für dieses Fahrzeug"))?
                 }
             };
             ecu_werkbank::history::set_repair_note(&path, &text)?;
@@ -2425,6 +2425,10 @@ fn compare(fahrzeug: Option<&str>, old: Option<&std::path::Path>, new: Option<&s
                 },
             };
             let mut all: Vec<_> = history::list(&key).into_iter().map(|(_, r)| r).collect();
+            // normale Scans nur untereinander vergleichen (nicht mit „Andere Marken“)
+            if all.iter().any(|r| !history::ist_fremd(r)) {
+                all.retain(|r| !history::ist_fremd(r));
+            }
             if all.len() < 2 {
                 anyhow::bail!(tr!("Für {key} gibt es erst {a} Scan(s) — zum Vergleich braucht es zwei.", key = key, a = all.len()));
             }
