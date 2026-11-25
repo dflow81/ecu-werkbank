@@ -11,6 +11,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   `12 00 04 <Code>`); am Golf 6 Byte für Byte mit einem Werkstattgerät verglichen. Vorher
   waren die Umgebungsdaten bei diesen Steuergeräten leer.
 - Mitschnitt-Übersetzer benennt die KWP-Dienste 0x12, 0x17 und 0x22.
+- **Spannungswächter bei langen Schreibabläufen**: Beim Zurückschreiben vieler Anpassungen wird
+  die Bordspannung zwischendurch gemessen (höchstens alle 10 s) und vor dem nächsten Schreiben
+  abgebrochen, wenn sie unter 12,0 V fällt. „Steuergerät stellt Wert“ prüft sie ebenfalls und
+  gibt sonst die Kontrolle zurück.
 
 ### Behoben
 - „Andere Marken“ mit CAN-Adapter: Die VW-Sammeladresse 0x700 (alle UDS-Steuergeräte antworten)

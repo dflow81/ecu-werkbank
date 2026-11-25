@@ -207,6 +207,8 @@ pub struct Regler {
     start: Instant,
     aktiv: bool,
     fehler_in_folge: u32,
+    /// letzte Spannungsmessung (alle `spannung::ZWISCHEN_S` Sekunden)
+    spannung_zuletzt: Instant,
 }
 
 impl Regler {
@@ -230,7 +232,7 @@ impl Regler {
             uds.diagnostic_session(crate::uds::SESSION_EXTENDED)
                 .context(tr!("Erweiterte Sitzung abgelehnt — evtl. Zugriffsberechtigung nötig"))?;
         }
-        Ok(Self { tp, f, start: Instant::now(), aktiv: true, fehler_in_folge: 0 })
+        Ok(Self { tp, f, start: Instant::now(), aktiv: true, fehler_in_folge: 0, spannung_zuletzt: Instant::now() })
     }
 
     pub fn laufzeit(&self) -> f64 {
@@ -247,7 +249,7 @@ impl Regler {
             return Err(Abbruch(tr!("Zeitlimit ({a} s) erreicht — Kontrolle zurückgegeben", a = self.f.max_dauer_s)).into());
         }
         let soll = soll.clamp(self.f.min, self.f.max);
-        let res = (|| -> Result<Messung> {
+        let res = (|| -> Result<(Messung, Option<f64>)> {
             let uds = Uds::new(&*self.tp);
             let data = self.f.encode(soll);
             match self.f.art.as_str() {
@@ -261,11 +263,22 @@ impl Regler {
             let o = crate::obd::Obd::new(&*self.tp);
             let ist = o.read_value(self.f.rueckmeldung_pid).ok();
             let geschwindigkeit = o.read_value(0x0D).ok();
-            Ok(Messung { soll, ist, geschwindigkeit })
+            // Bordspannung zwischendurch (gleiche Verbindung, OBD-PID 0x42)
+            let spannung = if self.spannung_zuletzt.elapsed() >= Duration::from_secs(crate::spannung::ZWISCHEN_S) {
+                self.spannung_zuletzt = Instant::now();
+                o.read_value(0x42).ok().filter(|v| (5.0..20.0).contains(v))
+            } else {
+                None
+            };
+            Ok((Messung { soll, ist, geschwindigkeit }, spannung))
         })();
         match res {
-            Ok(m) => {
+            Ok((m, spannung)) => {
                 self.fehler_in_folge = 0;
+                if let Some(v) = spannung.filter(|v| *v < crate::spannung::MINDEST_V) {
+                    self.stop();
+                    return Err(Abbruch(tr!("Abbruch: Bordspannung {a} V zu niedrig — Kontrolle zurückgegeben", a = format!("{v:.1}"))).into());
+                }
                 if m.geschwindigkeit.is_some_and(|v| v > 0.0) {
                     self.stop();
                     return Err(Abbruch(tr!("Abbruch: Fahrzeug bewegt sich — Kontrolle zurückgegeben")).into());

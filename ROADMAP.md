@@ -54,7 +54,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 35 | Weitere Marken: Basis-Diagnose Opel/Ford/Mercedes/BMW über UDS + OBD | Autel | hoch | hoch | mittel | mittel | 2.0 | 🟡 `fremd.rs` findet Steuergeräte mit 11 und 29 Bit (ISO 15765-4) |
 | 36 | ECU-Sicherung (Speicher auslesen, wo erlaubt) | Autel, Flash-Tools | mittel | mittel | mittel | mittel | 2.0 | ⏳ Baustein `read_memory` |
 | 37 | Flash-Ablauf (siehe Abschnitt Flashing) | ODIS, E-Sys, Xentry | hoch | hoch | **hoch** | niedrig | Vision | ⏳ |
-| 38 | Spannungsüberwachung während langer Abläufe | ODIS, ISTA+ | hoch | niedrig | niedrig | hoch | 1.0 | 🟡 Prüfung vor jedem Schreiben (`spannung.rs`, ≥ 12,0 V); laufende Überwachung kommt mit dem Flashen |
+| 38 | Spannungsüberwachung während langer Abläufe | ODIS, ISTA+ | hoch | niedrig | niedrig | hoch | 1.0 | ✅ Prüfung vor jedem Schreiben (≥ 12,0 V) und Spannungswächter bei langen Abläufen (Anpassungen zurückschreiben: vor jedem weiteren Schreiben höchstens alle 10 s; Steuergerät stellt Wert: alle 10 s, sonst Kontrolle zurück) — beim Motor selbst keine Zwischenmessung (gleiche OBD-IDs / TP-2.0-Sperre) |
 | 39 | REST-Schnittstelle (lokal, mit Schlüssel) | – | mittel | mittel | mittel | mittel | 2.0 | ✅ `ecu-werkbank api` (Datenbank, nur lesen); Live-Daten vom Auto fehlen noch |
 | 40 | Skripte (Lua oder Rhai, eingebettet) | – | mittel | mittel | mittel | niedrig | 2.0 | ✅ Rhai: `skript`, GUI Werkzeuge → Skripte; nur lesende Funktionen |
 | 41 | Python-Anbindung (pyo3 oder REST) | – | mittel | mittel | niedrig | niedrig | Vision | 🟡 über REST, Beispiel `beispiele/api_abfrage.py` |
