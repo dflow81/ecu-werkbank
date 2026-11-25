@@ -846,6 +846,18 @@ pub fn uds_response(tx: u16, req: &[u8]) -> Option<Vec<u8>> {
             _ => vec![0x7F, 0x09, 0x12],
         },
         // --- UDS ---
+        // ReadMemoryByAddress (Format 0x24: 4 Byte Adresse, 2 Byte Länge):
+        // 0x0000–0x7FFF lesbar, 0x8000–0x8FFF gesperrt, darüber außerhalb
+        0x23 if arg(1) == 0x24 => {
+            let adr = u32::from_be_bytes([arg(2), arg(3), arg(4), arg(5)]);
+            let n = u32::from(u16::from_be_bytes([arg(6), arg(7)]));
+            match adr {
+                _ if n == 0 || n > 0xFF0 => vec![0x7F, 0x23, 0x13],
+                a if a + n <= 0x8000 => [vec![0x63], (a..a + n).map(speicher_byte).collect()].concat(),
+                a if a < 0x9000 => vec![0x7F, 0x23, 0x33],
+                _ => vec![0x7F, 0x23, 0x31],
+            }
+        }
         0x10 => vec![0x50, arg(1), 0x00, 0x32, 0x01, 0xF4],
         0x3E => vec![0x7E, 0x00],
         0x11 => vec![0x51, arg(1)],
@@ -979,6 +991,11 @@ const GOLF6_STELLGLIED: &[&[u8]] = &[
     &[0x02, 0x25, 0x00, 0x67],
     &[0x03, 0x03, 0x04, 0x6B, 0xFF],
 ];
+
+/// Inhalt des simulierten Speichers an einer Adresse (für ReadMemoryByAddress).
+pub fn speicher_byte(adr: u32) -> u8 {
+    (adr.wrapping_mul(31) ^ (adr >> 8)) as u8
+}
 
 pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
     let mut c = car().lock().unwrap();

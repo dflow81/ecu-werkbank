@@ -63,6 +63,7 @@ pub mod profil;
 pub mod rekorder;
 pub mod retrofit;
 pub mod service;
+pub mod speicher;
 pub mod bus;
 pub mod erkennung;
 pub mod fremd;

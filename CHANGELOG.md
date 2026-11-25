@@ -17,6 +17,7 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
   gibt sonst die Kontrolle zurück.
 
 - **Einzelmesswert**: 🔍 an einem Feld des Messwertblocks zeigt diesen Wert groß an (gut ablesbar, läuft live mit).
+- **Speicher lesen** (`speicher-lesen`, nur lesen): Steuergeräte-Speicher über UDS 0x23 in Blöcken auslesen und als `.bin` sichern; gesperrte Bereiche werden als Lücke mit Grund vermerkt.
 - **Konfiguration vergleichen in der GUI**: Fahrzeug → Codier-Sicherung → „Ganze Konfiguration vergleichen“ (vorher/nachher oder anderes Fahrzeug).
 
 ### Behoben

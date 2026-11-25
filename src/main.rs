@@ -427,6 +427,30 @@ enum Command {
         #[arg(long)]
         ja: bool,
     },
+    /// Steuergeräte-Speicher auslesen (UDS ReadMemoryByAddress, nur lesen) und als .bin sichern
+    SpeicherLesen {
+        /// Anfrage-ID, z. B. 0x7E0
+        #[arg(long, value_parser = parse_hex)]
+        geraet: u16,
+        /// Antwort-ID (Standard: passend zur Anfrage-ID)
+        #[arg(long, value_parser = parse_hex)]
+        rx: Option<u16>,
+        /// Startadresse (hex), z. B. 0x0
+        #[arg(long, value_parser = parse_hex32)]
+        von: u32,
+        /// Anzahl Bytes (hex oder dezimal), z. B. 0x1000
+        #[arg(long, value_parser = parse_hex32)]
+        laenge: u32,
+        /// Bytes je Anfrage
+        #[arg(long, default_value_t = 128)]
+        block: u16,
+        /// Diagnosesitzung vorher, z. B. 0x03 (erweitert); ohne = Standardsitzung
+        #[arg(long, value_parser = parse_hex)]
+        sitzung: Option<u16>,
+        /// Ausgabe (.bin); Standard: Fahrzeugordner/speicher
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Erweiterte Identifikation (UDS): alle Standard-Kennfelder eines Steuergeräts lesen und benennen (nur lesen)
     Ident {
         /// Steuergerät: UDS-Anfrage-ID (hex), z. B. 714
@@ -1282,6 +1306,14 @@ fn parse_tp20(s: &str) -> Result<u16, String> {
     parse_can_id(s).and_then(|a| if a <= 0xFF { Ok(a) } else { Err(tr!("TP-2.0-Adresse '{s}' zu groß (00–FF)", s = s)) })
 }
 
+fn parse_hex32(s: &str) -> Result<u32, String> {
+    let t = s.trim();
+    match t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
+        Some(h) => u32::from_str_radix(h, 16).map_err(|e| e.to_string()),
+        None => t.parse::<u32>().map_err(|e| e.to_string()),
+    }
+}
+
 fn parse_hex(s: &str) -> Result<u16, String> {
     let s = s.trim();
     let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
@@ -1382,6 +1414,30 @@ fn main() -> Result<()> {
         Command::AnpassungVergleich { alt, neu } => anpassung_vergleich(alt.as_deref(), neu.as_deref(), cli.fahrzeug.as_deref()),
         Command::AnpassungZurueck { datei, geraet, kennung, alle, ja } => anpassung_zurueck(&be, datei.as_deref(), geraet, &kennung, alle, ja, cli.fahrzeug.as_deref()),
         Command::Ident { geraet, rx } => ident_cmd(&be, geraet, rx),
+        Command::SpeicherLesen { geraet, rx, von, laenge, block, sitzung, out } => {
+            use ecu_werkbank::speicher;
+            let a = speicher::Auftrag { tx: geraet, rx: rx.unwrap_or_else(|| ecu_werkbank::uds::antwort_id(geraet)), von, laenge, block, sitzung: sitzung.map(|s| s as u8) };
+            println!("{}", tr!("Speicher lesen {a} ab {b}, {c} Byte (nur lesen) …", a = format!("{geraet:#05x}"), b = format!("{von:#010x}"), c = laenge));
+            let z = speicher::lesen(&be, &a, |n, g| eprint!("\r  {n}/{g} Byte"))?;
+            eprintln!();
+            for (adr, n, g) in &z.luecken {
+                println!("{}", tr!("  nicht lesbar: {a}–{b}: {c}", a = format!("{adr:#010x}"), b = format!("{:#010x}", adr + n - 1), c = g));
+            }
+            let out = match out {
+                Some(p) => p,
+                None => {
+                    let name = ecu_werkbank::vehicle::stamped(&format!("speicher-{geraet:03x}-{von:08x}"), "bin");
+                    match active_vehicle(cli.fahrzeug.as_deref())?.and_then(|k| ecu_werkbank::vehicle::load(&k)) {
+                        Some(v) => v.dir().join("speicher").join(name),
+                        None => PathBuf::from(name),
+                    }
+                }
+            };
+            let meta = speicher::speichern(&z, &out)?;
+            println!("{}", z.zusammenfassung());
+            println!("{}", tr!("Gespeichert: {a} (Beschreibung: {b})", a = out.display(), b = meta.display()));
+            Ok(())
+        }
         Command::AnpassungSchreibtest { geraet, kennung, ja } => anpassung_schreibtest(&be, geraet, kennung, ja, cli.fahrzeug.as_deref()),
         Command::Grundeinstellung { system, suche } => grundeinstellung_cmd(system.as_deref(), suche.as_deref()),
         Command::Login { geraet, sa2, key, kwp, index, level, test, loeschen } => login_cmd(&be, geraet, sa2, key, kwp, index, level, test, loeschen, cli.fahrzeug.as_deref()),
