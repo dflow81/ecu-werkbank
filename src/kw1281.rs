@@ -375,7 +375,7 @@ mod tests {
         // 0x01: Start 0, Daten 1000000, Parität (eine 1 → ungerade → 0), Stopp 1
         assert_eq!(fuenf_baud_bits(0x01), vec![false, true, false, false, false, false, false, false, false, true]);
         // 0x03: zwei Einsen → Paritätsbit 1
-        assert_eq!(fuenf_baud_bits(0x03)[8], true);
+        assert!(fuenf_baud_bits(0x03)[8]);
         assert_eq!(fuenf_baud_bits(0x17).len(), 10);
     }
 
