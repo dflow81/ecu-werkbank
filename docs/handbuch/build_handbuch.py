@@ -5,8 +5,10 @@ Aufruf:  python3 docs/handbuch/build_handbuch.py
 Ergebnis: docs/handbuch/ecu-werkbank-Handbuch.pdf
 
 Die Bilder in bilder/ sind Bildschirmfotos der GUI mit der Golf-6-Simulation
-(Beispielfahrzeug M-AB 123, erfundene Fahrgestellnummer). Neu erzeugen — die GUI
-fotografiert sich selbst und schließt sich danach:
+(Beispielfahrzeug M-AB 123, erfundene Fahrgestellnummer). Alle auf einmal neu erzeugen
+(legt das Beispielfahrzeug in einem leeren Arbeitsordner an):
+  docs/handbuch/bilder_erzeugen.sh [Arbeitsordner] [Seite …]
+Einzeln — die GUI fotografiert sich selbst und schließt sich danach:
   VAG_TRANSPORT=golf6 VAG_HELL=1 VAG_FENSTER=1000x880 VAG_TAB=<seite> \
   VAG_FOTO=bild.ppm VAG_FOTO_WARTEN=<sekunden> ecu-werkbank-gui
 Seiten (VAG_TAB) z. B.: start, steuergeraete, obd, tp20, tp20-block, grundeinstellung,
