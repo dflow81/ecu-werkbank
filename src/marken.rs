@@ -33,7 +33,7 @@ pub fn ist_vw_konzern(marke: &str) -> bool {
 pub fn hinweis(marke: &str) -> String {
     match marke {
         m if ist_vw_konzern(m) => tr!("VW-Konzern: Für alle Steuergeräte mit Namen, Codierung und Anpassung besser Diagnose → Steuergeräte nutzen."),
-        "BMW" | "BMW M" | "BMW i" | "Mini" => tr!("BMW/Mini nutzen eine eigene Adressierung (Tester 0x6F1 mit Zieladresse im ersten Byte) — die allgemeine Suche findet dort meist nur das Motorsteuergerät über OBD."),
+        "BMW" | "BMW M" | "BMW i" | "Mini" => tr!("BMW/Mini nutzen eine eigene Adressierung (Tester 0x6F1 mit Zieladresse im ersten Byte). Mit einem SocketCAN-Adapter fragt die Suche sie mit ab; über ELM327 wird meist nur das Motorsteuergerät über OBD gefunden."),
         "Mercedes-Benz" => tr!("Mercedes: UDS mit 11-Bit-Adressen wird gefunden; Texte zu Herstellerfehlern nur aus eigenen Datenpaketen."),
         "Opel" => tr!("Opel: neuere Modelle (UDS) werden gefunden; ältere mit GMLAN-Diagnose nur über OBD."),
         "Tesla" => tr!("Tesla: kaum OBD-Diagnose über die Buchse — wenig zu erwarten."),

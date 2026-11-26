@@ -85,6 +85,7 @@ setzt die echte Service-Anzeige zurück — darum nur nach einem echten Service.
 | D6 | K-Leitung (Roadmap 33) | nur mit KKL-Kabel und Auto bis ~2004: `ecu-werkbank kline --port /dev/ttyUSB0 --adresse 0x01 --gruppe 1` | ⏳ |
 | D7 | J2534 unter Windows (Roadmap 34) | Windows-Rechner mit J2534-Adapter (64-Bit-Treiber): `ecu-werkbank.exe -t j2534 --port <Name> obd-info` | ⏳ |
 | D2 | Integrationstests über vcan (Roadmap 28) | wie D1, dann `mockecu` auf vcan0 | ⏳ |
+| D8 | BMW-Adressierung über vcan (Roadmap 35) | wie D1, dann `VAG_MOCK_BMW=1 mockecu vcan0` und `ecu-werkbank -i vcan0 fremd` → erwartet: Steuergerät `0x6f1:12/0x612:f1` gefunden, Kennung und Fehler wie Motor 0x7E0 | ⏳ |
 
 Nach dem Termin: Ergebnisse hier eintragen, Konstanten in `src/kwp.rs` nur
 nach bestätigtem Mitschnitt umstellen, ROADMAP/CHANGELOG nachziehen.

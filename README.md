@@ -956,14 +956,22 @@ Kennung (UDS-Kennungen F187, F18C, F189, F191, F197 … bzw. KWP2000 0x1A) und F
 ```
 
 So wird gesucht (nur SocketCAN): 1,5 s zuhören; CAN-IDs mit Verkehr werden nie benutzt. Bei
-mehr als 20 belegten IDs (Buchse hängt an einem Fahrzeug-Bus) nur 0x7E0–0x7E7, sonst alle freien
-IDs 0x400–0x7FF, je 25 ms, nur „Tester Present“ (0x3E). Treffer werden danach einzeln
-nachgeprüft. Mit ELM327 und Demo nur die OBD-Adressen. Fehler löschen geht je Steuergerät mit
-Rückfrage (UDS 0x14 bzw. KWP2000 0x14).
+mehr als 20 belegten IDs (Buchse hängt an einem Fahrzeug-Bus) nur 0x7E0–0x7E7, sonst:
+
+- alle freien IDs 0x400–0x7FF, je 25 ms, nur „Tester Present“ (0x3E),
+- 29-Bit-Adressen (ISO 15765-4): einmal an alle über 0x18DB33F1, Antworten von 0x18DAF1xx,
+- **BMW/Mini** (erweiterte Adressierung nach ISO 15765-2): auf 0x6F1 mit der Adresse des
+  Steuergeräts im ersten Byte, je 20 ms; Antwort auf 0x600 + Adresse. In der Liste stehen sie
+  als `0x6f1:12/0x612:f1` (12 = Adresse des Steuergeräts).
+
+Treffer werden danach einzeln nachgeprüft. Mit ELM327 und Demo nur die OBD-Adressen (und
+29 Bit, wenn 11 Bit nichts findet). Fehler löschen geht je Steuergerät mit Rückfrage (UDS 0x14
+bzw. KWP2000 0x14).
 
 Nicht möglich: Herstellertexte zu Fehlern (nur genormte P-Codes haben Text), Codierung,
-Anpassungen, Service-Rückstellung, 29-Bit-Adressen, DoIP (Ethernet) und Autos mit K-Leitung.
-Am echten Mercedes noch nicht ausprobiert.
+Anpassungen, Service-Rückstellung. Am echten Mercedes oder BMW noch nicht ausprobiert. Zum
+Üben ohne Auto: `VAG_MOCK_BMW=1 cargo run --bin mockecu -- vcan0` spielt zusätzlich ein
+Steuergerät mit BMW-Adressierung (0x12).
 
 ## Messwerte aufzeichnen (CSV)
 

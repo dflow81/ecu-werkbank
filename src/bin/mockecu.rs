@@ -7,6 +7,9 @@
 //!
 //! Ohne CAN-Frames geht es einfacher mit `ecu-werkbank -t demo …`.
 //! Golf-6-Nachbau statt Demo-Fahrzeug: `VAG_DEMO=golf6 cargo run --bin mockecu`.
+//! Mit `VAG_MOCK_BMW=1` antwortet der Motor zusätzlich wie ein BMW-Steuergerät
+//! (erweiterte Adressierung: Anfrage 0x6F1 mit Adresse 0x12, Antwort 0x612) —
+//! zum Prüfen von `fremd` ohne BMW.
 //!
 //! Start:
 //!   sudo modprobe vcan; sudo ip link add dev vcan0 type vcan 2>/dev/null
@@ -26,6 +29,11 @@ fn main() -> anyhow::Result<()> {
         eprintln!("  UDS    {addr:#04x} {name:<14} req={tx:#05x} resp={rx:#05x}");
         let iface = iface.clone();
         handles.push(thread::spawn(move || serve_uds(&iface, tx, rx)));
+    }
+    if std::env::var("VAG_MOCK_BMW").is_ok_and(|v| v == "1") {
+        eprintln!("  BMW    0x12 Motor (wie DME)  req=0x6f1:12 resp=0x612:f1");
+        let iface = iface.clone();
+        handles.push(thread::spawn(move || serve_bmw(&iface, 0x12)));
     }
     let addrs = sim::tp20_addresses();
     eprintln!(
@@ -57,6 +65,27 @@ fn serve_uds(iface: &str, tx: u16, rx: u16) {
             _ => continue,
         };
         if let Some(resp) = sim::uds_response(tx, &req) {
+            let _ = tp.send(&resp);
+        }
+    }
+}
+
+/// Motor des Demo-Fahrzeugs mit BMW-Adressierung (Adressbyte im ersten Datenbyte).
+fn serve_bmw(iface: &str, adresse: u8) {
+    use ecu_werkbank::isotp::mit_adresse;
+    let tp = match IsoTp::open(iface, mit_adresse(0x600 + u16::from(adresse), 0xF1), mit_adresse(0x6F1, adresse)) {
+        Ok(tp) => tp,
+        Err(e) => {
+            eprintln!("[BMW {adresse:#04x}] Fehler: {e}");
+            return;
+        }
+    };
+    loop {
+        let req = match tp.recv() {
+            Ok(r) if !r.is_empty() => r,
+            _ => continue,
+        };
+        if let Some(resp) = sim::uds_response(0x7E0, &req) {
             let _ = tp.send(&resp);
         }
     }

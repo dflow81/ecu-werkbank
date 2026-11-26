@@ -56,8 +56,12 @@ impl Backend {
     /// Wie [`Backend::open`], auch mit 29-Bit-IDs: IDs über 0x7FF werden als
     /// erweiterte Frames gesendet (ISO 15765-4, z. B. 0x18DA10F1 / 0x18DAF110).
     pub fn open_id(&self, tx: u32, rx: u32) -> Result<Box<dyn Transport>> {
-        if tx > 0x1FFF_FFFF || rx > 0x1FFF_FFFF {
+        let erweitert = (tx | rx) & crate::isotp::ERW_ADR != 0;
+        if !erweitert && (tx > 0x1FFF_FFFF || rx > 0x1FFF_FFFF) {
             anyhow::bail!(crate::tr!("CAN-ID zu groß (höchstens 29 Bit)"));
+        }
+        if erweitert && !matches!(self, Backend::SocketCan { .. }) {
+            anyhow::bail!(crate::trs!("Erweiterte Adressierung (BMW/Mini) geht nur mit einem SocketCAN-Adapter"));
         }
         match self {
             Backend::SocketCan { iface } => {

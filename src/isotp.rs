@@ -11,6 +11,13 @@
 //! (`VAG_CANFD=1`) und nur, wenn die Schnittstelle CAN FD kann (MTU 72) —
 //! ältere Autos wie der Golf 6 sprechen kein FD. Empfangen werden immer beide
 //! Arten.
+//!
+//! **Erweiterte Adressierung** (ISO 15765-2, „extended addressing“): Das erste
+//! Datenbyte jedes Frames ist die Zieladresse, für ISO-TP bleiben 7 Byte.
+//! So spricht z. B. BMW/Mini: Tester sendet auf 0x6F1 mit der Adresse des
+//! Steuergeräts im ersten Byte, das Steuergerät antwortet auf 0x600 + Adresse
+//! mit 0xF1 (Tester) im ersten Byte. Im Programm wird das in der Kennung
+//! mitgeführt: Bit 31 gesetzt, Adressbyte in Bit 16–23 (siehe [`mit_adresse`]).
 
 use anyhow::{anyhow, bail, Context, Result};
 use crate::can::{CanFrame, CanSocket, EmbeddedFrame, ExtendedId, Id, Socket, StandardId};
@@ -21,24 +28,47 @@ use std::time::Duration;
 /// present. Change here if a controller is observed to be picky.
 const PAD: u8 = 0xAA;
 
+/// Merker in einer Kennung: erweiterte Adressierung (Adressbyte in Bit 16–23).
+pub const ERW_ADR: u32 = 0x8000_0000;
+
+/// CAN-ID (11 Bit) mit Adressbyte im ersten Datenbyte.
+pub fn mit_adresse(can_id: u16, adresse: u8) -> u32 {
+    ERW_ADR | (u32::from(adresse) << 16) | u32::from(can_id & 0x7FF)
+}
+
+/// Kennung zerlegen: (CAN-ID, Adressbyte bei erweiterter Adressierung).
+pub fn zerlegen(id: u32) -> (u32, Option<u8>) {
+    if id & ERW_ADR != 0 {
+        (id & 0x7FF, Some((id >> 16) as u8))
+    } else {
+        (id, None)
+    }
+}
+
+/// BMW/Mini: (Anfrage, Antwort) für das Steuergerät mit Adresse `ziel`
+/// (Tester 0x6F1 → Ziel; Antwort 0x600 + Ziel → Tester 0xF1).
+pub fn bmw_paar(ziel: u8) -> (u32, u32) {
+    (mit_adresse(0x6F1, ziel), mit_adresse(0x600 + u16::from(ziel), 0xF1))
+}
+
 /// Gültige CAN-FD-Nutzlängen (DLC 9–15 = 12 … 64 Byte).
 const FD_LAENGEN: [usize; 8] = [8, 12, 16, 20, 24, 32, 48, 64];
 
 /// Auf die nächste gültige Frame-Länge auffüllen (klassisch immer 8).
 fn auffuellen(mut f: Vec<u8>, dl: usize) -> Vec<u8> {
-    let ziel = if dl <= 8 { 8 } else { FD_LAENGEN.iter().copied().find(|l| *l >= f.len()).unwrap_or(64) };
+    let ziel = if dl <= 8 { dl } else { FD_LAENGEN.iter().copied().find(|l| *l >= f.len()).unwrap_or(64) };
     f.resize(ziel, PAD);
     f
 }
 
 /// Erster Frame einer Nachricht: (Frame, verbrauchte Nutzbytes, Einzel-Frame?).
-/// `dl` = Frame-Größe (8 klassisch, 64 bei CAN FD).
+/// `dl` = Frame-Größe (8 klassisch, 7 mit Adressbyte, 64 bei CAN FD).
 pub fn erster_frame(data: &[u8], dl: usize) -> Result<(Vec<u8>, usize, bool)> {
     let n = data.len();
     if n == 0 {
         bail!("leere ISO-TP-Nutzlast");
     }
-    if n <= 7 {
+    if n < dl.min(8) {
         let mut f = vec![n as u8];
         f.extend_from_slice(data);
         return Ok((auffuellen(f, dl), n, true));
@@ -119,6 +149,9 @@ pub struct IsoTp {
     sock: Sock,
     tx_id: u32,
     rx_id: u32,
+    /// erweiterte Adressierung: Adressbyte beim Senden / erwartet beim Empfang
+    tx_adr: Option<u8>,
+    rx_adr: Option<u8>,
     /// Frame-Größe beim Senden: 8 (klassisch) oder 64 (CAN FD)
     dl: usize,
     _belegt: crate::bus::Belegt,
@@ -131,20 +164,23 @@ pub fn fd_aktiv(iface: &str) -> bool {
 }
 
 impl IsoTp {
-    pub fn open(iface: &str, tx_id: u32, rx_id: u32) -> Result<Self> {
+    /// Kennungen über 0x7FF = 29 Bit; mit [`ERW_ADR`] = erweiterte Adressierung.
+    pub fn open(iface: &str, tx: u32, rx: u32) -> Result<Self> {
         let fehler = || crate::tr!("CAN-Interface '{iface}' konnte nicht geöffnet werden", iface = iface);
+        let ((tx_id, tx_adr), (rx_id, rx_adr)) = (zerlegen(tx), zerlegen(rx));
         #[cfg(target_os = "linux")]
-        if fd_aktiv(iface) {
+        if fd_aktiv(iface) && tx_adr.is_none() {
             let sock = socketcan::CanFdSocket::open(iface).with_context(fehler)?;
             sock.set_read_timeout(Duration::from_millis(1000))?;
             sock.set_write_timeout(Duration::from_millis(1000))?;
-            return Ok(Self { sock: Sock::Fd(sock), tx_id, rx_id, dl: 64, _belegt: crate::bus::Belegt::neu() });
+            return Ok(Self { sock: Sock::Fd(sock), tx_id, rx_id, tx_adr, rx_adr, dl: 64, _belegt: crate::bus::Belegt::neu() });
         }
         let sock = CanSocket::open(iface).with_context(fehler)?;
         crate::connect::fix_hw_loopback(iface, &sock);
         sock.set_read_timeout(Duration::from_millis(1000))?;
         sock.set_write_timeout(Duration::from_millis(1000))?;
-        Ok(Self { sock: Sock::Klassisch(sock), tx_id, rx_id, dl: 8, _belegt: crate::bus::Belegt::neu() })
+        let dl = if tx_adr.is_some() { 7 } else { 8 };
+        Ok(Self { sock: Sock::Klassisch(sock), tx_id, rx_id, tx_adr, rx_adr, dl, _belegt: crate::bus::Belegt::neu() })
     }
 
     /// Sendet über CAN FD?
@@ -166,7 +202,10 @@ impl IsoTp {
     }
 
     fn write(&self, id: u32, payload: &[u8]) -> Result<()> {
-        let data = auffuellen(payload.to_vec(), self.dl);
+        let mut data = auffuellen(payload.to_vec(), self.dl);
+        if let Some(a) = self.tx_adr {
+            data.insert(0, a);
+        }
         match &self.sock {
             Sock::Klassisch(s) => {
                 let frame = CanFrame::new(Self::id(id)?, &data).ok_or_else(|| anyhow!(crate::trs!("Frame-Bau fehlgeschlagen")))?;
@@ -190,7 +229,15 @@ impl IsoTp {
                     let frame = s.read_frame().context(crate::trs!("Keine Antwort (Timeout) vom Steuergerät"))?;
                     if Self::raw_id(frame.id()) == gesucht {
                         let mut d = frame.data().to_vec();
-                        d.resize(8, 0);
+                        match self.rx_adr {
+                            // erweiterte Adressierung: nur Frames an uns, Adressbyte weg
+                            Some(a) if d.first() != Some(&a) => continue,
+                            Some(_) => {
+                                d.remove(0);
+                                d.resize(7, 0);
+                            }
+                            None => d.resize(8, 0),
+                        }
                         return Ok(d);
                     }
                 }
@@ -354,6 +401,27 @@ mod tests {
         let (frames, zurueck) = hin_und_zurueck(&data, 64);
         assert_eq!(zurueck, data);
         assert_eq!(&frames[0][..6], &[0x10, 0x00, 0x00, 0x00, 0x13, 0x88], "32-Bit-Länge");
+    }
+
+    #[test]
+    fn erweiterte_adressierung() {
+        // 7 Byte je Frame: Einzel-Frame bis 6 Byte, Erst-Frame trägt 5, Folge-Frames 6
+        for n in [1usize, 6, 7, 11, 12, 13, 100] {
+            let data: Vec<u8> = (0..n).map(|i| i as u8).collect();
+            let (frames, zurueck) = hin_und_zurueck(&data, 7);
+            assert_eq!(zurueck, data, "{n} Byte");
+            assert!(frames.iter().all(|f| f.len() == 7));
+        }
+        assert_eq!(hin_und_zurueck(&[1; 6], 7).0.len(), 1);
+        assert_eq!(hin_und_zurueck(&[1; 7], 7).0.len(), 2, "7 Byte brauchen Erst- + Folge-Frame");
+        assert_eq!(hin_und_zurueck(&[1; 11], 7).0.len(), 2);
+        assert_eq!(hin_und_zurueck(&[1; 12], 7).0.len(), 3);
+        // BMW: DME 0x12
+        let (tx, rx) = bmw_paar(0x12);
+        assert_eq!(zerlegen(tx), (0x6F1, Some(0x12)));
+        assert_eq!(zerlegen(rx), (0x612, Some(0xF1)));
+        assert_eq!(zerlegen(0x7E0), (0x7E0, None));
+        assert_eq!(zerlegen(0x18DA_10F1), (0x18DA_10F1, None));
     }
 
     #[test]

@@ -5,6 +5,12 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
+- **Andere Marken: BMW/Mini-Adressierung** (Tester 0x6F1, Adresse des Steuergeräts im ersten
+  Datenbyte — erweiterte Adressierung nach ISO 15765-2). ISO-TP kann das jetzt, die Suche fragt
+  diese Adressen mit ab (nur SocketCAN). `mockecu` spielt mit `VAG_MOCK_BMW=1` ein solches
+  Steuergerät. Am echten BMW noch nicht geprüft.
+- Handbuch: `docs/handbuch/bilder_erzeugen.sh` legt ein Beispielfahrzeug an und fotografiert
+  alle Seiten neu (für die Bilder zur Version 1.0).
 - **Lange Codierung schreiben freigeschaltet** (TP 2.0, Kennung 0x0600): am Golf 6 mit einem
   Werkstattgerät-Mitschnitt bestätigt. Gateway-Codierung und Anpassung schreiben bleiben Probelauf.
 - Mitschnitt schreibt jede Sekunde auf die Platte (vorher alle 100 Frames — bei Abbruch fehlte das Ende).

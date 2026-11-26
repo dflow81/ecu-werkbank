@@ -2,7 +2,9 @@
 //! Kennung und Fehlerspeicher mit den genormten Diensten lesen.
 //!
 //! Was geht: UDS (ISO 14229) und KWP2000 auf CAN (ISO 14230 über ISO-TP),
-//! 11-Bit-IDs und 29-Bit-IDs nach ISO 15765-4 (0x18DAxxF1), 500 kbit/s. Fehlercodes werden genormt angezeigt (P/C/B/U);
+//! 11-Bit-IDs und 29-Bit-IDs nach ISO 15765-4 (0x18DAxxF1), 500 kbit/s,
+//! und (nur SocketCAN) die erweiterte Adressierung von BMW/Mini: Tester 0x6F1,
+//! Adresse des Steuergeräts im ersten Byte, Antwort auf 0x600 + Adresse. Fehlercodes werden genormt angezeigt (P/C/B/U);
 //! Klartext gibt es nur für die genormten Codes (P0xxx …). Herstellereigene
 //! Texte, Codierung und Anpassungen gibt es hier nicht.
 //!
@@ -47,19 +49,26 @@ pub fn paar_29(ziel: u8) -> (u32, u32) {
 /// Übliche OBD-Ziele bei 29 Bit (Motor 0x10, Getriebe 0x18, weitere).
 const ZIELE_29: [u8; 4] = [0x10, 0x18, 0x17, 0x28];
 
-/// CAN-ID als Text: 11 Bit „0x7e0“, 29 Bit „0x18da10f1“.
+/// CAN-ID als Text: 11 Bit „0x7e0“, 29 Bit „0x18da10f1“, mit Adressbyte
+/// (erweiterte Adressierung) „0x6f1:12“.
 pub fn id_text(id: u32) -> String {
-    if id > 0x7FF {
+    if let (can, Some(a)) = crate::isotp::zerlegen(id) {
+        format!("{can:#05x}:{a:02x}")
+    } else if id > 0x7FF {
         format!("{id:#010x}")
     } else {
         format!("{id:#05x}")
     }
 }
 
-/// „0x7e0/0x7e8“ oder „0x18da10f1/0x18daf110“ zurück in IDs.
+/// „0x7e0/0x7e8“, „0x18da10f1/0x18daf110“ oder „0x6f1:12/0x612:f1“ zurück in IDs.
 pub fn ids_aus_text(s: &str) -> Option<(u32, u32)> {
     let (a, b) = s.split_once('/')?;
-    let h = |x: &str| u32::from_str_radix(x.trim().trim_start_matches("0x"), 16).ok().filter(|v| *v <= 0x1FFF_FFFF);
+    let zahl = |x: &str, max: u32| u32::from_str_radix(x.trim().trim_start_matches("0x"), 16).ok().filter(|v| *v <= max);
+    let h = |x: &str| match x.split_once(':') {
+        Some((id, adr)) => Some(crate::isotp::mit_adresse(zahl(id, 0x7FF)? as u16, zahl(adr, 0xFF)? as u8)),
+        None => zahl(x, 0x1FFF_FFFF),
+    };
     Some((h(a)?, h(b)?))
 }
 
@@ -230,6 +239,43 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
             std::thread::sleep(Duration::from_millis(5));
         }
     }
+    // 2c. BMW/Mini (erweiterte Adressierung): Tester Present auf 0x6F1 an jede
+    // Adresse, Antwort auf 0x600 + Adresse mit 0xF1 im ersten Byte. Nur wenn
+    // 0x6F1 frei ist; Adressen, deren Antwort-ID schon Verkehr hat, werden ausgelassen.
+    let mut roh_bmw: Vec<u8> = Vec::new();
+    if !nur_obd && !belegt.contains(&0x6F1) {
+        fortschritt(&tr!("Frage Steuergeräte mit BMW-Adressierung (0x6F1)…"));
+        let ziele: Vec<u8> = (0x00u8..=0xFE).filter(|z| *z != 0xF1 && !belegt.contains(&(0x600 + u16::from(*z)))).collect();
+        let lesen_bmw = |roh: &mut Vec<u8>| {
+            while let Ok(f) = sock.read_frame() {
+                let Id::Standard(id) = f.id() else { continue };
+                let rx = id.as_raw();
+                if !(0x600..=0x6FF).contains(&rx) || belegt.contains(&rx) {
+                    continue;
+                }
+                let ok = matches!(f.data(), [0xF1, l, 0x7E, ..] if *l & 0xF0 == 0) || matches!(f.data(), [0xF1, l, 0x7F, 0x3E, ..] if *l & 0xF0 == 0);
+                let z = (rx - 0x600) as u8;
+                if ok && !roh.contains(&z) {
+                    roh.push(z);
+                }
+            }
+        };
+        for &z in &ziele {
+            if let Some(f) = StandardId::new(0x6F1).and_then(|id| CanFrame::new(id, &[z, 0x02, 0x3E, 0x00, 0xAA, 0xAA, 0xAA, 0xAA])) {
+                let _ = sock.write_frame(&f);
+            }
+            let bis = Instant::now() + Duration::from_millis(20);
+            while Instant::now() < bis {
+                lesen_bmw(&mut roh_bmw);
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        }
+        let bis = Instant::now() + Duration::from_millis(300);
+        while Instant::now() < bis {
+            lesen_bmw(&mut roh_bmw);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
     drop(sock);
 
     // 3. nachprüfen (späte Antworten können der nächsten ID zugeordnet sein)
@@ -251,6 +297,13 @@ pub fn suchen(be: &Backend, mut fortschritt: impl FnMut(&str)) -> Result<Suche> 
     }
     for z in roh29 {
         let (t, r) = paar_29(z);
+        if antwortet(be, t, r) {
+            geraete.push((t, r));
+        }
+    }
+    roh_bmw.sort_unstable();
+    for z in roh_bmw {
+        let (t, r) = crate::isotp::bmw_paar(z);
         if antwortet(be, t, r) {
             geraete.push((t, r));
         }
@@ -535,5 +588,17 @@ mod tests {
         assert_eq!(ids_aus_text(&m.can), Some((t, r)));
         assert_eq!(ids_aus_text("0x7e0/0x7e8"), Some((0x7E0, 0x7E8)));
         assert_eq!(ids_aus_text("0x7e0"), None);
+    }
+
+    #[test]
+    fn bmw_kennung_als_text() {
+        let (t, r) = crate::isotp::bmw_paar(0x12);
+        let text = format!("{}/{}", id_text(t), id_text(r));
+        assert_eq!(text, "0x6f1:12/0x612:f1");
+        assert_eq!(ids_aus_text(&text), Some((t, r)));
+        assert!(!ist_obd_adresse(t));
+        // ohne SocketCAN geht erweiterte Adressierung nicht — klare Meldung statt falscher IDs
+        let e = Backend::Demo.open_id(t, r).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("SocketCAN"), "{e}");
     }
 }
