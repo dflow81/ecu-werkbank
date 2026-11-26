@@ -27,7 +27,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 8 | DBC-Signale entschlüsseln | CANalyzer, SavvyCAN | hoch | niedrig | niedrig | hoch | Quick Win | ✅ `dbc-decode` |
 | 9 | Codier-Helfer: Rückgängig / alles zurück | VCDS, ODIS | mittel | niedrig | niedrig | hoch | Quick Win | ✅ |
 | 10 | Handy-Anzeige mit Zugangsschlüssel | – | mittel | niedrig | niedrig | hoch | Quick Win | ✅ |
-| 11 | TP 2.0: lange Codierung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 eingebaut, Probelauf bis Mitschnitt |
+| 11 | TP 2.0: lange Codierung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 Kennung 0x0600 (Bordnetz u. a.) ✅ am Golf 6 bestätigt und freigeschaltet (26.11.2026); Gateway (0x9A) noch Probelauf bis Mitschnitt B2 |
 | 12 | TP 2.0: Anpassung schreiben | VCDS | hoch | mittel | hoch | hoch | 1.0 | 🟡 eingebaut, Probelauf bis Mitschnitt |
 | 13 | TP 2.0: Einzelmesswerte (Funktion 09) | VCDS | niedrig | niedrig | niedrig | mittel | 1.0 | ✅ Einzelmesswert: 🔍 an jedem Feld des Messwertblocks zeigt den Wert groß (Ampel, Sollbereich, läuft mit „Live“) |
 | 14 | TP 2.0: Umgebungsbedingungen direkt | VCDS | mittel | mittel | niedrig | mittel | 1.0 | ✅ Freeze-Frame `12 00 04 <Code>` (am Golf 6 mit Werkstattgerät-Mitschnitt geprüft): Status, Priorität, Häufigkeit, Verlernzähler, km, Datum/Zeit, weitere Messwerte; Rückfall 0x17 |

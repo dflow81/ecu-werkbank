@@ -594,9 +594,13 @@ pub fn kurzcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu:
 /// Lange Codierung über 0x0600 schreiben — am Auto mit einem Mitschnitt
 /// bestätigt? Solange `false`, macht [`langcodierung_schreiben`] am echten
 /// Auto nur einen Probelauf (zeigt die Anfrage, sendet nichts).
-/// Annahme: KWP 0x2E (WriteDataByCommonIdentifier) mit derselben Kennung,
-/// über die das Steuergerät die Codierung mit 0x22 liefert.
-pub const LANGCODIERUNG_GEPRUEFT: bool = false;
+/// KWP 0x2E (WriteDataByCommonIdentifier) mit derselben Kennung, über die
+/// das Steuergerät die Codierung mit 0x22 liefert. **Bestätigt am Golf 6
+/// (Bordnetz 0x20, 26.11.2026)**: Das Werkstattgerät schickt in Sitzung 0x89
+/// genau `2E 06 00 <Codierung>`, das Steuergerät antwortet `6E 06 00`. Vorher
+/// schreibt es seinen eigenen Werkstattcode (`2E F1 98 …`) — das machen wir
+/// nicht; lehnt ein Steuergerät deshalb ab, gibt es eine klare Meldung.
+pub const LANGCODIERUNG_GEPRUEFT: bool = true;
 /// Lange Codierung des Gateways (0x3B 0x9A) — siehe [`LANGCODIERUNG_GEPRUEFT`].
 /// Annahme: gleicher Aufbau wie die am Golf 6 mitgeschnittene Kurzcodierung
 /// (0x3B 0x9A [Betriebsnummer][Softwarestand][Codierblock]).
@@ -672,7 +676,13 @@ pub fn langcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu:
     if !darf_senden(be, geprueft) {
         return Ok(Schreiben::Probelauf { anfrage, alt });
     }
-    k.request(anfrage[0], &anfrage[1..])?;
+    if let Err(e) = k.request(anfrage[0], &anfrage[1..]) {
+        let t = format!("{e:#}");
+        if ["NRC 0x22", "NRC 0x33", "NRC 0x31"].iter().any(|n| t.contains(n)) {
+            bail!(tr!("Steuergerät lehnt das Schreiben ab ({a}). Manche Steuergeräte verlangen vorher einen Werkstattcode oder eine Anmeldung — nichts geändert.", a = t));
+        }
+        return Err(e);
+    }
     let danach = langcodierung_lesen(&mut k).map(|(_, c)| c).ok_or_else(|| anyhow::anyhow!(tr!("Kontrolle: Codierung danach nicht lesbar.")))?;
     Ok(Schreiben::Geschrieben { alt, danach })
 }

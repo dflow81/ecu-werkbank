@@ -37,7 +37,13 @@ pub(super) fn record(be: &Backend, iface: &str, out: &std::path::Path, seconds: 
     println!("{}", tr!("Schneide {seconds}s auf {iface} mit → {a} (Strg-C bricht ab)…", seconds = seconds, iface = iface, a = out.display()));
     let start = Instant::now();
     let mut n = 0usize;
+    // mindestens jede Sekunde auf die Platte, damit bei Strg-C nichts fehlt
+    let mut geschrieben = Instant::now();
     while start.elapsed() < Duration::from_secs(seconds) {
+        if geschrieben.elapsed() >= Duration::from_secs(1) {
+            w.flush()?;
+            geschrieben = Instant::now();
+        }
         let Ok(frame) = sock.read_frame() else { continue };
         let t = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -49,9 +55,6 @@ pub(super) fn record(be: &Backend, iface: &str, out: &std::path::Path, seconds: 
         };
         writeln!(w, "{}", ecu_werkbank::canlog::format_line(t, iface, id, frame.data()))?;
         n += 1;
-        if n.is_multiple_of(100) {
-            w.flush()?;
-        }
     }
     w.flush()?;
     println!("{}", tr!("{n} Frames gespeichert. Auswerten mit:  ecu-werkbank decode-log {a}", n = n, a = out.display()));

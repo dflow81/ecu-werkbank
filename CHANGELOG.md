@@ -5,6 +5,9 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
+- **Lange Codierung schreiben freigeschaltet** (TP 2.0, Kennung 0x0600): am Golf 6 mit einem
+  Werkstattgerät-Mitschnitt bestätigt. Gateway-Codierung und Anpassung schreiben bleiben Probelauf.
+- Mitschnitt schreibt jede Sekunde auf die Platte (vorher alle 100 Frames — bei Abbruch fehlte das Ende).
 - **K-Leitungs-Steuergeräte hinter dem Gateway** (z. B. Polo 6R: ABS und Lenkhilfe): Das Gateway
   tunnelt die K-Leitung über CAN. ECUWerkbank erkennt das am Kanalaufbau und liest Identifikation
   und Fehlerspeicher (KW1281 oder KWP2000) — im Scan und mit `ktunnel --adresse 0x03`. Am Polo 6R
