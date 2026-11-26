@@ -785,7 +785,11 @@ pub fn umgebung_werte(env: &[u8]) -> Vec<(String, String)> {
                 let feld = |ab: u32, bits: u32| (x >> (32 - ab - bits)) & ((1 << bits) - 1);
                 let (jahr, monat, tag) = (2000 + feld(0, 6), feld(6, 4), feld(10, 5));
                 let (std, min, sek) = (feld(15, 5), feld(20, 6), feld(26, 6) + 1);
-                v.push((tr!("Datum"), format!("{jahr}.{monat:02}.{tag:02}")));
+                let mut d = format!("{jahr}.{monat:02}.{tag:02}");
+                if !(1..=12).contains(&monat) || tag == 0 {
+                    d += &tr!(" (kein echtes Datum — Uhr im Kombi nicht gestellt)");
+                }
+                v.push((tr!("Datum"), d));
                 v.push((tr!("Zeit"), format!("{std:02}:{min:02}:{sek:02}")));
             }
             for (i, c) in rest.chunks(3).enumerate() {
@@ -1304,12 +1308,12 @@ mod tests {
         assert_eq!(w["Verlernzähler"], "0");
         assert_eq!(w["Kilometerstand"], "243178 km");
         assert_eq!(w["Zeitangabe"], "0");
-        assert_eq!(w["Datum"], "2004.14.05");
+        assert!(w["Datum"].starts_with("2004.14.05 (kein echtes Datum"), "{}", w["Datum"]);
         assert_eq!(w["Zeit"], "12:04:54");
         assert!(w["Temperatur"].starts_with("12"), "{}", w["Temperatur"]);
         let tuer = [0x6C, 0x01, 0x68, 0x03, 0x02, 0x09, 0x03, 0xB7, 0x20, 0x00, 0x01, 0x13, 0x99, 0x08, 0xC3];
         let w: std::collections::HashMap<String, String> = umgebung_werte(&tuer).into_iter().collect();
-        assert_eq!((w["Kilometerstand"].as_str(), w["Datum"].as_str(), w["Zeit"].as_str()), ("243488 km", "2004.14.12", "16:35:04"));
+        assert_eq!((w["Kilometerstand"].as_str(), &w["Datum"][..10], w["Zeit"].as_str()), ("243488 km", "2004.14.12", "16:35:04"));
         let ohne = [0x6C, 0x01, 0x6C, 0x03, 0x25, 0x09, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let w = umgebung_werte(&ohne);
         assert!(w.iter().all(|(k, _)| k != "Datum"), "ohne Datum");
