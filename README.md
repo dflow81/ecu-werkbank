@@ -245,6 +245,9 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
   0x76C; Antwort = Anfrage + 0x6A). Der Scan sucht 0x700–0x7DF ab (≈ 3 s).
 - Steuergeräte verlangen 10 ms Abstand zwischen Frames (T3), melden
   „beschäftigt“ (0x21) oder kennen nur 0x22 statt 0x1A — alles eingebaut.
+- Polo 6R (2010): ABS (ESP8.2i) und Lenkhilfe (TRW) hängen an einer K-Leitung hinter dem
+  Gateway — der Scan liest sie über den Tunnel (siehe „Weitere Anschlüsse“). Damit findet
+  ECUWerkbank dort alle 12 Steuergeräte wie das Werkstattgerät.
 
 ### Schnell-Scan, Fehlertexte, Adapter automatisch
 
@@ -1279,17 +1282,30 @@ Nachbau gibt es keine, weil die echten noch nicht gelernt sind.
 
 ## Umgebungsbedingungen bei TP-2.0-Fehlern
 
-Bei UDS-Steuergeräten zeigt ECUWerkbank schon, unter welchen Bedingungen ein Fehler
-auftrat. Für TP 2.0 (Golf 6: Motor, ABS, Türen …) fragt ECUWerkbank jetzt zu jedem Fehler
-zusätzlich den Dienst 0x17 (Status des Fehlercodes, ISO 14230) ab — nur lesend. Der
-Aufbau der Antwort ist vom Hersteller nicht offen beschrieben, darum stehen die Daten vorerst
-als „Umgebungsdaten (roh)“ im Protokoll, in `kwp-dtc` und in der GUI. Kennt ein
-Steuergerät den Dienst nicht, wird nicht weiter gefragt; der Fehlerspeicher wird
-trotzdem normal gelesen.
+Zu jedem Fehler fragt ECUWerkbank die gespeicherten Umgebungsbedingungen ab — nur lesend:
+zuerst VAG-Freeze-Frame (KWP 0x12 mit dem Fehlercode), sonst 0x17. Die Antwort `6C 01 …` wird
+im Klartext gezeigt: Fehlerstatus, Priorität, Häufigkeit, Verlernzähler, Kilometerstand,
+Datum/Uhrzeit und weitere Messwerte (z. B. Temperatur). Der Aufbau ist aus einem eigenen
+Mitschnitt am Golf 6 abgeleitet und mit einem Werkstattgerät am selben Fehler verglichen
+(25.11.2026), am Polo 6R bestätigt (26.11.2026). Steht im Datum ein Monat über 12, ist die Uhr
+im Kombi nie gestellt worden — ECUWerkbank schreibt das dazu. Unbekannte Antworten bleiben als
+„Umgebungsdaten (roh)“ stehen.
 
-Am Golf 6 (2010) kennt **kein** TP-2.0-Steuergerät den Dienst (Antwort `7F 17 11`), und
-Freeze-Frames (0x12) werden mit „Bedingungen nicht erfüllt“ abgelehnt. Dort gibt es zu
-TP-2.0-Fehlern also keine Umgebungsdaten — das ist kein Fehler von ecu-werkbank.
+## Weitere Anschlüsse (DoIP, CAN FD, K-Leitung, J2534)
+
+| Anschluss | Wofür | Befehl / Einstellung | Stand |
+|---|---|---|---|
+| **K-Leitung hinter dem Gateway** | ältere Steuergeräte, die das Gateway über CAN durchreicht (Polo 6R: ABS, Lenkhilfe) | automatisch im Scan; einzeln `ktunnel --adresse 0x03` | ✅ am Polo 6R (2010) |
+| DoIP (Ethernet) | neuere Autos mit Diagnose über Netzwerk (etwa ab Golf 8) | `-t doip --port 169.254.1.10`, GUI-Transport „DoIP“ | 🟡 nur gegen simuliertes Gateway |
+| CAN FD | Steuergeräte mit schnellem CAN | Adapter mit `fd on`, dann `VAG_CANFD=1` | 🟡 nur Tests |
+| K-Leitung mit KKL-Kabel | sehr alte VW (vor ~2004, KW1281) | `kline --port /dev/ttyUSB0 --adresse 0x01` | 🟡 nur Simulation |
+| J2534-Adapter | nur Windows, 64-Bit-Treiber | `-t j2534`, GUI-Transport „J2534-Adapter“ | 🟡 nur gebaut |
+
+**K-Leitung hinter dem Gateway** (aus einem eigenen Mitschnitt am Polo 6R mit Werkstattgerät):
+Solche Steuergeräte antworten auf den TP-2.0-Kanalaufbau nur kurz mit `00 D0 xx`. Dann öffnet
+ECUWerkbank den Tunnel (`200#<Ziel> C0 A0`, Tester 0x7A0, Antwort 0x7xx), schickt als erste
+Nachricht die 5-Baud-Adresse und spricht danach KW1281 (ganze Blöcke) oder KWP2000 mit Kopf.
+Nur lesen: Identifikation und Fehlerspeicher.
 
 ## Startseite: Fahrzeug auf einen Blick
 
@@ -1326,17 +1342,17 @@ und Stand in ECUWerkbank:
 | 00 | Auto-Scan / Report (PDF) | ✅ `autoscan`, `report` | ✅ `autoscan`, `report` |
 | 01 | Steuergerät-Identifikation | ✅ `rdid` (0xF187, 0xF190 …) | ✅ `kwp-ident` (Softwarestand am Golf 6 bestätigt) |
 | 02 | Fehlerspeicher lesen | ✅ `dtc` (VW-Fehlernummern wie beim Werkstattgerät) | ✅ `kwp-dtc` (Fehlerart am Golf 6 bestätigt) |
-| 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | 🟡 Steuergeräte am Golf 6 lehnen ab; per Auto-Scan-Import ✅ |
+| 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | ✅ VAG-Freeze-Frame (0x12) im Klartext, am Golf 6 mit Werkstattgerät verglichen |
 | – | Auto-Scan-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `autoscan-import` | ✅ `autoscan-import` |
 | 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ✅ `kwp-stellglied`, GUI Steuergeräte → Steuergerät wählen → „▶ Stellglieddiagnose“ (Ablauf per Mitschnitt an der Golf-6-Tür gelernt) |
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |
-| 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben `kwp-langcodierung --neu` (🟡 eingebaut, am Auto noch Probelauf) |
+| 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben `kwp-langcodierung --neu` (✅ Kennung 0x0600, am Golf 6 per Mitschnitt bestätigt; Gateway noch Probelauf) |
 | – | Codierungs-Sicherung / Vergleich / Zurückschreiben | ✅ `coding-*` | 🟡 nur sichern |
 | – | Fahrzeug-Historie, Vorher/Nachher | ✅ `history`, `compare` | ✅ |
 | 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste; Formeln am Golf 6 mit Werkstattgerät verglichen |
-| 09 | Einzelmesswerte | – | ❌ |
+| 09 | Einzelmesswerte | ✅ einzelne Kennung | ✅ 🔍 am Messwertfeld (liest den Block wie das Werkstattgerät) |
 | 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben `kwp-anpassung-schreiben` (🟡 eingebaut, am Auto noch Probelauf) |
 | 11/16 | Login / Zugriffsberechtigung | 🟡 `login` (SecurityAccess, Bytecode vom Nutzer) | 🟡 `login --kwp` (am Auto ungeprüft) |
 | 15 | Readiness | ✅ `obd-info` + Fahranleitung (GUI) | – |
@@ -1352,18 +1368,17 @@ und Stand in ECUWerkbank:
 | – | Verbauliste (verbaute Steuergeräte, nach System) | ✅ `verbauliste`, GUI Steuergeräte → „📋 Verbauliste nach System“ | ✅ aus dem Scan |
 | – | Gateway-Verbauliste direkt aus dem Gateway | ⏳ geplant (neuere Autos mit UDS-Gateway) | ✅ `gateway-verbauliste`, GUI-Knopf (Golf 6 geprüft) |
 | – | Transportmodus | ❌ | ❌ |
-| – | K-Line (vor ~2004) | – nicht über SocketCAN | – |
+| – | K-Leitung | – | ✅ hinter dem Gateway `ktunnel` (Polo 6R); 🟡 KKL-Kabel `kline` |
 
 ✅ geht · 🟡 teilweise · ⏳ geplant · ❌ geht nicht · – gibt es dort nicht
 
 Als Nächstes:
+- Anpassung und Gateway-Codierung schreiben am Golf 6 per Mitschnitt bestätigen (bis dahin
+  zeigt ECUWerkbank am echten Auto nur, was es senden würde), Grundeinstellung
 - Restliche Messwert-Formeln (Bremsdruck, Beschleunigung, Drehrate …) mit einer
   gleichzeitigen Vergleichsmessung festnageln
-- KWP2000: lange Codierung und Anpassung schreiben am Golf 6 per Mitschnitt bestätigen
-  (bis dahin zeigt ECUWerkbank am echten Auto nur, was es senden würde), Grundeinstellung
-- Umgebungsbedingungen bei TP-2.0-Fehlern direkt lesen (Mitschnitt am Golf auswerten)
 - Gateway-Verbauliste bei neueren UDS-Gateways
-- Erkenntnisse vom Golf 6 an einem zweiten Auto (Polo 6R) prüfen
+- DoIP, CAN FD, KKL-Kabel und J2534 an echter Hardware prüfen
 - **Steuergeräte-Adresskarte** aus eigenen `discover`-Mitschnitten
 
 ## Lizenz, Marken, Quellen

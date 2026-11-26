@@ -239,6 +239,9 @@ tabelle(["Funktion", "CAN-Adapter", "ELM327"], [
 ], [100, 30, 40])
 klein("Am Golf 6 geprüft ist nur der CAN-Adapter. Der ELM327-Teil ist noch nicht an echter Hardware getestet.")
 h2("Weitere Anschlüsse (neu in 1.0, noch nicht am Auto geprüft)")
+p("<b>Ältere Steuergeräte hinter dem Gateway</b> (z. B. ABS und Lenkhilfe im Polo 6R) hängen an einer "
+  "K-Leitung, die das Gateway über CAN durchreicht. Das erkennt ECUWerkbank beim Scan von selbst — "
+  "dafür reicht der normale CAN-Adapter (am Polo 6R geprüft).")
 tabelle(["Anschluss", "Wofür", "Einstellen"], [
     ["DoIP (Ethernet)", "Neuere Autos mit Diagnose über Netzwerk (etwa ab Golf 8). Braucht ein DoIP-Kabel "
                         "(OBD auf Netzwerkstecker).", "Verbindung → Transport „DoIP“ und IP-Adresse des Autos"],
