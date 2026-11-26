@@ -41,7 +41,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 HIER = Path(__file__).resolve().parent
 BILDER = HIER / "bilder"
 AUSGABE = HIER / "ecu-werkbank-Handbuch.pdf"
-STAND = "24.11.2026"
+STAND = "26.11.2026"
 VERSION = "0.5.0"
 
 FONTS = Path("/usr/share/fonts/truetype/dejavu")
@@ -238,6 +238,17 @@ tabelle(["Funktion", "CAN-Adapter", "ELM327"], [
     ["CAN-Mitschnitt, Auto-Erkennung", "ja", "nein"],
 ], [100, 30, 40])
 klein("Am Golf 6 geprüft ist nur der CAN-Adapter. Der ELM327-Teil ist noch nicht an echter Hardware getestet.")
+h2("Weitere Anschlüsse (neu in 1.0, noch nicht am Auto geprüft)")
+tabelle(["Anschluss", "Wofür", "Einstellen"], [
+    ["DoIP (Ethernet)", "Neuere Autos mit Diagnose über Netzwerk (etwa ab Golf 8). Braucht ein DoIP-Kabel "
+                        "(OBD auf Netzwerkstecker).", "Verbindung → Transport „DoIP“ und IP-Adresse des Autos"],
+    ["CAN FD", "Neuere Steuergeräte mit schnellerem CAN. Nur wenn der Adapter CAN FD kann.",
+               "Adapter mit <font face='DV-M'>fd on</font> einrichten, dann <font face='DV-M'>VAG_CANFD=1</font>"],
+    ["K-Leitung (KKL-Kabel)", "Sehr alte VW (vor etwa 2004) mit KW1281. Bisher im Terminal: Kennung, Fehler, "
+                              "Messwertgruppen.", "<font face='DV-M'>ecu-werkbank kline --port /dev/ttyUSB0 --adresse 0x01</font>"],
+    ["J2534-Adapter", "Nur unter <b>Windows</b>: Adapter mit J2534-Treiber (64 Bit).",
+                      "Verbindung → Transport „J2534-Adapter“"],
+], [35, 80, 55])
 h2("Installieren")
 p("Im Projektordner einmal bauen und für deinen Benutzer installieren (ohne sudo):")
 code("cargo build --release", "./packaging/install.sh")
@@ -336,6 +347,14 @@ p("Beim Motor rechnet ECUWerkbank die 5-stellige Herstellernummer in den OBD-Cod
   "herstellereigene Bauteil-Nummern wie 01627, für die es keine offene Liste gibt. Hier hilft ein eigener Text: "
   "Neben einem Code ohne Text steht ein <b>✏</b>-Knopf. Klicken, Text schreiben, Enter. Er erscheint danach "
   "überall, auch im PDF.")
+h2("Umgebungsbedingungen")
+p("Zu vielen Fehlern speichert das Steuergerät, <b>wann und unter welchen Umständen</b> er aufgetreten ist: "
+  "Kilometerstand, Datum und Uhrzeit, Häufigkeit, Verlernzähler und einige Messwerte. ECUWerkbank zeigt sie "
+  "eingerückt unter dem Fehler, auch bei den älteren TP-2.0-Steuergeräten des Golf 6 (geprüft gegen VCDS).")
+h2("Erfahrung aus deiner Historie")
+p("Ist ein Fehler bei dir schon öfter aufgetreten, steht in der geführten Fehlersuche eine kleine "
+  "<b>Statistik</b>: wie oft er da war, wie oft er wieder weg war, wie oft er wiederkam, und nach welcher "
+  "Reparatur-Notiz er am häufigsten verschwunden ist. Sie entsteht nur aus deinen eigenen Scans.")
 kasten("Gut zu wissen",
        "Antwortet ein Steuergerät nicht (z. B. Radio aus oder gerade beim Hochfahren), steht es als "
        "„nicht lesbar“ im Protokoll. Seine Fehler gelten dann <b>nicht</b> als behoben.")
@@ -351,7 +370,8 @@ h2("Messwertblöcke (TP 2.0)")
 p("Ältere Steuergeräte liefern ihre Werte in <b>Messwertblöcken</b> mit bis zu 8 Feldern. Unter Diagnose → "
   "Ältere Steuergeräte (TP 2.0) <b>Steuergeräte suchen</b>, Adresse wählen (Motor = 0x01) und einen Block lesen — einmal "
   "oder fortlaufend (<b>Live</b>). <b>Alle Blöcke lesen</b> zeigt in einem Durchgang, welche Blöcke ein "
-  "Steuergerät überhaupt hat.")
+  "Steuergerät überhaupt hat. Mit der <b>🔍</b> neben einem Feld wird nur dieser eine Wert groß angezeigt "
+  "(<b>Einzelmesswert</b>) und schneller aktualisiert — praktisch, wenn du beim Schrauben aus der Ferne hinschaust.")
 bild("tp20", "Diagnose → Ältere Steuergeräte (TP 2.0): alle gefundenen TP-2.0-Steuergeräte mit Kennung und Fehlerzahl.", 96)
 h2("Favoriten und eigene Namen")
 p("Ohne Beschriftung zeigt ECUWerkbank nur die <b>Art</b> eines Werts, mit „~“ davor (z. B. „~Drehzahl“). Den "
@@ -508,7 +528,9 @@ p("<b>Softwarestände</b> listet Teilenummer, Software- und Hardwarestand jedes 
   "dem letzten Mal — so siehst du, ob in der Werkstatt etwas getauscht oder neu programmiert wurde.")
 bild("software", "Fahrzeug → Softwarestände.", 72)
 p("<b>Codier-Sicherung</b> speichert die Codierung aller Steuergeräte und vergleicht zwei Sicherungen. Vor jeder "
-  "Änderung am Auto: erst sichern. Einzelne Steuergeräte lassen sich daraus zurückschreiben.")
+  "Änderung am Auto: erst sichern. Einzelne Steuergeräte lassen sich daraus zurückschreiben. "
+  "<b>🔀 Ganze Konfiguration vergleichen</b> stellt Codierung, Anpassungen und Softwarestand eines Steuergeräts "
+  "aus zwei Sicherungen nebeneinander und zeigt nur, was sich unterscheidet.")
 bild("sicherung", "Fahrzeug → Codier-Sicherung: Sicherungen vergleichen und einzeln zurückschreiben.", 145)
 h2("Wo liegen die Dateien?")
 p("Seit Version 0.4 liegen alle Angaben, Scans, Sicherungen und Einstellungen in <b>einer Datei</b>, der "
@@ -557,6 +579,19 @@ p("Der Knopf <b>🆔 Erweiterte Identifikation</b> beim gewählten Steuergerät 
   "Codierung …) und benennt sie. Für TP-2.0-Steuergeräte steht die Identifikation "
   "im Reiter TP 2.0.")
 bild("ident", "Erweiterte Identifikation des Kombiinstruments (0x714).", 80)
+h2("Andere Marken")
+p("Unter Verbindung → <b>Andere Marken</b> sucht ECUWerkbank auch bei Mercedes, Opel, Ford &amp; Co. die "
+  "Steuergeräte und liest Kennung und Fehlerspeicher (genormte UDS- und OBD-Diagnose). Aus der "
+  "Fahrgestellnummer wird die Marke erkannt, mit einem Hinweis, was bei ihr geht. Herstellertexte gibt es "
+  "dabei nur aus eigenen Datenpaketen. Solche Scans werden getrennt geführt und stören den Verlauf des Autos nicht.")
+h2("Speicher auslesen (Experten)")
+p("Im Terminal liest <font face='DV-M'>speicher-lesen</font> einen Speicherbereich eines UDS-Steuergeräts und "
+  "sichert ihn als Datei — <b>nur lesen</b>. Viele Steuergeräte lehnen das ab; nach mehreren Ablehnungen hört "
+  "ECUWerkbank von selbst auf.")
+h2("Schnittstelle für eigene Programme (REST)")
+p("<font face='DV-M'>ecu-werkbank api</font> stellt die Fahrzeug-Datenbank im Heimnetz als Schnittstelle bereit "
+  "(mit geheimem Schlüssel). Mit <font face='DV-M'>--live</font> kommen auch OBD-Live-Werte vom Auto dazu, z. B. "
+  "<font face='DV-M'>/api/v1/live/obd?pids=0C,0D</font>. Nur lesen.")
 h2("Grundeinstellungen (Referenz)")
 p("Ein Lexikon der üblichen Werkstattfunktionen je System: Drosselklappe anlernen, Lenkwinkelsensor, "
   "ABS entlüften, Parkbremse, Service-Intervall … Zu jeder steht, wozu sie dient, worauf du achten musst und "
@@ -625,6 +660,10 @@ kasten("Kilometerstand",
        "ECUWerkbank schreibt den Kilometerstand <b>nie</b>. Jeder Schreibweg — Codierung, Anpassungen, "
        "Service-Werte und der allgemeine Schreibbefehl — lehnt die Kilometer-Kennungen ab, auch mit "
        "<font face='DV-M'>--ja</font>. Tachomanipulation ist strafbar.", GELB)
+kasten("Spannungswächter",
+       "Bei Abläufen mit vielen Schreibvorgängen (z. B. mehrere Anpassungen zurückschreiben) misst ECUWerkbank die "
+       "Bordspannung nicht nur am Anfang, sondern höchstens alle 10 Sekunden erneut. Sinkt sie unter 12 V, wird "
+       "<b>vor</b> dem nächsten Schreiben abgebrochen — nichts bleibt halb geschrieben.")
 h2("Routine und Stellglied (UDS)")
 p("Im Reiter Werkzeuge → Experten: Routine & Stellglied (UDS) gibst du Steuergerät, Routine-ID bzw. Kennung und Werte "
   "von Hand ein. Bei <b>Sub</b> bedeutet 1 = starten, 2 = stoppen, 3 = Ergebnis abfragen. Vor dem Senden "
@@ -663,7 +702,8 @@ tabelle(["Problem", "Ursache und Lösung"], [
     ["Radio antwortet nicht", "Radio ist aus oder startet nach dem Anlassen neu. Einschalten, kurz warten, neu lesen."],
     ["Kilometer weicht um bis zu 9 km ab", "Das Kombi rundet auf 10 km ab. Genau aus dem Kombi lesen oder von Hand "
                                            "eintragen (Kapitel 9)."],
-    ["Keine Umgebungsdaten bei TP-2.0-Fehlern", "Die Golf-6-Steuergeräte liefern keine. Das ist kein Fehler."],
+    ["Keine Umgebungsdaten bei einem Fehler", "Nicht jedes Steuergerät speichert sie zu jedem Fehler. Das ist kein Fehler."],
+    ["Abbruch „Spannung zu niedrig“", "Ladegerät anschließen, kurz warten und den Ablauf neu starten (Kapitel 13)."],
     ["Grundeinstellung gesperrt", "Für dieses Steuergerät gibt es noch keinen gelernten Ablauf (Kapitel 13)."],
     ["Feld heißt „~Drehzahl“ statt eines Namens", "Noch kein eigener Name eingetragen — ✏ am Feld (Kapitel 7)."],
     ["GUI hängt / zeigt nichts Neues", "Statuszeile unten lesen. Notfalls GUI schließen und neu starten; Daten "
@@ -698,6 +738,11 @@ tabelle(["Befehl", "Was er tut"], [
     ["sprache --vorlage fr", "Vorlage für eine neue Sprache; <font face='DV-M'>--verwaist</font> / "
                              "<font face='DV-M'>--aufraeumen</font> pflegen eine Sprachdatei"],
     ["rdid-scan --tx 0x714 --rx 0x77E --von 0x2200 --bis 0x22FF", "Kennungen eines Steuergeräts lesen (nur lesen)"],
+    ["fremd", "Andere Marken: Steuergeräte suchen, Kennung und Fehler lesen"],
+    ["kline --adresse 0x01 --gruppe 1", "Sehr alte VW über K-Leitung (KKL-Kabel)"],
+    ["speicher-lesen --geraet 0x7E0 --von 0x0 --laenge 256", "Speicher eines UDS-Steuergeräts lesen (Experten)"],
+    ["api --live", "REST-Schnittstelle mit Datenbank und Live-Werten"],
+    ["pruefplan --code P0300", "Prüfplan zu einem Fehler, mit Statistik aus deiner Historie"],
 ], [72, 98])
 h2("Befehle, die schreiben")
 p("Diese Befehle zeigen <b>ohne</b> <font face='DV-M'>--ja</font> nur eine Vorschau dessen, was sie senden würden:")
