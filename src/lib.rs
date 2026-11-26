@@ -44,6 +44,7 @@ pub mod kennungstexte;
 pub mod km;
 pub mod kosten;
 pub mod kw1281;
+pub mod ktunnel;
 pub mod kwp;
 pub mod marken;
 pub mod kwp_grund;

@@ -35,6 +35,18 @@ use anyhow::{anyhow, bail, Context, Result};
 use crate::can::{CanFrame, CanSocket, EmbeddedFrame, Id, Socket, StandardId};
 use std::time::{Duration, Instant};
 
+/// Das Steuergerät hängt an einer K-Leitung hinter dem Gateway (kurze
+/// Antwort `00 D0 xx` auf den Kanalaufbau) — lesen über [`crate::ktunnel`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KLeitungImTunnel;
+
+impl std::fmt::Display for KLeitungImTunnel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&crate::tr!("K-Leitungs-Steuergerät hinter dem Gateway (eigener Kanal)"))
+    }
+}
+impl std::error::Error for KLeitungImTunnel {}
+
 /// Kanalaufbau vorübergehend nicht möglich — später nochmal versuchen.
 /// Als eigene Fehlerart, damit die Wiederholung nicht an der (übersetzten)
 /// Meldung hängt: `e.downcast_ref::<Kurzzeitig>()`.
@@ -248,6 +260,9 @@ impl<I: CanIo> Tp20<I> {
         let resp = io
             .read(resp_id)
             .context(crate::trs!("keine TP2.0 Setup-Antwort (0xD0) vom Steuergerät"))?;
+        if crate::ktunnel::ist_tunnel_antwort(&resp) {
+            return Err(KLeitungImTunnel.into());
+        }
         if resp.len() < 6 {
             bail!(crate::tr!("TP2.0 Setup-Antwort zu kurz ({n} Byte)", n = resp.len()));
         }

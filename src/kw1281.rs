@@ -43,6 +43,19 @@ pub trait Leitung {
     fn empfangen(&mut self, timeout: Duration) -> Result<u8>;
     /// Adresse mit 5 Bit/s senden (7O1) und danach auf 10 400 Baud bereit sein.
     fn fuenf_baud(&mut self, adresse: u8) -> Result<()>;
+    /// Ganze Blöcke statt einzelner Bytes mit Quittung (K-Leitung im
+    /// CAN-Tunnel des Gateways: das Gateway quittiert die Bytes selbst).
+    fn ganze_bloecke(&self) -> bool {
+        false
+    }
+    /// Ganzen Block senden (nur bei [`Leitung::ganze_bloecke`]).
+    fn block_raus(&mut self, _block: &[u8]) -> Result<()> {
+        bail!("block_raus nicht unterstützt")
+    }
+    /// Ganzen Block empfangen (nur bei [`Leitung::ganze_bloecke`]).
+    fn block_rein(&mut self) -> Result<Vec<u8>> {
+        bail!("block_rein nicht unterstützt")
+    }
 }
 
 /// Bits der 5-Baud-Anmeldung: Start (0), 7 Datenbits LSB zuerst, ungerade
@@ -74,6 +87,11 @@ impl<L: Leitung> Kw1281<L> {
     /// Anmelden und Identifikation lesen.
     pub fn verbinden(mut leitung: L, adresse: u8) -> Result<Self> {
         leitung.fuenf_baud(adresse)?;
+        Self::nach_fuenf_baud(leitung)
+    }
+
+    /// Anmeldung ab dem Sync-Byte (5-Baud-Adresse ist schon gesendet).
+    pub fn nach_fuenf_baud(mut leitung: L) -> Result<Self> {
         let sync = leitung.empfangen(Duration::from_millis(2500)).context(tr!("K-Leitung: keine Antwort auf die Anmeldung (Zündung an? Adresse richtig?)"))?;
         if sync != 0x55 {
             bail!(tr!("K-Leitung: Sync {a} statt 55 — falsche Baudrate?", a = format!("{sync:02X}")));
@@ -89,7 +107,12 @@ impl<L: Leitung> Kw1281<L> {
             match t {
                 titel::ACK => return Ok(k),
                 titel::TEXT => {
-                    let s = String::from_utf8_lossy(&d).trim().to_string();
+                    // letzter Block oft binär (Codierung, Betriebsnummer) → hex
+                    let s = if d.iter().all(|b| (0x20..0x7F).contains(b)) {
+                        String::from_utf8_lossy(&d).trim().to_string()
+                    } else {
+                        crate::kwp::umgebung_hex(&d)
+                    };
                     if !s.is_empty() {
                         k.ident.push(s);
                     }
@@ -111,6 +134,10 @@ impl<L: Leitung> Kw1281<L> {
         let z = self.naechster_zaehler();
         let mut b = vec![(daten.len() + 3) as u8, z, t];
         b.extend_from_slice(daten);
+        if self.leitung.ganze_bloecke() {
+            b.push(0x03);
+            return self.leitung.block_raus(&b);
+        }
         for &x in &b {
             self.leitung.senden(x)?;
             let q = self.leitung.empfangen(T_BYTE).context(tr!("K-Leitung: Quittung fehlt"))?;
@@ -123,6 +150,18 @@ impl<L: Leitung> Kw1281<L> {
 
     /// Block empfangen (jedes Byte außer dem Ende quittieren): (Titel, Daten).
     pub fn block_empfangen(&mut self) -> Result<(u8, Vec<u8>)> {
+        if self.leitung.ganze_bloecke() {
+            let b = self.leitung.block_rein()?;
+            let len = *b.first().unwrap_or(&0) as usize;
+            if len < 3 || b.len() < len + 1 {
+                bail!(tr!("K-Leitung: Blocklänge {a} ungültig", a = len));
+            }
+            if b[len] != 0x03 {
+                bail!(tr!("K-Leitung: Blockende {a} statt 03", a = format!("{:02X}", b[len])));
+            }
+            self.zaehler = b[1];
+            return Ok((b[2], b[3..len].to_vec()));
+        }
         let lies = |l: &mut L| -> Result<u8> {
             let x = l.empfangen(T_BYTE)?;
             l.senden(!x)?;

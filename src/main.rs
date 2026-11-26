@@ -442,6 +442,21 @@ enum Command {
         #[arg(long)]
         gruppe: Option<u8>,
     },
+    /// K-Leitungs-Steuergerät hinter dem Gateway (z. B. Polo 6R ABS 03, Lenkhilfe 44): Identifikation, Fehler (nur lesen)
+    Ktunnel {
+        /// Steuergeräte-Adresse wie im Werkstattgerät, z. B. 0x03 ABS, 0x44 Lenkhilfe
+        #[arg(long, value_parser = parse_hex)]
+        adresse: u16,
+        /// Ziel am Kanalaufbau (Standard: aus der Tabelle, sonst gleich der Adresse)
+        #[arg(long, value_parser = parse_hex)]
+        ziel: Option<u16>,
+        /// KWP2000-Adresse im Nachrichtenkopf (Standard: aus der Tabelle, ABS = 0x28)
+        #[arg(long, value_parser = parse_hex)]
+        kwp_ziel: Option<u16>,
+        /// zusätzlich diese Messwertgruppe lesen (nur KW1281)
+        #[arg(long)]
+        gruppe: Option<u8>,
+    },
     /// Steuergeräte-Speicher auslesen (UDS ReadMemoryByAddress, nur lesen) und als .bin sichern
     SpeicherLesen {
         /// Anfrage-ID, z. B. 0x7E0
@@ -1432,6 +1447,65 @@ fn main() -> Result<()> {
         Command::AnpassungVergleich { alt, neu } => anpassung_vergleich(alt.as_deref(), neu.as_deref(), cli.fahrzeug.as_deref()),
         Command::AnpassungZurueck { datei, geraet, kennung, alle, ja } => anpassung_zurueck(&be, datei.as_deref(), geraet, &kennung, alle, ja, cli.fahrzeug.as_deref()),
         Command::Ident { geraet, rx } => ident_cmd(&be, geraet, rx),
+        Command::Ktunnel { adresse, ziel, kwp_ziel, gruppe } => {
+            use ecu_werkbank::ktunnel::{self, KTunnel, KwpK};
+            use ecu_werkbank::kw1281::{self, Kw1281};
+            let Backend::SocketCan { iface } = &be else { anyhow::bail!(tr!("Der Tunnel braucht einen SocketCAN-Adapter.")) };
+            let a = u8::try_from(adresse).map_err(|_| anyhow::anyhow!(tr!("Adresse höchstens 0xFF")))?;
+            let z = match ziel { Some(z) => u8::try_from(z)?, None => ktunnel::ziel_fuer(a) };
+            let io = ecu_werkbank::tp20::SocketIo::open(iface, std::time::Duration::from_millis(500))?;
+            println!("{}", tr!("Steuergerät {a} hinter dem Gateway (Kanal {b}, nur lesen) …", a = format!("{a:02X}"), b = format!("{z:02X}")));
+            let mut t = KTunnel::oeffnen(io, z)?;
+            let kw = t.anmelden(a)?;
+            if kw == [0x01, 0x8A] {
+                // Sync + Schlüsselwort liegen noch im Puffer
+                let mut k = Kw1281::nach_fuenf_baud(t)?;
+                println!("{}", tr!("Protokoll: KW1281"));
+                for z in &k.ident {
+                    println!("  {z}");
+                }
+                let f = k.fehler_lesen()?;
+                if f.is_empty() {
+                    println!("{}", tr!("Keine Fehlercodes gespeichert."));
+                } else {
+                    println!("{}", tr!("{a} Fehlercode(s):", a = f.len()));
+                    for (code, st) in f {
+                        let c = format!("{code:05}");
+                        println!("  {c}  {}  ({})", db.dtc_description(&c).unwrap_or(""), kw1281::fehlerart(st));
+                    }
+                }
+                if let Some(g) = gruppe {
+                    let w = k.gruppe_lesen(g)?;
+                    let texte = ecu_werkbank::messwerttexte::Texte::laden();
+                    println!("{g:03}: {}", texte.zeile(a, g, &w));
+                }
+                k.beenden();
+            } else {
+                let kz = match kwp_ziel {
+                    Some(k) => u8::try_from(k)?,
+                    None => ktunnel::BEKANNT.iter().find(|b| b.0 == a && b.2 != 0).map(|b| b.2).ok_or_else(|| anyhow::anyhow!(tr!("KWP2000-Adresse unbekannt — mit --kwp-ziel angeben")))?,
+                };
+                let mut k = KwpK::verbinden(t, a, kw, kz)?;
+                println!("{}", tr!("Protokoll: KWP2000 (Schlüsselwort {a})", a = format!("{:02X} {:02X}", kw[0], kw[1])));
+                for (did, name) in [(0xF197u16, tr!("Systemname")), (0xF187, tr!("Teilenummer")), (0xF189, tr!("Softwarestand")), (0xF191, tr!("Hardware"))] {
+                    if let Some(t) = k.text(did) {
+                        println!("  {name:<14} {t}");
+                    }
+                }
+                let f = k.fehler_lesen()?;
+                if f.is_empty() {
+                    println!("{}", tr!("Keine Fehlercodes gespeichert."));
+                } else {
+                    println!("{}", tr!("{a} Fehlercode(s):", a = f.len()));
+                    for d in f {
+                        let c = format!("{:05}", d.code);
+                        println!("  {c}  {}  ({:#04x})", db.dtc_description(&c).unwrap_or(""), d.status);
+                    }
+                }
+                k.beenden();
+            }
+            Ok(())
+        }
         Command::Kline { adresse, gruppe } => {
             use ecu_werkbank::kw1281::{self, DemoLeitung, Kkl, Kw1281, Leitung};
             fn ablauf<L: Leitung>(l: L, adresse: u8, gruppe: Option<u8>, db: &ecu_werkbank::labels::LabelDb) -> Result<()> {

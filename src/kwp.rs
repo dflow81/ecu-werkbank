@@ -724,8 +724,34 @@ pub fn sweep_addrs(be: &crate::transport::Backend, addrs: &[u8], mut progress: i
                 _ => break,
             }
         }
-        let Ok(mut ch) = opened else {
-            continue;
+        let mut ch = match opened {
+            Ok(ch) => ch,
+            Err(e) if e.downcast_ref::<crate::tp20::KLeitungImTunnel>().is_some() => {
+                // K-Leitung hinter dem Gateway (Polo 6R: ABS, Lenkhilfe)
+                if let Backend::SocketCan { iface } = be {
+                    // Das Steuergerät wiederholt seine kurze Antwort etwa 1 s
+                    // lang; das Werkstattgerät wartet ~2 s bis zum Tunnel
+                    let mut g = Err(anyhow::anyhow!(""));
+                    for warte in [1500, 2500] {
+                        std::thread::sleep(std::time::Duration::from_millis(warte));
+                        g = crate::tp20::SocketIo::open(iface, std::time::Duration::from_millis(500)).and_then(|io| crate::ktunnel::lesen(io, address));
+                        match &g {
+                            Ok(_) => break,
+                            Err(e) if std::env::var("VAG_TUNNEL_SPUR").is_ok() => eprintln!("Tunnel {address:02X}: {e:#}"),
+                            Err(_) => {}
+                        }
+                    }
+                    if let Ok(g) = g {
+                        let name = g.name.map(str::to_string).unwrap_or_else(|| tp20_name(address, &g.ident));
+                        let mut ident = g.ident;
+                        ident.push(tr!("über das Gateway (K-Leitung, {a})", a = g.protokoll));
+                        found.push(Tp20Found { address, name, tx: 0x7A0, rx: g.rx, ident, ident_raw: Vec::new(), dtcs: Some(g.dtcs), umgebung: Vec::new(), codierung: None });
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                continue;
+            }
+            Err(_) => continue,
         };
         let (tx, rx) = (ch.tx_id(), ch.rx_id());
         let mut k = Kwp::new(&mut ch);

@@ -5,6 +5,11 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
+- **K-Leitungs-Steuergeräte hinter dem Gateway** (z. B. Polo 6R: ABS und Lenkhilfe): Das Gateway
+  tunnelt die K-Leitung über CAN. ECUWerkbank erkennt das am Kanalaufbau und liest Identifikation
+  und Fehlerspeicher (KW1281 oder KWP2000) — im Scan und mit `ktunnel --adresse 0x03`. Am Polo 6R
+  (2010) geprüft: alle 12 Steuergeräte wie beim Werkstattgerät.
+- Umgebungsbedingungen: Hinweis, wenn das Datum ungültig ist (Uhr im Kombi nicht gestellt).
 - **Umgebungsbedingungen bei TP 2.0 im Klartext**: Fehlerstatus, Priorität, Häufigkeit,
   Verlernzähler, km-Stand, Datum/Uhrzeit und weitere Messwerte (z. B. Temperatur) zu jedem
   Fehler — in GUI, Terminal, PDF und Historie. Gelesen wie ein Werkstattgerät (Freeze-Frame
