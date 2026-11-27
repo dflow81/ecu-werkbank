@@ -56,6 +56,10 @@ pub struct Ablauf {
     pub gruppe_gelernt: u8,
     pub start: Vec<Anfrage>,
     pub lesen: Anfrage,
+    /// Einschalten während das Abfragen schon läuft (VCDS-Knopf „ON“, z. B.
+    /// `31 B9 00 <Gr>` am Golf-6-Motor) — gesendet nach der ersten Werte-Abfrage
+    #[serde(default)]
+    pub ein: Vec<Anfrage>,
     #[serde(default)]
     pub stop: Vec<Anfrage>,
     /// Mitschnitt-Datei, aus der gelernt wurde
@@ -71,6 +75,9 @@ impl Ablauf {
             z.push(tr!("Start: {a}", a = a.hex()));
         }
         z.push(tr!("Werte lesen: {a}", a = self.lesen.hex()));
+        for a in &self.ein {
+            z.push(tr!("Einschalten: {a}", a = a.hex()));
+        }
         for a in &self.stop {
             z.push(tr!("Aus: {a}", a = a.hex()));
         }
@@ -144,6 +151,17 @@ pub fn lernen(msgs: &[Message], adresse: u8, gruppe: u8, quelle: &str) -> Result
     if lesen[0] == 0x21 && start.iter().all(|a| a.bytes[0] == 0x10) {
         bail!(tr!("Im Mitschnitt ist keine Grundeinstellung zu erkennen — nur normales Messwert-Lesen."));
     }
+    // Einschalten: was zwischen den Abfragen sonst noch gesendet und bestätigt wurde
+    let ein: Vec<Anfrage> = paare[erste..=letzte]
+        .iter()
+        .filter(|(a, r)| *a != lesen && a[0] != 0x21 && r.as_deref().is_some_and(|r| positiv(a[0], r)))
+        .map(|(a, _)| anfrage(a, gruppe))
+        .fold(Vec::new(), |mut v, a| {
+            if !v.contains(&a) {
+                v.push(a);
+            }
+            v
+        });
     let stop: Vec<Anfrage> = paare[letzte + 1..]
         .iter()
         .filter(|(a, r)| a[0] != 0x21 && r.as_deref().is_some_and(|r| positiv(a[0], r)))
@@ -160,6 +178,7 @@ pub fn lernen(msgs: &[Message], adresse: u8, gruppe: u8, quelle: &str) -> Result
         gruppe_gelernt: gruppe,
         start,
         lesen: anfrage(&lesen, gruppe),
+        ein,
         stop,
         quelle: quelle.to_string(),
         datum: crate::report::now_local(),
@@ -235,7 +254,11 @@ pub enum Meldung {
 pub fn werte_text(antwort: &[u8], gruppe: u8) -> Vec<String> {
     let rest = match antwort.first() {
         Some(&g) if g == gruppe => &antwort[1..],
-        _ => antwort,
+        // Routine-Antwort „BA 00 <Gr> <Status> <Felder>“ (Golf-6-Motor)
+        _ => match antwort.iter().take(4).position(|&b| b == gruppe) {
+            Some(i) if (antwort.len() - i - 1) % 3 == 1 => &antwort[i + 2..],
+            _ => antwort,
+        },
     };
     if !rest.is_empty() && rest.len() % 3 == 0 {
         let v = crate::kwp::parse_block(rest);
@@ -265,11 +288,25 @@ pub fn ausfuehren(
     melden(Meldung::Laeuft);
     let lesen = a.lesen.mit_gruppe(gruppe);
     let mut fehler = None;
+    let mut eingeschaltet = a.ein.is_empty();
     while !stop.load(Ordering::Relaxed) {
         match senden(&mut k, &lesen) {
             Ok(r) => melden(Meldung::Werte(werte_text(&r, gruppe))),
             Err(e) => {
                 fehler = Some(format!("{e:#}"));
+                break;
+            }
+        }
+        if !eingeschaltet {
+            eingeschaltet = true;
+            for s in &a.ein {
+                let b = s.mit_gruppe(gruppe);
+                if let Err(e) = senden(&mut k, &b) {
+                    fehler = Some(tr!("Einschalten {a}: {e}", a = hex(&b), e = format!("{e:#}")));
+                    break;
+                }
+            }
+            if fehler.is_some() {
                 break;
             }
         }
@@ -341,6 +378,21 @@ mod tests {
     }
 
     #[test]
+    fn einschalten_waehrend_der_abfrage() {
+        // „ON“ kommt erst, nachdem die Werte schon ein paar Mal abgefragt wurden
+        let mut v = mitschnitt();
+        v.insert(11, m(true, &[0xA4, 0x3C]));
+        v.insert(12, m(false, &[0xE4, 0x3C]));
+        let a = lernen(&v, 0x01, 0x3C, "x").unwrap();
+        assert_eq!(a.ein.len(), 1);
+        assert_eq!(a.ein[0].mit_gruppe(98), vec![0xA4, 98]);
+        assert_eq!(a.stop.len(), 1);
+        assert!(lernen(&mitschnitt(), 0x01, 0x3C, "x").unwrap().ein.is_empty());
+        // Routine-Antwort mit Status-Byte vor den Feldern
+        assert_eq!(werte_text(&[0xA2, 0x00, 0x3C, 0x07, 0x01, 0xC8, 0x14], 0x3C), vec!["800.00 1/min".to_string()]);
+    }
+
+    #[test]
     fn lehnt_unsichere_mitschnitte_ab() {
         // falsche Gruppe
         assert!(lernen(&mitschnitt(), 0x01, 0x05, "x").is_err());
@@ -374,6 +426,7 @@ mod tests {
             gruppe_gelernt: 1,
             start: vec![Anfrage { bytes: vec![0x10, 0x89], gruppe_an: None }],
             lesen: Anfrage { bytes: vec![0x21, 0x01], gruppe_an: Some(1) },
+            ein: vec![],
             stop: vec![],
             quelle: "hand".into(),
             datum: String::new(),

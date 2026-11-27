@@ -33,7 +33,7 @@ Status: ✅ erledigt · 🟡 teilweise · ⏳ offen
 | 14 | TP 2.0: Umgebungsbedingungen direkt | VCDS | mittel | mittel | niedrig | mittel | 1.0 | ✅ Freeze-Frame `12 00 04 <Code>` (am Golf 6 mit Werkstattgerät-Mitschnitt geprüft): Status, Priorität, Häufigkeit, Verlernzähler, km, Datum/Zeit, weitere Messwerte; Rückfall 0x17 |
 | 15 | UDS: Anpassungskanäle mit Namen + Schreiben ohne Login, wo erlaubt | VCDS, ODIS | hoch | mittel | mittel | hoch | 1.0 | 🟡 lesen/sichern |
 | 16 | UDS: Gateway-Verbauliste (neuere Gateways) | VCDS, ODIS | hoch | mittel | niedrig | hoch | 1.0 | ⏳ Mitschnitt nötig |
-| 17 | Geführte Funktionen (Bremsbelag-Wechselstellung, Lenkwinkel-Grundeinstellung, Drosselklappe) | VCDS, Autel | hoch | mittel | hoch | hoch | 1.0 | 🟡 Drosselklappe/KWP |
+| 17 | Geführte Funktionen (Bremsbelag-Wechselstellung, Lenkwinkel-Grundeinstellung, Drosselklappe) | VCDS, Autel | hoch | mittel | hoch | hoch | 1.0 | 🟡 Drosselklappe (TP 2.0) ✅ am Golf 6 selbst angelernt (27.11.2026, Ablauf aus eigenem Mitschnitt); Bremsbelag/Lenkwinkel offen |
 | 18 | Service-Rückstellung für weitere Modelle | Autel, VCDS | hoch | mittel | mittel | hoch | 1.0 | 🟡 Golf 6 lesen; Rückstellwerte je Kombi-Teilenummer in der Fahrzeug-Datenbank (einmal am Auto lernen, dann für alle mit gleichem Kombi) |
 | 19 | Batterie anlernen (BEM/Batteriewechsel) | Autel, ISTA+ | hoch | mittel | mittel | hoch | 1.0 | ⏳ |
 | 20 | Herstellerdaten als Daten-Ordner (`manufacturers/<marke>/`) | alle | hoch | mittel | niedrig | hoch | 1.0 | ✅ abgelöst durch die Fahrzeug-Datenbank: Herstellerwissen als Datenpaket (TOML/JSON/CSV) je Quelle, Community-Daten in `daten/community/<hersteller>/`, ohne Neubau erweiterbar |

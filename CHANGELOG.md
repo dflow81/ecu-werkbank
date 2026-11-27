@@ -5,6 +5,10 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
+- **Grundeinstellung (TP 2.0) am Golf 6 bestätigt:** Drosselklappe (Motor, Gruppe 60) mit
+  ECUWerkbank selbst angelernt. Das Lernen aus dem Mitschnitt erkennt jetzt auch das
+  Einschalten, das erst während des Abfragens kommt (VCDS-Knopf „ON“). Neuer Befehl
+  `kwp-grundeinstellung` (lernen mit `--lernen <Mitschnitt>`, ausführen mit `--ja`).
 - **TP 2.0: Anpassung speichern und Gateway-Codierung schreiben freigeschaltet** — am Golf 6
   selbst geschrieben (gleicher Wert), Ablauf wie beim Werkstattgerät: Kanal wählen, Wert testen,
   speichern, Ergebnis prüfen.

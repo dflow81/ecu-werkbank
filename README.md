@@ -384,7 +384,16 @@ Danach lässt sich jede Gruppe dieses Steuergeräts starten (mit Rückfrage), di
 Werte laufen live mit, „⏹ Aus“ beendet sie. Übernommen wird nur, was das
 Steuergerät im Mitschnitt bestätigt hat; beim Starten wird nur die Gruppennummer
 ausgetauscht. Der Ablauf liegt im Fahrzeugordner (`grundeinstellung.toml`) — ein
-am Golf gelernter Ablauf gilt nie für ein anderes Auto.
+am Golf gelernter Ablauf gilt nie für ein anderes Auto. Am Golf 6 geprüft: Drosselklappe
+anlernen (Motor, Gruppe 60) — das Einschalten, das erst während des Abfragens kommt
+(„ON“), wird mitgelernt.
+
+Im Terminal:
+
+```bash
+ecu-werkbank -f <Fahrzeug> kwp-grundeinstellung --address 01 --gruppe 60 --lernen mitschnitt.log  # lernen
+ecu-werkbank -f <Fahrzeug> kwp-grundeinstellung --address 01 --gruppe 60 --ja --sekunden 20        # ausführen
+```
 
 Im Reiter **Werkzeuge → „Experten: Routine & Stellglied (UDS)“** (UDS-Steuergeräte, Routine 0x31 und
 Stellglied 0x2F) kommt vor jedem Senden eine Rückfrage; im Terminal zeigen

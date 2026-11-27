@@ -718,6 +718,23 @@ enum Command {
         #[arg(long)]
         ja: bool,
     },
+    /// Grundeinstellung (Funktion 04) eines TP-2.0-Steuergeräts: Ablauf aus eigenem Mitschnitt lernen (--lernen), zeigen, mit --ja ausführen
+    KwpGrundeinstellung {
+        /// TP-2.0-Adresse (hex), z. B. 01 = Motor
+        #[arg(long, value_parser = parse_tp20)]
+        address: u16,
+        /// Gruppe dezimal wie im Werkstattgerät, z. B. 60
+        #[arg(long)]
+        gruppe: u8,
+        /// Ablauf aus diesem Mitschnitt lernen (Werkstattgerät hat die Grundeinstellung gemacht)
+        #[arg(long)]
+        lernen: Option<PathBuf>,
+        /// Wie lange laufen lassen (Sekunden), danach Aus
+        #[arg(long, default_value_t = 30)]
+        sekunden: u64,
+        #[arg(long)]
+        ja: bool,
+    },
     /// Anpassungskanäle (Funktion 10) eines TP-2.0-Steuergeräts lesen (nur lesen)
     KwpAnpassung {
         /// TP-2.0-Adresse (hex), z. B. 20 = Bordnetz beim Golf 6
@@ -1613,6 +1630,9 @@ fn main() -> Result<()> {
         Command::KwpCodierungSchreiben { address, wert, ja } => kwp_codierung_schreiben(&be, address as u8, wert, ja),
         Command::KwpAnpassung { address, kanal } => kwp_anpassung(&be, address as u8, &kanal),
         Command::KwpLangcodierung { address, neu, ja } => kwp_langcodierung(&be, address as u8, neu.as_deref(), ja, &db),
+        Command::KwpGrundeinstellung { address, gruppe, lernen, sekunden, ja } => {
+            kwp_grundeinstellung(&be, address as u8, gruppe, lernen.as_deref(), ja, sekunden, cli.fahrzeug.as_deref())
+        }
         Command::KwpAnpassungSchreiben { address, kanal, wert, ja } => kwp_anpassung_schreiben(&be, address as u8, kanal, wert, ja),
         Command::Verbauliste { no_tp20, gespeichert, out } => {
             verbauliste(&be, &db, !no_tp20, gespeichert, out.as_deref(), cli.fahrzeug.as_deref())

@@ -650,3 +650,52 @@ pub(super) fn block_columns(block: u8, values: &[kwp::BlockValue]) -> Vec<(Strin
         })
         .collect()
 }
+
+/// Grundeinstellung (Funktion 04) an einem TP-2.0-Steuergerät: Ablauf aus einem
+/// eigenen Mitschnitt lernen (`--lernen`), anzeigen, oder mit `--ja` ausführen.
+pub(super) fn kwp_grundeinstellung(be: &Backend, address: u8, gruppe: u8, lernen: Option<&std::path::Path>, ja: bool, sekunden: u64, fahrzeug: Option<&str>) -> Result<()> {
+    use ecu_werkbank::kwp_grund as ge;
+    let v = fahrzeug_fuer(be, fahrzeug)?;
+    if let Some(p) = lernen {
+        let text = ecu_werkbank::ablage::lesen(p).with_context(|| tr!("{a} lesen", a = p.display()))?;
+        let d = ecu_werkbank::canlog::Decoder::decode_text(&text);
+        let name = p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let a = ge::lernen(&d.messages, address, gruppe, &name)?;
+        println!("{}", tr!("Gelernt für {a}, Steuergerät {b}:", a = v.label(), b = format!("{address:02X}")));
+        for z in a.beschreibung() {
+            println!("  {z}");
+        }
+        ge::merken(&v.key, &a)?;
+        println!("{}", tr!("Gespeichert — Senden für dieses Steuergerät freigeschaltet."));
+        return Ok(());
+    }
+    let Some(a) = ge::ablauf(&v.key, address) else {
+        anyhow::bail!(tr!("Für {a}, Steuergerät {b} ist noch kein Ablauf gelernt — erst mit --lernen <Mitschnitt> aus einem eigenen Mitschnitt lernen.", a = v.label(), b = format!("{address:02X}")));
+    };
+    println!("{}", tr!("Ablauf ({a}, gelernt aus {q} am {d}):", a = v.label(), q = a.quelle, d = a.datum));
+    for z in a.beschreibung() {
+        println!("  {z}");
+    }
+    if !ja {
+        println!("{}", tr!("Nichts gesendet. Mit --ja Gruppe {g} ausführen (Auto steht, Zündung an; Bedingungen der Gruppe vorher nachlesen).", g = gruppe));
+        return Ok(());
+    }
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let s2 = stop.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(sekunden));
+        s2.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+    let mut letzte = Vec::new();
+    ge::ausfuehren(be, &a, gruppe, &stop, |m| match m {
+        ge::Meldung::Laeuft => println!("{}", tr!("Grundeinstellung Gruppe {g} läuft ({s} s) …", g = gruppe, s = sekunden)),
+        ge::Meldung::Werte(w) => {
+            if w != letzte {
+                println!("  {}", w.join(" | "));
+                letzte = w;
+            }
+        }
+        ge::Meldung::Fertig(t) => println!("{t}"),
+        ge::Meldung::Fehler(t) => println!("{}", tr!("Fehler: {e}", e = t)),
+    })
+}
