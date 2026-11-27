@@ -78,14 +78,14 @@ setzt die echte Service-Anzeige zurück — darum nur nach einem echten Service.
 
 | # | Was | Wie | Status |
 |---|---|---|---|
-| D1 | Mitschnitt abspielen (Roadmap 24) | `sudo modprobe vcan && sudo ip link add vcan0 type vcan && sudo ip link set vcan0 up`, dann `replay --log … --iface vcan0` und gleichzeitig CAN-Monitor auf `vcan0` | ⏳ |
+| D1 | Mitschnitt abspielen (Roadmap 24) | `sudo modprobe vcan && sudo ip link add vcan0 type vcan && sudo ip link set vcan0 up`, dann `replay --log … --iface vcan0` und gleichzeitig CAN-Monitor auf `vcan0` | ✅ 27.11.2026: Polo-Mitschnitt (1700 Frames, Tempo 10) auf vcan0 — mitgelesen 1700 Frames, identisch; `lo` wird abgelehnt |
 | D3 | ODX/PDX-Import mit einer echten, rechtmäßig erworbenen Datei (Roadmap 57/58) | `db odx --datei … --hersteller …`, dann `db quellen`, `fehlertext --code …` | ⏳ |
-| D4 | CAN FD über vcan (Roadmap 32) | `sudo ip link add vcan1 type vcan && sudo ip link set vcan1 mtu 72 up`, dann `VAG_CANFD=1 ecu-werkbank -i vcan1 …` gegen `mockecu` | ⏳ |
+| D4 | CAN FD über vcan (Roadmap 32) | `sudo ip link add vcan1 type vcan && sudo ip link set vcan1 mtu 72 up`, dann `VAG_CANFD=1 ecu-werkbank -i vcan1 …` gegen `mockecu` | ✅ 27.11.2026 auf vcan0 (MTU 72): `VAG_CANFD=1` Ident gegen `mockecu` mit FD — VIN (20 B) als ein FD-Einzel-Frame mit Längen-Escape (24 B), alle Werte richtig |
 | D5 | DoIP (Roadmap 31) | nur mit einem DoIP-Fahrzeug (z. B. Golf 8) und OBD-Ethernet-Kabel: `ecu-werkbank -t doip --port 169.254.x.x ident --geraet 0x4010` | ⏳ |
 | D6 | K-Leitung (Roadmap 33) | nur mit KKL-Kabel und Auto bis ~2004: `ecu-werkbank kline --port /dev/ttyUSB0 --adresse 0x01 --gruppe 1` | ⏳ |
 | D7 | J2534 unter Windows (Roadmap 34) | Windows-Rechner mit J2534-Adapter (64-Bit-Treiber): `ecu-werkbank.exe -t j2534 --port <Name> obd-info` | ⏳ |
-| D2 | Integrationstests über vcan (Roadmap 28) | wie D1, dann `mockecu` auf vcan0 | ⏳ |
-| D8 | BMW-Adressierung über vcan (Roadmap 35) | wie D1, dann `VAG_MOCK_BMW=1 mockecu vcan0` und `ecu-werkbank -i vcan0 fremd` → erwartet: Steuergerät `0x6f1:12/0x612:f1` gefunden, Kennung und Fehler wie Motor 0x7E0 | ⏳ |
+| D2 | Integrationstests über vcan (Roadmap 28) | wie D1, dann `mockecu` auf vcan0 | ✅ 27.11.2026: `obd-info`, `ident --geraet 0x7e0`, `kwp-ident`/`kwp-dtc`/`kwp-block` (TP 2.0), `report` (6 Steuergeräte, 5 Fehler) über echte CAN-Frames gegen `mockecu` |
+| D8 | BMW-Adressierung über vcan (Roadmap 35) | wie D1, dann `VAG_MOCK_BMW=1 mockecu vcan0` und `ecu-werkbank -i vcan0 fremd` → erwartet: Steuergerät `0x6f1:12/0x612:f1` gefunden, Kennung und Fehler wie Motor 0x7E0 | ✅ 27.11.2026: `fremd` fand `0x6f1:12/0x612:f1` neben 0x7E0–0x7E2, Kennung (mehrteilige Antworten) und 2 Fehler wie Motor 0x7E0 (Suche 45 s) |
 
 Nach dem Termin: Ergebnisse hier eintragen, Konstanten in `src/kwp.rs` nur
 nach bestätigtem Mitschnitt umstellen, ROADMAP/CHANGELOG nachziehen.
