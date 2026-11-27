@@ -598,18 +598,18 @@ pub fn kurzcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu:
 /// das Steuergerät die Codierung mit 0x22 liefert. **Bestätigt am Golf 6
 /// (Bordnetz 0x20, 26.11.2026)**: Das Werkstattgerät schickt in Sitzung 0x89
 /// genau `2E 06 00 <Codierung>`, das Steuergerät antwortet `6E 06 00`. Vorher
-/// schreibt es seinen eigenen Werkstattcode (`2E F1 98 …`) — das machen wir
-/// nicht; lehnt ein Steuergerät deshalb ab, gibt es eine klare Meldung.
+/// schreibt es den Werkstattcode (`2E F1 98 …`) — ohne ihn (oder mit lauter
+/// Nullen) lehnt das Bordnetz mit NRC 0x22 ab; mit eigenem Code selbst
+/// geschrieben am 27.11.2026 (siehe [`werkstattcode`]).
 pub const LANGCODIERUNG_GEPRUEFT: bool = true;
 /// Lange Codierung des Gateways (0x3B 0x9A) — siehe [`LANGCODIERUNG_GEPRUEFT`].
-/// Annahme: gleicher Aufbau wie die am Golf 6 mitgeschnittene Kurzcodierung
-/// (0x3B 0x9A [Betriebsnummer][Softwarestand][Codierblock]).
-pub const GATEWAY_CODIERUNG_GEPRUEFT: bool = false;
+/// 0x3B 0x9A [Werkstattcode][Softwarestand][Codierblock] — am Golf 6 mitgeschnitten
+/// (B2) und am 27.11.2026 selbst geschrieben (byte-gleich mit dem Werkstattgerät).
+pub const GATEWAY_CODIERUNG_GEPRUEFT: bool = true;
 /// Anpassung schreiben (Routine 0x0103) — siehe [`anpass_schreib_anfrage`].
-/// Ablauf am Golf 6 mitgeschnitten (B3); bleibt gesperrt, bis ECUWerkbank selbst
-/// einmal am Auto denselben Wert gespeichert hat (offen: nimmt das Steuergerät
-/// den Werkstattcode 00 00 00 00 00 00 an?).
-pub const ANPASSUNG_SCHREIBEN_GEPRUEFT: bool = false;
+/// Ablauf am Golf 6 mitgeschnitten (B3) und am 27.11.2026 selbst gespeichert
+/// (Bordnetz Kanal 23). Lauter Nullen als Werkstattcode lehnt es ab (NRC 0x22).
+pub const ANPASSUNG_SCHREIBEN_GEPRUEFT: bool = true;
 
 /// Wo die lange Codierung eines TP-2.0-Steuergeräts steht.
 #[derive(Debug, Clone, PartialEq)]
@@ -635,7 +635,9 @@ pub fn darf_senden(be: &crate::transport::Backend, geprueft: bool) -> bool {
 }
 
 /// Anfrage (mit SID) für eine neue lange Codierung. Die Länge muss gleich bleiben.
-pub fn langcodierung_anfrage(art: &LangArt, alt: &[u8], neu: &[u8]) -> Result<Vec<u8>> {
+/// `wsc`: Werkstattcode — beim Gateway ersetzt er wie beim Werkstattgerät die
+/// Betriebsnummer vorne (Mitschnitt B2, 27.11.2026); None/Nullen = alte bleibt.
+pub fn langcodierung_anfrage(art: &LangArt, alt: &[u8], neu: &[u8], wsc: Option<[u8; 6]>) -> Result<Vec<u8>> {
     if neu.len() != alt.len() {
         bail!(tr!("Codierung muss {a} Byte lang sein (eingegeben: {b}).", a = alt.len(), b = neu.len()));
     }
@@ -646,6 +648,9 @@ pub fn langcodierung_anfrage(art: &LangArt, alt: &[u8], neu: &[u8]) -> Result<Ve
             // Softwarestand, Längenbyte und Abschluss bleiben)
             let mut d = raw.clone();
             d.get_mut(12..12 + neu.len()).ok_or_else(|| anyhow::anyhow!(tr!("Gateway-Codierung unvollständig gelesen")))?.copy_from_slice(neu);
+            if let Some(w) = wsc.filter(|w| *w != [0; 6]) {
+                d[..6].copy_from_slice(&w);
+            }
             [&[0x3B, ECU_ID_9A][..], &d].concat()
         }
     })
@@ -666,18 +671,28 @@ pub fn langcodierung_lesen(k: &mut Kwp) -> Option<(LangArt, Vec<u8>)> {
 /// Mitschnitt bestätigt ist ([`LANGCODIERUNG_GEPRUEFT`]).
 pub fn langcodierung_schreiben(be: &crate::transport::Backend, adresse: u8, neu: &[u8]) -> Result<Schreiben> {
     if darf_senden(be, LANGCODIERUNG_GEPRUEFT || GATEWAY_CODIERUNG_GEPRUEFT) {
+        werkstattcode_fuer(be)?; // ohne Werkstattcode gar nicht erst anfangen
         crate::spannung::vor_dem_schreiben(be)?;
     }
     let mut ch = open_session(be, adresse)?;
     let mut k = Kwp::new(&mut ch);
     let (art, alt) = langcodierung_lesen(&mut k).ok_or_else(|| anyhow::anyhow!(tr!("Steuergerät {a} hat keine lange Codierung.", a = format!("{adresse:02X}"))))?;
-    let anfrage = langcodierung_anfrage(&art, &alt, neu)?;
     let geprueft = match art {
         LangArt::Kennung0600 => LANGCODIERUNG_GEPRUEFT,
         LangArt::Gateway9A(_) => GATEWAY_CODIERUNG_GEPRUEFT,
     };
-    if !darf_senden(be, geprueft) {
+    let senden = darf_senden(be, geprueft);
+    let wsc = if senden { werkstattcode_fuer(be)? } else { werkstattcode().unwrap_or([0; 6]) };
+    let anfrage = langcodierung_anfrage(&art, &alt, neu, Some(wsc))?;
+    if !senden {
         return Ok(Schreiben::Probelauf { anfrage, alt });
+    }
+    if art == LangArt::Kennung0600 {
+        // Wie das Werkstattgerät (Golf 6 Bordnetz, Mitschnitt 26.11.2026): erst den
+        // Werkstattcode in F198 eintragen — ohne diesen Schritt antwortet das
+        // Bordnetz auf 2E 06 00 mit NRC 0x22 (am Auto gesehen 27.11.2026).
+        // Lehnt ein Steuergerät F198 ab, trotzdem weiter (manche brauchen es nicht).
+        let _ = k.request(0x2E, &[&[0xF1, 0x98][..], &wsc].concat());
     }
     if let Err(e) = k.request(anfrage[0], &anfrage[1..]) {
         let t = format!("{e:#}");
@@ -1064,14 +1079,43 @@ pub fn anpassung_lesen(be: &crate::transport::Backend, adresse: u8, kanaele: &[u
     Ok(out)
 }
 
-/// Werkstattcode, den das Steuergerät beim Speichern einer Anpassung mit
-/// ablegt (6 Byte, wer zuletzt geändert hat). Standard: Nullen; eigener Code
-/// über `VAG_WERKSTATTCODE` (12 Hex-Ziffern, Leerzeichen erlaubt).
-pub fn werkstattcode() -> [u8; 6] {
-    std::env::var("VAG_WERKSTATTCODE").ok().and_then(|t| werkstattcode_aus(&t)).unwrap_or([0; 6])
+/// Werkstattcode (6 Byte: wer zuletzt geändert hat). Das Golf-6-Bordnetz
+/// verlangt ihn beim Schreiben von Codierung (vorher `2E F1 98`) und Anpassung
+/// (`31 BB …`) und lehnt lauter Nullen mit NRC 0x22 ab (am Auto 27.11.2026).
+/// Quelle: `VAG_WERKSTATTCODE`, sonst der Eintrag im Firmenkopf. Schreibweise
+/// „Betriebsnummer/Importeur/Gerätenummer“ (z. B. `12345/123/12345`) oder
+/// 12 Hex-Ziffern.
+pub fn werkstattcode() -> Result<[u8; 6]> {
+    let text = std::env::var("VAG_WERKSTATTCODE").ok().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| crate::firmenkopf::laden().werkstattcode);
+    if text.trim().is_empty() {
+        bail!(tr!("Kein Werkstattcode eingetragen — viele Steuergeräte nehmen ohne ihn nichts an. Bitte unter Fahrzeuge → Firmenkopf eintragen (Betriebsnummer/Importeur/Gerätenummer, z. B. 12345/123/12345)."));
+    }
+    werkstattcode_aus(&text).ok_or_else(|| anyhow::anyhow!(tr!("Werkstattcode „{a}“ ungültig — Schreibweise Betriebsnummer/Importeur/Gerätenummer, z. B. 12345/123/12345.", a = text.trim())))
 }
 
-fn werkstattcode_aus(t: &str) -> Option<[u8; 6]> {
+/// Wie [`werkstattcode`]; in der Simulation reichen Nullen, wenn keiner eingetragen ist.
+pub fn werkstattcode_fuer(be: &crate::transport::Backend) -> Result<[u8; 6]> {
+    match be {
+        crate::transport::Backend::Demo => Ok(werkstattcode().unwrap_or([0; 6])),
+        _ => werkstattcode(),
+    }
+}
+
+/// Werkstattcode aus „Betriebsnummer/Importeur/Gerätenummer“ oder 12 Hex-Ziffern.
+/// Gepackt in 48 Bit: Betriebsnummer (21 Bit) | Importeur (10 Bit) |
+/// Gerätenummer (17 Bit) — nachgerechnet an einem Mitschnitt.
+pub fn werkstattcode_aus(t: &str) -> Option<[u8; 6]> {
+    if t.contains('/') {
+        let teile: Vec<u64> = t.split('/').map(|x| x.trim().parse().ok()).collect::<Option<_>>()?;
+        let [wsc, imp, ger] = teile[..] else { return None };
+        if wsc > 99_999 || imp > 999 || ger > 99_999 {
+            return None;
+        }
+        let v = (wsc << 27) | (imp << 17) | ger;
+        let mut out = [0u8; 6];
+        out.copy_from_slice(&v.to_be_bytes()[2..]);
+        return Some(out);
+    }
     let h: String = t.chars().filter(|c| !c.is_whitespace()).collect();
     if h.len() != 12 {
         return None;
@@ -1109,13 +1153,17 @@ fn anpass_warten(k: &mut Kwp) -> Result<Vec<u8>> {
 /// Kontrolle neu lesen. Am echten Auto nur ein Probelauf (liest den alten
 /// Wert, zeigt die Anfrage), solange [`ANPASSUNG_SCHREIBEN_GEPRUEFT`] `false` ist.
 pub fn anpassung_schreiben(be: &crate::transport::Backend, adresse: u8, kanal: u8, wert: u16) -> Result<Schreiben> {
+    if darf_senden(be, ANPASSUNG_SCHREIBEN_GEPRUEFT) {
+        werkstattcode_fuer(be)?; // ohne Werkstattcode gar nicht erst anfangen
+    }
     let alt = match anpassung_lesen(be, adresse, &[kanal])?.pop() {
         Some(Ok(a)) => a.wert,
         Some(Err(e)) => bail!(e),
         None => bail!(tr!("Kanal {a}: keine Antwort", a = kanal)),
     };
-    let anfrage = anpass_schreib_anfrage(wert, werkstattcode());
-    if !darf_senden(be, ANPASSUNG_SCHREIBEN_GEPRUEFT) {
+    let senden = darf_senden(be, ANPASSUNG_SCHREIBEN_GEPRUEFT);
+    let anfrage = anpass_schreib_anfrage(wert, if senden { werkstattcode_fuer(be)? } else { werkstattcode().unwrap_or([0; 6]) });
+    if !senden {
         return Ok(Schreiben::Probelauf { anfrage, alt: alt.to_be_bytes().to_vec() });
     }
     crate::spannung::vor_dem_schreiben(be)?;
@@ -1148,7 +1196,7 @@ pub fn anpassung_schreiben(be: &crate::transport::Backend, adresse: u8, kanal: u
         r.map_err(|e| {
             let t = format!("{e:#}");
             if ["NRC 0x22", "NRC 0x33", "NRC 0x31"].iter().any(|n| t.contains(n)) && t.contains("0xBB") {
-                anyhow::anyhow!(tr!("Steuergerät lehnt das Speichern ab ({a}). Eventuell verlangt es einen Werkstattcode (VAG_WERKSTATTCODE) oder einen Login.", a = t))
+                anyhow::anyhow!(tr!("Steuergerät lehnt das Speichern ab ({a}). Werkstattcode prüfen (Fahrzeuge → Firmenkopf); manche Steuergeräte verlangen zusätzlich einen Login.", a = t))
             } else {
                 e
             }
@@ -1376,6 +1424,10 @@ mod tests {
         assert_eq!(anpass_schreib_anfrage(10, [0; 6]), [0x31, 0xBB, 0x01, 0x03, 0x00, 0x0A, 0, 0, 0, 0, 0, 0]);
         assert_eq!(werkstattcode_aus("01 23 45 67 89 AB"), Some([0x01, 0x23, 0x45, 0x67, 0x89, 0xAB]));
         assert_eq!(werkstattcode_aus("0123"), None);
+        assert_eq!(werkstattcode_aus("12345/123/12345"), Some([0x01, 0x81, 0xC8, 0xF6, 0x30, 0x39]));
+        assert_eq!(werkstattcode_aus("99999/999/99999"), Some([0x0C, 0x34, 0xFF, 0xCF, 0x86, 0x9F]));
+        assert_eq!(werkstattcode_aus("1/2"), None);
+        assert_eq!(werkstattcode_aus("100000/1/1"), None);
         assert_eq!(werkstattcode_aus("0123456789XY"), None);
     }
 

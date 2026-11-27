@@ -523,7 +523,7 @@ pub(super) fn kwp_langcodierung(be: &Backend, address: u8, neu: Option<&str>, ja
     println!("  {}", ecu_werkbank::backup::hex(&alt));
     let Some(neu) = neu else { return Ok(()) };
     let neu: Vec<u8> = parse_hex_bytes(neu)?;
-    let anfrage = kwp::langcodierung_anfrage(&art, &alt, &neu)?;
+    let anfrage = kwp::langcodierung_anfrage(&art, &alt, &neu, kwp::werkstattcode().ok())?;
     for (i, (a, b)) in alt.iter().zip(&neu).enumerate() {
         for bit in 0..8 {
             if (a ^ b) >> bit & 1 == 1 {

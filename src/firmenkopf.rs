@@ -19,6 +19,10 @@ pub struct Firmenkopf {
     /// Firmenlogo (PNG oder JPG) als Base64
     #[serde(skip_serializing_if = "String::is_empty")]
     pub logo: String,
+    /// Werkstattcode zum Schreiben (Betriebsnummer/Importeur/Gerätenummer),
+    /// siehe `kwp::werkstattcode` — erscheint nicht im Bericht
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub werkstattcode: String,
 }
 
 /// Größtes erlaubtes Logo (Datei), damit Berichte klein bleiben.
@@ -77,7 +81,7 @@ pub fn laden() -> Firmenkopf {
 /// Speichern; ein leerer Firmenkopf löscht die Datei.
 pub fn speichern(f: &Firmenkopf) -> Result<()> {
     let p = pfad();
-    if f.ist_leer() {
+    if f.ist_leer() && f.werkstattcode.trim().is_empty() {
         if crate::ablage::existiert(&p) {
             crate::ablage::entfernen(&p)?;
         }

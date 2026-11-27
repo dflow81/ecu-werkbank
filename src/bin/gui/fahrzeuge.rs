@@ -326,6 +326,19 @@ impl App {
                     }
                 });
                 ui.end_row();
+                ui.label(tr!("Werkstattcode"));
+                ui.horizontal_wrapped(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut f.werkstattcode).hint_text("12345/123/12345").desired_width(140.0));
+                    let w = f.werkstattcode.trim();
+                    if w.is_empty() {
+                        ui.weak(tr!("nötig zum Codieren und Anpassen (Betriebsnummer/Importeur/Gerätenummer)"));
+                    } else if ecu_werkbank::kwp::werkstattcode_aus(w).is_some() {
+                        ui.weak(tr!("✓ wird beim Schreiben mitgeschickt (nicht im Bericht)"));
+                    } else {
+                        ui.colored_label(stufe_color(Stufe::Warnung), tr!("ungültig — Schreibweise 12345/123/12345"));
+                    }
+                });
+                ui.end_row();
             });
             let z = f.zeilen();
             if !z.is_empty() {
@@ -338,11 +351,15 @@ impl App {
         }
         if speichern {
             let f = self.firmenkopf.clone().unwrap_or_default();
-            self.status = match ecu_werkbank::firmenkopf::speichern(&f) {
+            let w = f.werkstattcode.trim();
+            self.status = if !w.is_empty() && ecu_werkbank::kwp::werkstattcode_aus(w).is_none() {
+                tr!("Werkstattcode „{a}“ ungültig — Schreibweise Betriebsnummer/Importeur/Gerätenummer, z. B. 12345/123/12345.", a = w)
+            } else { match ecu_werkbank::firmenkopf::speichern(&f) {
+                Ok(()) if f.ist_leer() && !w.is_empty() => tr!("Werkstattcode gespeichert."),
                 Ok(()) if f.ist_leer() => tr!("Firmenkopf entfernt."),
                 Ok(()) => tr!("Firmenkopf gespeichert — erscheint oben in allen neuen Berichten."),
                 Err(e) => tr!("Firmenkopf: {e}", e = format!("{e:#}")),
-            };
+            } };
         }
     }
 

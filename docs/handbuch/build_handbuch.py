@@ -459,6 +459,10 @@ p("Für Werkstätten: unter Fahrzeug → Fahrzeuge &amp; Wartung → <b>Firmenko
   "Telefon, E-Mail und eine Zusatzzeile eintragen, mit <b>🖼 Logo wählen…</b> ein Firmenlogo (PNG oder JPG) "
   "hinzufügen und speichern. Der Firmenkopf steht dann oben auf jeder Seite aller PDF-Berichte — auf Seite 1 "
   "rechts im Titelbalken mit dem Logo.")
+p("Im selben Abschnitt steht der <b>Werkstattcode</b> (Betriebsnummer/Importeur/Gerätenummer, z. B. 12345/123/12345). "
+  "Ihn schickt ECUWerkbank beim Codieren und Anpassen mit, so wie ein Werkstattgerät. Viele Steuergeräte "
+  "(z. B. das Bordnetz im Golf 6) lehnen ohne ihn ab — ohne eingetragenen Werkstattcode schreibt ECUWerkbank "
+  "deshalb nicht. In Berichten erscheint er nicht.")
 bild("bericht", "Fehlerspeicher-Protokoll (PDF) mit Firmenkopf und Logo (Beispieldaten).", 150)
 h2("Alle PDF-Berichte im Überblick")
 p("ECUWerkbank schreibt diese Berichte als PDF in den Ordner <i>berichte</i> des Fahrzeugs. Alle haben "

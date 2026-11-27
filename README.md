@@ -888,10 +888,13 @@ TP-2.0-Steuergeräte:
   Roh-Identifikation.
 - **Lange Codierung schreiben** (`kwp-langcodierung --neu … --ja`, GUI Seite „Codierung“):
   Bordnetz/ABS über Kennung 0x0600, Gateway über die Identifikation 0x9A, danach
-  wird zur Kontrolle neu gelesen. **Noch nicht am Auto bestätigt:** am echten Auto
-  läuft deshalb erst ein Probelauf — er zeigt die Anfrage, sendet aber nichts. Das
-  wird freigeschaltet, sobald ein Mitschnitt die Anfrage bestätigt. Gleiches gilt für
-  `kwp-anpassung-schreiben` (Anpassungskanal ändern).
+  wird zur Kontrolle neu gelesen. Ebenso `kwp-anpassung-schreiben` (Anpassungskanal
+  ändern). Alle drei am Golf 6 selbst geschrieben und bestätigt.
+- **Werkstattcode:** Zum Schreiben schickt ECUWerkbank wie ein Werkstattgerät einen
+  Werkstattcode mit (Betriebsnummer/Importeur/Gerätenummer). Das Golf-6-Bordnetz lehnt
+  ohne ihn (oder mit lauter Nullen) ab. Eintragen in der GUI unter Fahrzeuge → Firmenkopf
+  oder mit `ecu-werkbank firmenkopf --werkstattcode 12345/123/12345` (alternativ
+  Umgebungsvariable `VAG_WERKSTATTCODE`). Ohne Werkstattcode schreibt ECUWerkbank nicht.
 - TP-2.0-Adressen gibt man immer hexadezimal an, mit oder ohne `0x` (`20` = `0x20` = Bordnetz).
 
 ```bash
@@ -1356,12 +1359,12 @@ und Stand in ECUWerkbank:
 | 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |
-| 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben `kwp-langcodierung --neu` (✅ Kennung 0x0600, am Golf 6 per Mitschnitt bestätigt; Gateway noch Probelauf) |
+| 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben `kwp-langcodierung --neu` (✅ Kennung 0x0600 und Gateway, am Golf 6 selbst geschrieben; braucht Werkstattcode) |
 | – | Codierungs-Sicherung / Vergleich / Zurückschreiben | ✅ `coding-*` | 🟡 nur sichern |
 | – | Fahrzeug-Historie, Vorher/Nachher | ✅ `history`, `compare` | ✅ |
 | 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste; Formeln am Golf 6 mit Werkstattgerät verglichen |
 | 09 | Einzelmesswerte | ✅ einzelne Kennung | ✅ 🔍 am Messwertfeld (liest den Block wie das Werkstattgerät) |
-| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben `kwp-anpassung-schreiben` (🟡 eingebaut, am Auto noch Probelauf) |
+| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben `kwp-anpassung-schreiben` (✅ Golf 6 Bordnetz, braucht Werkstattcode) |
 | 11/16 | Login / Zugriffsberechtigung | 🟡 `login` (SecurityAccess, Bytecode vom Nutzer) | 🟡 `login --kwp` (am Auto ungeprüft) |
 | 15 | Readiness | ✅ `obd-info` + Fahranleitung (GUI) | – |
 | 18 | Fehlerpfade (alle möglichen Fehlercodes) | ✅ `fehler-geruest`, GUI Werkzeuge → Fehlerbilder | ❌ Dienst gibt es bei KWP nicht |

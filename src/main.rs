@@ -1095,6 +1095,9 @@ enum Command {
         /// freie Zusatzzeile (z. B. Meisterbetrieb)
         #[arg(long)]
         zusatz: Option<String>,
+        /// Werkstattcode zum Schreiben: Betriebsnummer/Importeur/Gerätenummer, z. B. 12345/123/12345 ("" löscht)
+        #[arg(long)]
+        werkstattcode: Option<String>,
         /// Firmenlogo (PNG oder JPG); leer ("") entfernt das Logo
         #[arg(long)]
         logo: Option<PathBuf>,
@@ -1718,10 +1721,16 @@ fn main() -> Result<()> {
             print!("{}", konfigvergleich::text(&x, &y, &db));
             Ok(())
         }
-        Command::Firmenkopf { name, adresse, telefon, email, zusatz, logo, loeschen } => {
+        Command::Firmenkopf { name, adresse, telefon, email, zusatz, werkstattcode, logo, loeschen } => {
             use ecu_werkbank::firmenkopf;
             let mut f = if loeschen { firmenkopf::Firmenkopf::default() } else { firmenkopf::laden() };
-            let geaendert = loeschen || name.is_some() || adresse.is_some() || telefon.is_some() || email.is_some() || zusatz.is_some() || logo.is_some();
+            let geaendert = loeschen || name.is_some() || adresse.is_some() || telefon.is_some() || email.is_some() || zusatz.is_some() || logo.is_some() || werkstattcode.is_some();
+            if let Some(w) = werkstattcode {
+                if !w.trim().is_empty() {
+                    ecu_werkbank::kwp::werkstattcode_aus(&w).ok_or_else(|| anyhow::anyhow!(tr!("Werkstattcode „{a}“ ungültig — Schreibweise Betriebsnummer/Importeur/Gerätenummer, z. B. 12345/123/12345.", a = w.trim())))?;
+                }
+                f.werkstattcode = w.trim().to_string();
+            }
             match logo {
                 Some(p) if p.as_os_str().is_empty() => f.logo.clear(),
                 Some(p) => {
@@ -1743,6 +1752,9 @@ fn main() -> Result<()> {
                 println!("{}", tr!("Kein Firmenkopf. Setzen z. B.: ecu-werkbank firmenkopf --name \"Kfz Muster\" --telefon \"0123 456\""));
             } else {
                 println!("{}", tr!("Kopf in Berichten: {a}{b}", a = f.zeilen().join("  ·  "), b = if f.logo.is_empty() { String::new() } else { tr!(" (mit Logo)") }));
+            }
+            if !f.werkstattcode.is_empty() {
+                println!("{}", tr!("Werkstattcode zum Schreiben: {a}", a = f.werkstattcode));
             }
             Ok(())
         }

@@ -5,9 +5,13 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
-- **TP 2.0: Anpassung speichern** nach dem Mitschnitt vom Golf 6 umgebaut: Kanal wählen, Wert
-  testen, speichern mit Werkstattcode (`VAG_WERKSTATTCODE`, Standard Nullen), Ergebnis prüfen.
-  Bleibt Probelauf, bis ECUWerkbank selbst einmal am Auto gespeichert hat.
+- **TP 2.0: Anpassung speichern und Gateway-Codierung schreiben freigeschaltet** — am Golf 6
+  selbst geschrieben (gleicher Wert), Ablauf wie beim Werkstattgerät: Kanal wählen, Wert testen,
+  speichern, Ergebnis prüfen.
+- **Werkstattcode** (Betriebsnummer/Importeur/Gerätenummer) unter Fahrzeuge → Firmenkopf bzw.
+  `firmenkopf --werkstattcode`. Wird beim Schreiben mitgeschickt (Codierung: vorher `F198`,
+  Gateway: in der Codieranfrage, Anpassung: beim Speichern). Das Golf-6-Bordnetz lehnt ohne ihn
+  ab — ohne eingetragenen Werkstattcode schreibt ECUWerkbank deshalb nicht.
 - **vcan-Tests bestanden:** Mitschnitt abspielen, alle Grundbefehle über echte CAN-Frames gegen
   `mockecu`, CAN FD und BMW-Adressierung.
 - **Andere Marken: BMW/Mini-Adressierung** (Tester 0x6F1, Adresse des Steuergeräts im ersten
@@ -17,7 +21,7 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 - Handbuch: `docs/handbuch/bilder_erzeugen.sh` legt ein Beispielfahrzeug an und fotografiert
   alle Seiten neu (für die Bilder zur Version 1.0).
 - **Lange Codierung schreiben freigeschaltet** (TP 2.0, Kennung 0x0600): am Golf 6 mit einem
-  Werkstattgerät-Mitschnitt bestätigt. Gateway-Codierung und Anpassung schreiben bleiben Probelauf.
+  Werkstattgerät-Mitschnitt bestätigt.
 - Mitschnitt schreibt jede Sekunde auf die Platte (vorher alle 100 Frames — bei Abbruch fehlte das Ende).
 - **K-Leitungs-Steuergeräte hinter dem Gateway** (z. B. Polo 6R: ABS und Lenkhilfe): Das Gateway
   tunnelt die K-Leitung über CAN. ECUWerkbank erkennt das am Kanalaufbau und liest Identifikation

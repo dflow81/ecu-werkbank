@@ -1483,14 +1483,19 @@ mod tests {
     #[test]
     fn langcodierung_anfragen() {
         use crate::kwp::{langcodierung_anfrage, LangArt};
-        assert_eq!(langcodierung_anfrage(&LangArt::Kennung0600, &[1, 2], &[1, 3]).unwrap(), vec![0x2E, 0x06, 0x00, 1, 3]);
+        assert_eq!(langcodierung_anfrage(&LangArt::Kennung0600, &[1, 2], &[1, 3], None).unwrap(), vec![0x2E, 0x06, 0x00, 1, 3]);
         let mut neu = crate::kwp::codierung_9a(GOLF6_GATEWAY_9A).unwrap();
         neu[0] = 0xE8;
-        let a = langcodierung_anfrage(&LangArt::Gateway9A(GOLF6_GATEWAY_9A.to_vec()), &neu, &neu).unwrap();
+        let a = langcodierung_anfrage(&LangArt::Gateway9A(GOLF6_GATEWAY_9A.to_vec()), &neu, &neu, None).unwrap();
         assert_eq!(&a[..2], &[0x3B, 0x9A]);
         assert_eq!(&a[2..14], &GOLF6_GATEWAY_9A[..12]);
         assert_eq!(a[14], 0xE8);
         assert_eq!(a.last(), Some(&0xFF));
+        // eigener Werkstattcode ersetzt die Betriebsnummer, Rest bleibt
+        let w = [1, 2, 3, 4, 5, 6];
+        let b = langcodierung_anfrage(&LangArt::Gateway9A(GOLF6_GATEWAY_9A.to_vec()), &neu, &neu, Some(w)).unwrap();
+        assert_eq!(&b[2..8], &w);
+        assert_eq!(&b[8..], &a[8..]);
     }
 
     #[test]
