@@ -29,6 +29,7 @@ for f in packaging/LIESMICH-Windows.txt LICENSE-MIT LICENSE-APACHE CREDITS.md; d
   sed 's/$/\r/' "$f" > "$ORDNER/$(basename "$f")"
 done
 [[ -f docs/handbuch/ecu-werkbank-Handbuch.pdf ]] && cp docs/handbuch/ecu-werkbank-Handbuch.pdf "$ORDNER/"
+[[ -f docs/handbuch/ecu-werkbank-Manual.pdf ]] && cp docs/handbuch/ecu-werkbank-Manual.pdf "$ORDNER/"
 # Schriften, die die Oberfläche (egui/epaint) mitbringt — deren Lizenzen gehören dazu
 SCHRIFTEN=$(ls -d "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/epaint-0.28*/fonts 2>/dev/null | head -1)
 if [[ -n "$SCHRIFTEN" ]]; then

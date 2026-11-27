@@ -47,7 +47,9 @@ install -Dm644 LICENSE-MIT    "$DOC/LICENSE-MIT"
 install -Dm644 LICENSE-APACHE "$DOC/LICENSE-APACHE"
 install -Dm644 CREDITS.md     "$DOC/CREDITS.md"
 install -Dm644 README.md      "$DOC/README.md"
+install -Dm644 README.en.md   "$DOC/README.en.md"
 [[ -f docs/handbuch/ecu-werkbank-Handbuch.pdf ]] && install -Dm644 docs/handbuch/ecu-werkbank-Handbuch.pdf "$DOC/ecu-werkbank-Handbuch.pdf"
+[[ -f docs/handbuch/ecu-werkbank-Manual.pdf ]] && install -Dm644 docs/handbuch/ecu-werkbank-Manual.pdf "$DOC/ecu-werkbank-Manual.pdf"
 # Schriften, die die Oberfläche (egui/epaint) mitbringt — deren Lizenzen gehören dazu
 SCHRIFTEN=$(ls -d "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/epaint-0.28*/fonts 2>/dev/null | head -1)
 if [[ -n "$SCHRIFTEN" ]]; then

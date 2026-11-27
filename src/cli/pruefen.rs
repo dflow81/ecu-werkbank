@@ -410,7 +410,7 @@ pub(super) fn handy(be: &Backend, db: &LabelDb, port: u16, pids: &[u16], seconds
                             Some(Stufe::Warnung) => "warnung",
                             None => "",
                         };
-                        web::Tile { name: name.into(), unit: unit.into(), value, state: state.into() }
+                        web::Tile { name: ecu_werkbank::i18n::t(name), unit: unit.into(), value, state: state.into() }
                     })
                     .collect()
             }

@@ -75,7 +75,7 @@ fn json(d: &LiveData) -> String {
     format!("{{\"title\":\"{}\",\"alarm\":\"{}\",\"tiles\":[{}]}}", esc(&d.title), esc(&d.alarm), tiles.join(","))
 }
 
-const PAGE: &str = r#"<!doctype html><html lang="de"><head><meta charset="utf-8">
+const PAGE: &str = r#"<!doctype html><html lang="@LANG@"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>ECUWerkbank live</title>
 <style>
 body{margin:0;font-family:system-ui,sans-serif;background:#111;color:#eee}
@@ -86,15 +86,32 @@ h1{font-size:16px;font-weight:600;margin:12px 16px;color:#9cf}
 .t.gut{border-color:#2a8a45}.t.hinweis{border-color:#d98c0d}.t.warnung{border-color:#c0271f;background:#2a1414}
 .n{font-size:13px;color:#aaa}.v{font-size:34px;font-weight:700;margin-top:4px}.u{font-size:14px;color:#aaa;margin-left:4px}
 #s{font-size:11px;color:#666;margin:0 16px 16px}
-</style></head><body><h1 id="h">ECUWerkbank</h1><div id="alarm"></div><div id="g"></div><div id="s">verbinde…</div>
+</style></head><body><h1 id="h">ECUWerkbank</h1><div id="alarm"></div><div id="g"></div><div id="s">@VERBINDE@</div>
 <script>
 async function tick(){try{const r=await fetch('api',{cache:'no-store'});const d=await r.json();
 document.getElementById('h').textContent=d.title||'ecu-werkbank';
 const a=document.getElementById('alarm');a.style.display=d.alarm?'block':'none';a.textContent=d.alarm;
-document.getElementById('g').innerHTML=d.tiles.map(t=>`<div class="t ${t.state}"><div class="n">${t.name}</div><div class="v">${t.value===null?'—':t.value.toLocaleString('de-DE')}<span class="u">${t.unit}</span></div></div>`).join('');
-document.getElementById('s').textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');}catch(e){document.getElementById('s').textContent='keine Verbindung';}}
+document.getElementById('g').innerHTML=d.tiles.map(t=>`<div class="t ${t.state}"><div class="n">${t.name}</div><div class="v">${t.value===null?'—':t.value.toLocaleString('@LOCALE@')}<span class="u">${t.unit}</span></div></div>`).join('');
+document.getElementById('s').textContent='@AKTUALISIERT@ '+new Date().toLocaleTimeString('@LOCALE@');}catch(e){document.getElementById('s').textContent='@KEINE@';}}
 setInterval(tick,500);tick();
 </script></body></html>"#;
+
+/// Die Handy-Seite in der eingestellten Sprache.
+fn seite() -> String {
+    let sprache = crate::i18n::sprache();
+    let locale = match sprache.as_str() {
+        "de" => "de-DE".to_string(),
+        "en" => "en-GB".to_string(),
+        s => s.to_string(),
+    };
+    // Texte ohne Anführungszeichen/Backslash, damit das JavaScript gültig bleibt
+    let js = |t: String| t.replace(['\'', '"', '\\', '<'], "");
+    PAGE.replace("@LANG@", &js(sprache.clone()))
+        .replace("@LOCALE@", &js(locale))
+        .replace("@VERBINDE@", &js(tr!("verbinde…")))
+        .replace("@AKTUALISIERT@", &js(tr!("aktualisiert")))
+        .replace("@KEINE@", &js(tr!("keine Verbindung")))
+}
 
 /// Server auf `port` starten (0 = beliebig). Liefert die Adresse fürs Handy.
 pub fn serve(port: u16, data: Shared) -> Result<Server> {
@@ -126,7 +143,7 @@ pub fn serve(port: u16, data: Shared) -> Result<Server> {
                     let path = req.split_whitespace().nth(1).unwrap_or("/");
                     let (status, ctype, body) = match path.strip_prefix(pfad.as_str()) {
                         Some(r) if r.starts_with("api") => ("200 OK", "application/json", json(&data.lock().unwrap_or_else(|e| e.into_inner()))),
-                        Some(_) => ("200 OK", "text/html; charset=utf-8", PAGE.to_string()),
+                        Some(_) => ("200 OK", "text/html; charset=utf-8", seite()),
                         None => ("404 Not Found", "text/plain", "404".to_string()),
                     };
                     let _ = write!(

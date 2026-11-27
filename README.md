@@ -1,5 +1,7 @@
 # ECUWerkbank
 
+🇬🇧 [English version](README.en.md)
+
 **Diagnose & Codierung für deutsche Autos** — offenes Werkzeug über **SocketCAN**, in Rust.
 Geeignet für Fahrzeuge von VW, Audi, Seat und Škoda. Eigenständige
 Implementierung der veröffentlichten Standard-Protokolle:
@@ -28,10 +30,13 @@ SocketCAN-Adapter (CANable/candleLight, PCAN, MCP2515-HAT, …).
 
 ## Handbuch
 
-Ausführliche Anleitung mit Bildern (Deutsch, einfache Sprache):
-[docs/handbuch/ecu-werkbank-Handbuch.pdf](docs/handbuch/ecu-werkbank-Handbuch.pdf).
-Neu bauen: `python3 docs/handbuch/build_handbuch.py`. Die Bilder sind Fotos der GUI
-mit der Golf-6-Simulation; die GUI fotografiert sich dabei selbst und schließt sich:
+Ausführliche Anleitung mit Bildern (einfache Sprache):
+[Deutsch: docs/handbuch/ecu-werkbank-Handbuch.pdf](docs/handbuch/ecu-werkbank-Handbuch.pdf) ·
+[English: docs/handbuch/ecu-werkbank-Manual.pdf](docs/handbuch/ecu-werkbank-Manual.pdf).
+Neu bauen: `python3 docs/handbuch/build_handbuch.py` (Deutsch) bzw. `… --en` (Englisch). Die
+Bilder sind Fotos der GUI mit der Golf-6-Simulation; `docs/handbuch/bilder_erzeugen.sh` legt
+ein Beispielfahrzeug in einem leeren Arbeitsordner an und fotografiert alle Seiten
+(`VAG_SPRACHE=en` für englische Bilder). Einzeln fotografiert sich die GUI selbst und schließt sich:
 `VAG_TRANSPORT=golf6 VAG_HELL=1 VAG_FENSTER=1000x880 VAG_TAB=<seite> VAG_FOTO=bild.ppm
 VAG_FOTO_WARTEN=<sekunden> ecu-werkbank-gui` (`VAG_HELL` = helles Design, `VAG_FENSTER` =
 Fenstergröße; Liste der Seiten im Kopf von `build_handbuch.py`). Mit eigenem
@@ -211,7 +216,7 @@ günstiger OBD-Adapter über USB, Bluetooth oder WLAN (`-t elm327`).
 | Messwertblöcke, ⭐ Favoriten, Blockscan | ✅ | ❌ | brauchen TP 2.0 |
 | **Gateway-Verbauliste und -Codierung** (direkt aus dem Gateway) | ✅ | ❌ | geht mit dem CAN-Interface, am Golf 6 geprüft; der ELM327 kann kein TP 2.0 |
 | Motor-Checks (Steuerkette, Leerlauf …), Fahrt-Rekorder | ✅ | ❌ | lesen Messwertblöcke (TP 2.0) |
-| Grundeinstellung an TP-2.0-Geräten (Funktion 04) | ✅ | ❌ | erst nach einem eigenen Mitschnitt freigeschaltet |
+| Grundeinstellung an TP-2.0-Geräten (Funktion 04) | ✅ | ❌ | erst nach einem eigenen Mitschnitt freigeschaltet; Drosselklappe am Golf 6 geprüft |
 | Live-Grafik / Scope | ✅ | ⚠️ | ELM327: nur OBD- und UDS-Kanäle, keine Messwertblöcke |
 | **CAN-Mitschnitt** aufnehmen, Lernhilfe aus Mitschnitt | ✅ | ❌ | braucht direkten Buszugriff |
 | Auto-Erkennung (Auto an/aus, Fahrzeug automatisch wählen) | ✅ | ❌ | liest die Adapter-Zähler |
@@ -1062,6 +1067,7 @@ Vergleicht die gespeicherten Codier- und Anpassungs-Sicherungen und Softwarestä
 ```bash
 ./target/release/ecu-werkbank firmenkopf --name "Kfz Muster" --adresse "Musterweg 1, 12345 Musterstadt" --telefon "0123 456"
 ./target/release/ecu-werkbank firmenkopf --logo logo.png        # PNG oder JPG; --logo "" entfernt es
+./target/release/ecu-werkbank firmenkopf --werkstattcode 12345/123/12345   # Werkstattcode zum Schreiben (nicht im Bericht)
 ./target/release/ecu-werkbank firmenkopf --loeschen
 ```
 
@@ -1317,7 +1323,7 @@ im Kombi nie gestellt worden — ECUWerkbank schreibt das dazu. Unbekannte Antwo
 |---|---|---|---|
 | **K-Leitung hinter dem Gateway** | ältere Steuergeräte, die das Gateway über CAN durchreicht (Polo 6R: ABS, Lenkhilfe) | automatisch im Scan; einzeln `ktunnel --adresse 0x03` | ✅ am Polo 6R (2010) |
 | DoIP (Ethernet) | neuere Autos mit Diagnose über Netzwerk (etwa ab Golf 8) | `-t doip --port 169.254.1.10`, GUI-Transport „DoIP“ | 🟡 nur gegen simuliertes Gateway |
-| CAN FD | Steuergeräte mit schnellem CAN | Adapter mit `fd on`, dann `VAG_CANFD=1` | 🟡 nur Tests |
+| CAN FD | Steuergeräte mit schnellem CAN | Adapter mit `fd on`, dann `VAG_CANFD=1` | 🟡 auf vcan geprüft |
 | K-Leitung mit KKL-Kabel | sehr alte VW (vor ~2004, KW1281) | `kline --port /dev/ttyUSB0 --adresse 0x01` | 🟡 nur Simulation |
 | J2534-Adapter | nur Windows, 64-Bit-Treiber | `-t j2534`, GUI-Transport „J2534-Adapter“ | 🟡 nur gebaut |
 
@@ -1365,7 +1371,7 @@ und Stand in ECUWerkbank:
 | 02 | … mit Umgebungsbedingungen | ✅ Snapshot je Fehler (km, Drehzahl … — unbekannte Werte roh) | ✅ VAG-Freeze-Frame (0x12) im Klartext, am Golf 6 mit Werkstattgerät verglichen |
 | – | Auto-Scan-Protokolle einlesen (Verlauf, Umgebung, Fehlertexte) | ✅ `autoscan-import` | ✅ `autoscan-import` |
 | 03 | Stellglieddiagnose | 🟡 `iocontrol` (roh) | ✅ `kwp-stellglied`, GUI Steuergeräte → Steuergerät wählen → „▶ Stellglieddiagnose“ (Ablauf per Mitschnitt an der Golf-6-Tür gelernt) |
-| 04 | Grundeinstellung | 🟡 `routine` (roh) | 🟡 nur nach eigenem Mitschnitt (GUI) |
+| 04 | Grundeinstellung | 🟡 `routine` (roh) | ✅ nach eigenem Mitschnitt (GUI, `kwp-grundeinstellung`; Drosselklappe am Golf 6 geprüft) |
 | 05 | Fehlerspeicher löschen | ✅ `clear` | ✅ `kwp-clear` |
 | 06 | Ausgabe beenden | ✅ | ✅ Kanal wird sauber geschlossen |
 | 07 | Codierung | ✅ `coding`, `code-write` | ✅ lesen `kwp-coding` (lang, kurz und Gateway — am Golf 6 bestätigt); Kurzcodierung schreiben `kwp-codierung-schreiben` (Golf-6-Tür geprüft); lange Codierung schreiben `kwp-langcodierung --neu` (✅ Kennung 0x0600 und Gateway, am Golf 6 selbst geschrieben; braucht Werkstattcode) |
@@ -1373,7 +1379,7 @@ und Stand in ECUWerkbank:
 | – | Fahrzeug-Historie, Vorher/Nachher | ✅ `history`, `compare` | ✅ |
 | 08 | Messwertblöcke | ✅ `rdid` + Labels | ✅ `kwp-block`, `kwp-blockscan`, Namen in einer Liste; Formeln am Golf 6 mit Werkstattgerät verglichen |
 | 09 | Einzelmesswerte | ✅ einzelne Kennung | ✅ 🔍 am Messwertfeld (liest den Block wie das Werkstattgerät) |
-| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | 🟡 Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben `kwp-anpassung-schreiben` (✅ Golf 6 Bordnetz, braucht Werkstattcode) |
+| 10 | Anpassung | 🟡 sichern/vergleichen `anpassung-*`, Kennungen benennen; Schreiben nur mit Login | ✅ Kanäle lesen `kwp-anpassung` (Golf 6 Bordnetz/Einparkhilfe geprüft), sichern; Schreiben `kwp-anpassung-schreiben` (✅ Golf 6 Bordnetz, braucht Werkstattcode) |
 | 11/16 | Login / Zugriffsberechtigung | 🟡 `login` (SecurityAccess, Bytecode vom Nutzer) | 🟡 `login --kwp` (am Auto ungeprüft) |
 | 15 | Readiness | ✅ `obd-info` + Fahranleitung (GUI) | – |
 | 18 | Fehlerpfade (alle möglichen Fehlercodes) | ✅ `fehler-geruest`, GUI Werkzeuge → Fehlerbilder | ❌ Dienst gibt es bei KWP nicht |
@@ -1393,12 +1399,10 @@ und Stand in ECUWerkbank:
 ✅ geht · 🟡 teilweise · ⏳ geplant · ❌ geht nicht · – gibt es dort nicht
 
 Als Nächstes:
-- Anpassung und Gateway-Codierung schreiben am Golf 6 per Mitschnitt bestätigen (bis dahin
-  zeigt ECUWerkbank am echten Auto nur, was es senden würde), Grundeinstellung
 - Restliche Messwert-Formeln (Bremsdruck, Beschleunigung, Drehrate …) mit einer
   gleichzeitigen Vergleichsmessung festnageln
 - Gateway-Verbauliste bei neueren UDS-Gateways
-- DoIP, CAN FD, KKL-Kabel und J2534 an echter Hardware prüfen
+- DoIP, KKL-Kabel und J2534 an echter Hardware prüfen
 - **Steuergeräte-Adresskarte** aus eigenen `discover`-Mitschnitten
 
 ## Lizenz, Marken, Quellen

@@ -772,7 +772,7 @@ impl App {
         });
         ui.add_space(8.0);
         ui.separator();
-        ui.strong("Grundeinstellung / Routine (0x31)");
+        ui.strong(tr!("Grundeinstellung / Routine (0x31)"));
         ui.horizontal(|ui| {
             ui.label(tr!("Routine-ID:"));
             ui.add(egui::TextEdit::singleline(&mut self.routine_id).desired_width(80.0));
@@ -790,7 +790,7 @@ impl App {
         });
         ui.add_space(8.0);
         ui.separator();
-        ui.strong("Stellglieddiagnose / IO-Control (0x2F)");
+        ui.strong(tr!("Stellglieddiagnose / IO-Control (0x2F)"));
         ui.horizontal(|ui| {
             ui.label(tr!("DID:"));
             ui.add(egui::TextEdit::singleline(&mut self.io_did).desired_width(80.0));

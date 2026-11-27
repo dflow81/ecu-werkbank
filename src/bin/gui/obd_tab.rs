@@ -303,7 +303,7 @@ impl App {
                 for pid in choices {
                     let Some((name, _)) = obd::pid_info(pid) else { continue };
                     let mut on = self.obd_selected.contains(&pid);
-                    if ui.checkbox(&mut on, name).changed() {
+                    if ui.checkbox(&mut on, ecu_werkbank::i18n::t(name)).changed() {
                         if on {
                             self.obd_selected.insert(pid);
                         } else {

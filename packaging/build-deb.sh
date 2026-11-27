@@ -18,6 +18,7 @@ install -Dm644 packaging/ecu-werkbank.svg           "$STAGE/usr/share/icons/hico
 install -Dm644 packaging/80-ecu-werkbank-can.rules  "$STAGE/usr/lib/udev/rules.d/80-ecu-werkbank-can.rules"
 install -Dm644 beispiele/datenpaket-alles.toml "$STAGE/usr/share/doc/ecu-werkbank/datenpaket-alles.toml"
 install -Dm644 README.md                        "$STAGE/usr/share/doc/ecu-werkbank/README.md"
+install -Dm644 README.en.md                     "$STAGE/usr/share/doc/ecu-werkbank/README.en.md"
 install -Dm644 packaging/ecu-werkbank.png           "$STAGE/usr/share/icons/hicolor/256x256/apps/ecu-werkbank.png"
 # Lizenzen und Quellen (bei Weitergabe Pflicht)
 DOC="$STAGE/usr/share/doc/ecu-werkbank"
@@ -25,6 +26,7 @@ install -Dm644 LICENSE-MIT    "$DOC/LICENSE-MIT"
 install -Dm644 LICENSE-APACHE "$DOC/LICENSE-APACHE"
 install -Dm644 CREDITS.md     "$DOC/CREDITS.md"
 [[ -f docs/handbuch/ecu-werkbank-Handbuch.pdf ]] && install -Dm644 docs/handbuch/ecu-werkbank-Handbuch.pdf "$DOC/ecu-werkbank-Handbuch.pdf"
+[[ -f docs/handbuch/ecu-werkbank-Manual.pdf ]] && install -Dm644 docs/handbuch/ecu-werkbank-Manual.pdf "$DOC/ecu-werkbank-Manual.pdf"
 cat > "$DOC/copyright" <<'COPY'
 ecu-werkbank
 Copyright (c) 2026 dflow81

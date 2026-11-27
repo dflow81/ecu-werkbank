@@ -512,7 +512,7 @@ impl App {
             .iter()
             .filter(|s| s.visible)
             .map(|s| ecu_werkbank::web::Tile {
-                name: s.name.clone(),
+                name: ecu_werkbank::i18n::t(&s.name),
                 unit: s.unit.clone(),
                 value: s.points.back().map(|p| p[1]),
                 state: match s.state() {

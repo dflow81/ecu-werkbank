@@ -2,9 +2,15 @@
 
 Alle für Nutzer wichtigen Änderungen. Neueste oben.
 
-## Unveröffentlicht
+## 1.0.0 — 27.11.2026
 
 ### Neu
+- **Englische Dokumentation:** `README.en.md` und das Handbuch auf Englisch
+  (`docs/handbuch/ecu-werkbank-Manual.pdf`, bauen mit `build_handbuch.py --en`). Das Handbuch-Skript
+  ist dafür in Layout (`build_handbuch.py`) und Texte (`inhalt_de.py`, `inhalt_en.py`) geteilt.
+- **Handbuch-Bilder neu für 1.0** (Deutsch und Englisch): `bilder_erzeugen.sh` erzeugt jetzt auch
+  die PDF-Seiten, die Handy-Ansicht (mit chromium), die Rückfrage und Beispiel-Feldnamen.
+- Handy-Anzeige und zwei Überschriften im Experten-Reiter sind jetzt übersetzt (vorher fest deutsch).
 - **Grundeinstellung (TP 2.0) am Golf 6 bestätigt:** Drosselklappe (Motor, Gruppe 60) mit
   ECUWerkbank selbst angelernt. Das Lernen aus dem Mitschnitt erkennt jetzt auch das
   Einschalten, das erst während des Abfragens kommt (VCDS-Knopf „ON“). Neuer Befehl
