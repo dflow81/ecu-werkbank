@@ -185,6 +185,9 @@ struct KwpModule {
     anpass: Vec<(u8, u16)>,
     /// Routine 0x0103: None = nicht gestartet, Some(None) = gestartet, Some(Some(k)) = Kanal k gewählt
     anpass_lauf: Option<Option<u8>>,
+    /// getesteter Wert (31 B9 01 03 hi lo) und „gespeichert“ (nach 31 BB)
+    anpass_test: Option<u16>,
+    anpass_gespeichert: bool,
     /// Identifikation 0x9A (Gateway: Betriebsnummer, Software, lange Codierung)
     ident_9a: Vec<u8>,
     /// Kurzcodierung (Geräte mit 0x9B-Aufbau „03 xx xx xx“)
@@ -353,7 +356,7 @@ fn uds(addr: u16, tx: u16, name: &'static str, part: &'static str, system: &'sta
 }
 
 fn kwp(addr: u8, ident: Ident, dtcs: Vec<(u16, u8)>) -> KwpModule {
-    KwpModule { addr, ident, dtcs, eigen: Eigenheit::default(), besetzt_gemeldet: false, stell: None, tester_tx: None, codierung: vec![0x0F, 0x00, 0x0A, 0x00, 0x41, 0x08], anpass: Vec::new(), anpass_lauf: None, ident_9a: Vec::new(), kurzcodierung: 72 }
+    KwpModule { addr, ident, dtcs, eigen: Eigenheit::default(), besetzt_gemeldet: false, stell: None, tester_tx: None, codierung: vec![0x0F, 0x00, 0x0A, 0x00, 0x41, 0x08], anpass: Vec::new(), anpass_lauf: None, anpass_test: None, anpass_gespeichert: false, ident_9a: Vec::new(), kurzcodierung: 72 }
 }
 
 type Module = (Vec<UdsModule>, Vec<KwpModule>, Vec<u8>);
@@ -1065,8 +1068,18 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
         // Anpassung (Routine 0x0103) wie am Golf-6-Bordnetz mitgeschnitten
         0x31 if req.get(1..4) == Some(&[0xB8, 0x01, 0x03]) && !m.anpass.is_empty() => {
             m.anpass_lauf = Some(None);
+            m.anpass_test = None;
+            m.anpass_gespeichert = false;
             vec![vec![0x71, 0xB8, 0x01, 0x03]]
         }
+        // Wert testen (31 B9 01 03 hi lo) — nur mit gewähltem Kanal
+        0x31 if req.get(1..4) == Some(&[0xB9, 0x01, 0x03]) && req.len() == 6 => match m.anpass_lauf {
+            Some(Some(_)) => {
+                m.anpass_test = Some(u16::from_be_bytes([req[4], req[5]]));
+                vec![vec![0x71, 0xB9, 0x01, 0x03]]
+            }
+            _ => vec![vec![0x7F, 0x31, 0x22]],
+        },
         0x31 if req.get(1..4) == Some(&[0xB9, 0x01, 0x03]) && m.anpass_lauf.is_some() => {
             let kanal = req.get(4).copied().unwrap_or(0);
             if m.anpass.iter().any(|(k, _)| *k == kanal) {
@@ -1078,24 +1091,35 @@ pub fn kwp_responses(addr: u8, req: &[u8]) -> Vec<Vec<u8>> {
         }
         0x31 if req.get(1..4) == Some(&[0xBA, 0x01, 0x03]) => match m.anpass_lauf {
             Some(Some(kanal)) => {
-                let [hi, lo] = m.anpass.iter().find(|(k, _)| *k == kanal).map(|(_, w)| *w).unwrap_or(0).to_be_bytes();
-                vec![vec![0x71, 0xBA, 0x01, 0x03, 0x82, 0x03, hi, lo, 0x07, 0x25, hi, lo, 0x25, 0x00, 0x6B, 0xFF]]
+                let gespeichert = m.anpass.iter().find(|(k, _)| *k == kanal).map(|(_, w)| *w).unwrap_or(0);
+                let [hi, lo] = m.anpass_test.unwrap_or(gespeichert).to_be_bytes();
+                if m.anpass_gespeichert {
+                    vec![vec![0x71, 0xBA, 0x01, 0x03, 0x05, 0x03, hi, lo, 0xFF]]
+                } else {
+                    vec![vec![0x71, 0xBA, 0x01, 0x03, 0x82, 0x03, hi, lo, 0x07, 0x25, hi, lo, 0x25, 0x00, 0x6B, 0xFF]]
+                }
             }
             Some(None) => vec![vec![0x71, 0xBA, 0x01, 0x03, 0x81]],
             None => vec![vec![0x7F, 0x31, 0x22]],
         },
-        // Anpassung speichern — Aufbau ist eine Annahme (siehe kwp::anpass_schreib_anfrage)
-        0x31 if req.get(1..4) == Some(&[0xBB, 0x01, 0x03]) => match (m.anpass_lauf, req.get(4..7)) {
-            (Some(Some(kanal)), Some(&[k, hi, lo])) if k == kanal => {
+        // Anpassung speichern: 31 BB 01 03 hi lo + Werkstattcode (6 Byte), wie am Golf 6 mitgeschnitten
+        0x31 if req.get(1..4) == Some(&[0xBB, 0x01, 0x03]) => match (m.anpass_lauf, req.len()) {
+            (Some(Some(kanal)), 12) => {
+                let w = u16::from_be_bytes([req[4], req[5]]);
                 if let Some(e) = m.anpass.iter_mut().find(|(x, _)| *x == kanal) {
-                    e.1 = u16::from_be_bytes([hi, lo]);
+                    e.1 = w;
                 }
+                m.anpass_test = Some(w);
+                m.anpass_gespeichert = true;
                 vec![vec![0x71, 0xBB, 0x01, 0x03]]
             }
+            (Some(Some(_)), _) => vec![vec![0x7F, 0x31, 0x13]],
             _ => vec![vec![0x7F, 0x31, 0x22]],
         },
         0x32 if req.get(1..4) == Some(&[0xB8, 0x01, 0x03]) => {
             m.anpass_lauf = None;
+            m.anpass_test = None;
+            m.anpass_gespeichert = false;
             vec![vec![0x72, 0xB8, 0x01, 0x03, 0x62]]
         }
         // Kurzcodierung schreiben: 3B 9A [Betriebsnummer 6][Software 4] 03 [Codierung 3]

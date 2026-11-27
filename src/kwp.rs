@@ -606,6 +606,9 @@ pub const LANGCODIERUNG_GEPRUEFT: bool = true;
 /// (0x3B 0x9A [Betriebsnummer][Softwarestand][Codierblock]).
 pub const GATEWAY_CODIERUNG_GEPRUEFT: bool = false;
 /// Anpassung schreiben (Routine 0x0103) — siehe [`anpass_schreib_anfrage`].
+/// Ablauf am Golf 6 mitgeschnitten (B3); bleibt gesperrt, bis ECUWerkbank selbst
+/// einmal am Auto denselben Wert gespeichert hat (offen: nimmt das Steuergerät
+/// den Werkstattcode 00 00 00 00 00 00 an?).
 pub const ANPASSUNG_SCHREIBEN_GEPRUEFT: bool = false;
 
 /// Wo die lange Codierung eines TP-2.0-Steuergeräts steht.
@@ -1061,14 +1064,45 @@ pub fn anpassung_lesen(be: &crate::transport::Backend, adresse: u8, kanaele: &[u
     Ok(out)
 }
 
+/// Werkstattcode, den das Steuergerät beim Speichern einer Anpassung mit
+/// ablegt (6 Byte, wer zuletzt geändert hat). Standard: Nullen; eigener Code
+/// über `VAG_WERKSTATTCODE` (12 Hex-Ziffern, Leerzeichen erlaubt).
+pub fn werkstattcode() -> [u8; 6] {
+    std::env::var("VAG_WERKSTATTCODE").ok().and_then(|t| werkstattcode_aus(&t)).unwrap_or([0; 6])
+}
+
+fn werkstattcode_aus(t: &str) -> Option<[u8; 6]> {
+    let h: String = t.chars().filter(|c| !c.is_whitespace()).collect();
+    if h.len() != 12 {
+        return None;
+    }
+    let mut out = [0u8; 6];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(h.get(2 * i..2 * i + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
 /// Anfrage (mit SID) zum Speichern eines Anpassungswerts, nachdem der Kanal
-/// mit 31 B9 01 03 gewählt ist. ANNAHME, noch nicht mitgeschnitten: Routine
-/// 0x0103 mit Unterfunktion 0xBB, Kanal und Wert. Erst nach einem Mitschnitt
-/// (Werkstattgerät schreibt einen Kanal) hier anpassen und
-/// [`ANPASSUNG_SCHREIBEN_GEPRUEFT`] auf `true` setzen.
-pub fn anpass_schreib_anfrage(kanal: u8, wert: u16) -> Vec<u8> {
+/// mit `31 B9 01 03 <Kanal>` gewählt und der Wert mit `31 B9 01 03 <hi lo>`
+/// getestet ist: `31 BB 01 03 <hi lo> <Werkstattcode 6 Byte>` — so am Golf 6
+/// (Bordnetz 5K0 937 086, Kanal 23) mitgeschnitten (26.11.2026, B3). Die
+/// Kanalnummer steht NICHT darin.
+pub fn anpass_schreib_anfrage(wert: u16, wsc: [u8; 6]) -> Vec<u8> {
     let [hi, lo] = wert.to_be_bytes();
-    vec![0x31, 0xBB, 0x01, 0x03, kanal, hi, lo]
+    [&[0x31, 0xBB, 0x01, 0x03, hi, lo][..], &wsc].concat()
+}
+
+/// Auf das Ergebnis der Anpassungs-Routine warten (31 BA 01 03, Status ≠ 0x81).
+fn anpass_warten(k: &mut Kwp) -> Result<Vec<u8>> {
+    for _ in 0..40 {
+        let r = k.request(0x31, &[0xBA, 0x01, 0x03])?;
+        if r.get(3) != Some(&0x81) {
+            return Ok(r);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    bail!(tr!("Steuergerät meldet kein Ergebnis der Anpassung"))
 }
 
 /// Einen Anpassungskanal ändern: Kanal lesen, neuen Wert speichern, zur
@@ -1080,22 +1114,45 @@ pub fn anpassung_schreiben(be: &crate::transport::Backend, adresse: u8, kanal: u
         Some(Err(e)) => bail!(e),
         None => bail!(tr!("Kanal {a}: keine Antwort", a = kanal)),
     };
-    let anfrage = anpass_schreib_anfrage(kanal, wert);
+    let anfrage = anpass_schreib_anfrage(wert, werkstattcode());
     if !darf_senden(be, ANPASSUNG_SCHREIBEN_GEPRUEFT) {
         return Ok(Schreiben::Probelauf { anfrage, alt: alt.to_be_bytes().to_vec() });
     }
     crate::spannung::vor_dem_schreiben(be)?;
     {
+        // Ablauf wie das Werkstattgerät (Mitschnitt Golf 6, B3): Routine
+        // starten, Kanal wählen, Wert testen, speichern, Ergebnis holen, beenden
         let mut ch = open_session(be, adresse)?;
         let mut k = Kwp::new(&mut ch);
+        let [hi, lo] = wert.to_be_bytes();
         let r = (|| -> Result<()> {
             k.request(0x31, &[0xB8, 0x01, 0x03])?;
+            let _ = k.request(0x31, &[0xBA, 0x01, 0x03]);
             k.request(0x31, &[0xB9, 0x01, 0x03, kanal])?;
+            anpass_warten(&mut k)?;
+            k.request(0x31, &[0xB9, 0x01, 0x03, hi, lo])?;
+            match anpass_ergebnis(&anpass_warten(&mut k)?) {
+                Some((w, _)) if w == wert => {}
+                Some((w, _)) => bail!(tr!("Steuergerät nimmt den Wert {a} nicht an (zeigt {b}) — nichts gespeichert.", a = wert, b = w)),
+                None => bail!(tr!("Steuergerät nimmt den Wert {a} nicht an — nichts gespeichert.", a = wert)),
+            }
             k.request(anfrage[0], &anfrage[1..])?;
+            let e = anpass_warten(&mut k)?;
+            // gespeichert: BA 01 03 05 03 <hi lo> FF
+            if e.get(3) != Some(&0x05) || e.get(5..7) != Some(&[hi, lo][..]) {
+                bail!(tr!("Unerwartete Antwort nach dem Speichern: {a}", a = e.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")));
+            }
             Ok(())
         })();
         let _ = k.request(0x32, &[0xB8, 0x01, 0x03]);
-        r?;
+        r.map_err(|e| {
+            let t = format!("{e:#}");
+            if ["NRC 0x22", "NRC 0x33", "NRC 0x31"].iter().any(|n| t.contains(n)) && t.contains("0xBB") {
+                anyhow::anyhow!(tr!("Steuergerät lehnt das Speichern ab ({a}). Eventuell verlangt es einen Werkstattcode (VAG_WERKSTATTCODE) oder einen Login.", a = t))
+            } else {
+                e
+            }
+        })?;
     }
     let danach = match anpassung_lesen(be, adresse, &[kanal])?.pop() {
         Some(Ok(a)) => a.wert,
@@ -1315,6 +1372,11 @@ mod tests {
         assert_eq!((wert, felder.len(), felder[2].display().as_str()), (10, 4, "10.00 s"));
         // noch nicht fertig
         assert_eq!(anpass_ergebnis(&[0xBA, 0x01, 0x03, 0x81]), None);
+        // Speichern wie mitgeschnitten: Wert, dann 6 Byte Werkstattcode, keine Kanalnummer
+        assert_eq!(anpass_schreib_anfrage(10, [0; 6]), [0x31, 0xBB, 0x01, 0x03, 0x00, 0x0A, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(werkstattcode_aus("01 23 45 67 89 AB"), Some([0x01, 0x23, 0x45, 0x67, 0x89, 0xAB]));
+        assert_eq!(werkstattcode_aus("0123"), None);
+        assert_eq!(werkstattcode_aus("0123456789XY"), None);
     }
 
     #[test]

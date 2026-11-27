@@ -5,6 +5,11 @@ Alle für Nutzer wichtigen Änderungen. Neueste oben.
 ## Unveröffentlicht
 
 ### Neu
+- **TP 2.0: Anpassung speichern** nach dem Mitschnitt vom Golf 6 umgebaut: Kanal wählen, Wert
+  testen, speichern mit Werkstattcode (`VAG_WERKSTATTCODE`, Standard Nullen), Ergebnis prüfen.
+  Bleibt Probelauf, bis ECUWerkbank selbst einmal am Auto gespeichert hat.
+- **vcan-Tests bestanden:** Mitschnitt abspielen, alle Grundbefehle über echte CAN-Frames gegen
+  `mockecu`, CAN FD und BMW-Adressierung.
 - **Andere Marken: BMW/Mini-Adressierung** (Tester 0x6F1, Adresse des Steuergeräts im ersten
   Datenbyte — erweiterte Adressierung nach ISO 15765-2). ISO-TP kann das jetzt, die Suche fragt
   diese Adressen mit ab (nur SocketCAN). `mockecu` spielt mit `VAG_MOCK_BMW=1` ein solches
